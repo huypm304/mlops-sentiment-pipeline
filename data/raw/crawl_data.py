@@ -1,6 +1,6 @@
 from google_play_scraper import Sort, reviews
 import pandas as pd
-from underthesea import word_tokenize
+from underthesea import text_normalize, word_tokenize
 import re
 import os
 
@@ -19,35 +19,30 @@ teencode_dict = {
 
 # --- 2. Các hàm tiền xử lý nâng cao ---
 
-def advanced_clean(text):
+def clean_data(text):
     if not isinstance(text, str) or len(text.strip()) == 0:
         return None
     
-    # a. Chuyển về chữ thường
-    text = text.lower()
+    # 1. Chuẩn hóa tiếng Việt (Xử lý dấu, chính tả, một số teencode phổ biến)
+    # Đây là chỗ "ăn tiền" nhất của underthesea
+    text = text_normalize(text)
     
-    # b. Xử lý ký tự lặp lại (ví dụ: ngonnnnn -> ngon, lagg -> lag)
-    # Tìm bất kỳ ký tự nào lặp lại từ 3 lần trở lên và rút gọn còn 1
+    # 2. Hạ chữ thường & Xử lý lặp ký tự (ngonnnnn -> ngon)
+    text = text.lower()
     text = re.sub(r'([a-z])\1{2,}', r'\1', text)
     
-    # c. Xóa ký tự đặc biệt, chỉ giữ lại chữ cái và số
+    # 3. Xóa ký tự đặc biệt (trừ khoảng trắng)
     text = re.sub(r'[^\w\s]', ' ', text)
     
-    # d. Sửa lỗi teencode từ dictionary
+    # 4. Áp dụng Dictionary của Huy (để fix những từ underthesea chưa cover)
     words = text.split()
     words = [teencode_dict.get(w, w) for w in words]
     
-    # e. BỎ QUA review quá ngắn (dưới 3 từ thường không mang ý nghĩa aspect)
+    # 5. Lọc độ dài
     if len(words) < 3:
         return None
         
-    # f. Lọc bỏ các review rác/quảng cáo thường gặp
-    junk_keywords = ['tuyển', 'zalo', 'kiếm tiền', 'nhập mã']
-    clean_text = " ".join(words)
-    if any(keyword in clean_text for keyword in junk_keywords):
-        return None
-        
-    return clean_text
+    return " ".join(words)
 
 def segment_text(text):
     if text is None: return None
