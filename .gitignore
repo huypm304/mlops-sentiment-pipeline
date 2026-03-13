@@ -1,2 +1,2 @@
-.venv
-*.deb
+venv/
+.vscode
