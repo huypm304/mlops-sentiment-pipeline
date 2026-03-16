@@ -3,99 +3,255 @@ import pandas as pd
 from underthesea import text_normalize, word_tokenize
 import re
 import os
+import random
 
-# --- 1. Cấu hình & Từ điển Teencode mở rộng ---
-app_list = [
-    'com.shopee.vn', 'com.lazada.android', 'vn.tiki.app.tikiandroid'
-]
+# ==========================================
+# 1. CONFIG
+# ==========================================
 
-# Thêm một số từ phổ biến và rác
-teencode_dict = {
-    "cx": "cũng", "ko": "không", "k": "không", "ng": "người",
-    "chs": "chơi", "dc": "được", "dell": "không", "dm": "tệ",
-    "lagg": "lag", "r": "rồi", "acc": "tài khoản", "sv": "người chơi",
-    "shop": "cửa hàng", "st": "số điện thoại", "rep": "phản hồi"
+APPS = {
+    "Shopee": "com.shopee.vn",
+    "Lazada": "com.lazada.android",
+    "Tiki": "vn.tiki.app.tikiandroid",
 }
 
-# --- 2. Các hàm tiền xử lý nâng cao ---
+REVIEWS_PER_APP = 6000
 
-def clean_data(text):
-    if not isinstance(text, str) or len(text.strip()) == 0:
-        return None
-    
-    # 1. Chuẩn hóa tiếng Việt (Xử lý dấu, chính tả, một số teencode phổ biến)
-    # Đây là chỗ "ăn tiền" nhất của underthesea
-    text = text_normalize(text)
-    
-    # 2. Hạ chữ thường & Xử lý lặp ký tự (ngonnnnn -> ngon)
-    text = text.lower()
-    text = re.sub(r'([a-z])\1{2,}', r'\1', text)
-    
-    # 3. Xóa ký tự đặc biệt (trừ khoảng trắng)
-    text = re.sub(r'[^\w\s]', ' ', text)
-    
-    # 4. Áp dụng Dictionary của Huy (để fix những từ underthesea chưa cover)
-    words = text.split()
-    words = [teencode_dict.get(w, w) for w in words]
-    
-    # 5. Lọc độ dài
-    if len(words) < 3:
-        return None
-        
+# ==========================================
+# 2. TEENCODE DICTIONARY
+# ==========================================
+
+TEENCODE_DICT = {
+    "ko":"không","k":"không","cx":"cũng","dc":"được","đc":"được",
+    "sp":"sản phẩm","shop":"cửa hàng","rep":"trả lời",
+    "ib":"nhắn tin","tks":"cảm ơn","thks":"cảm ơn",
+    "đvvc":"đơn vị vận chuyển"
+}
+
+# ==========================================
+# 3. SENTIMENT KEYWORDS
+# ==========================================
+
+POSITIVE_WORDS = [
+    "tốt","nhanh","ok","ổn","tuyệt","hài lòng","đẹp",
+    "chuẩn","uy tín","rất thích","giao nhanh"
+]
+
+NEGATIVE_WORDS = [
+    "tệ","lag","lỗi","chậm","bực","không được",
+    "lừa đảo","rởm","hỏng","thất vọng","kém",
+    "không giao","không nhận","treo máy"
+]
+
+POSITIVE_EMOJI = ["😍","❤️","👍","😊","🔥","🥰"]
+NEGATIVE_EMOJI = ["😡","😭","👎","🤬","😠"]
+
+SPAM_KEYWORDS = [
+    "nhận xu","tuyển ctv","link bio","zalo","telegram"
+]
+
+# ==========================================
+# 4. CLEAN TEXT
+# ==========================================
+
+def clean_text(text):
+
+    text = str(text).lower()
+
+    # remove link
+    text = re.sub(r"http\S+|www\S+", "", text)
+
+    # normalize repeated chars (đẹpppp -> đẹp)
+    text = re.sub(r"(.)\1{2,}", r"\1", text)
+
+    # remove special chars
+    text = re.sub(r"[^\w\s]", " ", text)
+
+    # teencode convert
+    words = [TEENCODE_DICT.get(w, w) for w in text.split()]
+
     return " ".join(words)
 
-def segment_text(text):
-    if text is None: return None
-    return word_tokenize(text, format="text")
+# ==========================================
+# 5. GARBAGE FILTER
+# ==========================================
 
-def convert_sentiment(score):
-    if score >= 4: return "positive"
-    elif score == 3: return "neutral"
-    else: return "negative"
+def is_garbage(text):
 
-# --- 3. Thu thập dữ liệu ---
-final_df = pd.DataFrame()
+    text = str(text).lower()
 
-for app_id in app_list:
-    print(f"Đang crawl dữ liệu: {app_id}")
+    if len(text.split()) < 2:
+        return True
+
+    if any(s in text for s in SPAM_KEYWORDS):
+        return True
+
+    return False
+
+# ==========================================
+# 6. HYBRID LABELING
+# ==========================================
+
+NEGATION_WORDS = ["không","ko","k","chẳng","chả"]
+
+def hybrid_label(row):
+
+    text = str(row["content"]).lower()
+    star = row["score"]
+
+    # NEGATION + positive word → negative
+    for neg in NEGATION_WORDS:
+        for pos in POSITIVE_WORDS:
+            if f"{neg} {pos}" in text:
+                return "negative"
+
+    # negative emoji
+    if any(e in text for e in NEGATIVE_EMOJI):
+        return "negative"
+
+    # positive emoji
+    if any(e in text for e in POSITIVE_EMOJI):
+        return "positive"
+
+    # negative keywords
+    if any(w in text for w in NEGATIVE_WORDS):
+        return "negative"
+
+    # positive keywords
+    if any(w in text for w in POSITIVE_WORDS):
+        return "positive"
+
+    # fallback star rating
+    if star >= 4:
+        return "positive"
+    elif star == 3:
+        return "neutral"
+    else:
+        return "negative"
+
+# ==========================================
+# 7. CRAWL DATA
+# ==========================================
+
+print("🚀 Crawling reviews...")
+
+all_reviews = []
+
+for name, app in APPS.items():
+
+    print(f"→ {name}")
+
     try:
+
         result, _ = reviews(
-            app_id, lang='vi', country='vn',
-            sort=Sort.NEWEST, count=1000 # Tăng lên 1000 để sau khi lọc vẫn đủ 5000 câu
+            app,
+            lang="vi",
+            country="vn",
+            sort=Sort.NEWEST,
+            count=REVIEWS_PER_APP
         )
-        temp_df = pd.DataFrame(result)[['content', 'score']]
-        temp_df['app_source'] = app_id
-        final_df = pd.concat([final_df, temp_df], ignore_index=True)
+
+        for r in result:
+
+            all_reviews.append({
+                "app": name,
+                "content": r["content"],
+                "score": r["score"]
+            })
+
     except Exception as e:
-        print(f"Lỗi {app_id}: {e}")
 
-# --- 4. Deep Preprocessing ---
-print("Bắt đầu quy trình Deep Cleaning...")
+        print("Error:", e)
 
-# Bước 1: Loại bỏ hàng rỗng ban đầu
-final_df = final_df.dropna(subset=["content"])
+print("Total raw:", len(all_reviews))
 
-# Bước 2: Áp dụng hàm Clean nâng cao (Lọc ngắn, lọc rác, sửa lỗi lặp)
-final_df["review_text_clean"] = final_df["content"].apply(advanced_clean)
+# ==========================================
+# 8. DATAFRAME CLEANING
+# ==========================================
 
-# Bước 3: Loại bỏ những hàng bị hàm Clean đánh dấu None (review < 3 từ, rác...)
-final_df = final_df.dropna(subset=["review_text_clean"])
+df = pd.DataFrame(all_reviews)
 
-# Bước 4: Loại bỏ trùng lặp sau khi đã clean (tránh trường hợp "tốt" và "tốt!!!!" giống nhau)
-final_df = final_df.drop_duplicates(subset=["review_text_clean"])
+df = df.dropna(subset=["content"])
+df = df.drop_duplicates(subset=["content"])
 
-# Bước 5: Gán nhãn Sentiment và Word Segmentation
-final_df["sentiment"] = final_df["score"].apply(convert_sentiment)
-final_df["review_text_segmented"] = final_df["review_text_clean"].apply(segment_text)
+df = df[~df["content"].apply(is_garbage)]
 
-# --- 5. Xuất dữ liệu ---
-output_dir = 'data/processed'
-output_path = os.path.join(output_dir, 'reviews_vi_clean_v2.csv')
+print("After cleaning:", len(df))
 
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
+# ==========================================
+# 9. LABELING
+# ==========================================
 
-final_df.to_csv(output_path, index=False, encoding='utf-8-sig')
+print("Labeling sentiment...")
 
-print(f"XONG! Giữ lại được {len(final_df)} review chất lượng.")
-print(f"File sẵn sàng demo tại: {output_path}")
+df["sentiment"] = df.apply(hybrid_label, axis=1)
+
+print(df["sentiment"].value_counts())
+
+# ==========================================
+# 10. TEXT PROCESSING
+# ==========================================
+
+print("Cleaning text...")
+
+df["review_clean"] = df["content"].apply(clean_text)
+
+print("Word segmentation...")
+
+df["review_segmented"] = df["review_clean"].apply(
+    lambda x: word_tokenize(x, format="text")
+)
+
+df["language"] = "vi"
+
+# ==========================================
+# 11. BALANCE DATASET
+# ==========================================
+
+print("Balancing dataset...")
+
+pos = df[df.sentiment == "positive"]
+neg = df[df.sentiment == "negative"]
+
+min_size = min(len(pos), len(neg))
+
+pos = pos.sample(min_size, random_state=42)
+neg = neg.sample(min_size, random_state=42)
+
+balanced_df = pd.concat([pos, neg])
+
+print("Balanced size:", len(balanced_df))
+
+# ==========================================
+# 12. TRAIN TEST SPLIT
+# ==========================================
+
+test_size = int(len(balanced_df) * 0.15)
+
+test_df = balanced_df.sample(test_size, random_state=99)
+
+train_df = balanced_df.drop(test_df.index)
+
+# ==========================================
+# 13. SAVE DATASET
+# ==========================================
+
+os.makedirs("data/processed", exist_ok=True)
+
+train_path = "data/processed/train_dataset.csv"
+test_path = "data/processed/test_dataset.csv"
+
+train_df.to_csv(train_path, index=False, encoding="utf-8-sig")
+test_df.to_csv(test_path, index=False, encoding="utf-8-sig")
+
+print("\n🎉 DATASET READY")
+
+print("\nTrain distribution")
+print(train_df.sentiment.value_counts())
+
+print("\nTest distribution")
+print(test_df.sentiment.value_counts())
+
+print("\nSaved:")
+print(train_path)
+print(test_path)

@@ -1,60 +1,57 @@
-# --- Core Frameworks & Tools ---
+# --- Các thư viện vừa bị báo lỗi ---
+python-dotenv==1.0.1
 click==8.1.7
 typer==0.9.0
-shellingham==1.5.4
-python-dotenv==1.0.1
+
+# --- Core & Utils ---
 PyYAML==6.0.1
-
-# --- Data Processing  ---
-numpy==1.26.4
-pandas==2.1.4
-python-dateutil==2.8.2
-pytz==2023.3.post1
-tzdata==2023.3
-
-# --- NLP  ---
-underthesea==6.3.0
-underthesea_core==1.0.4
-joblib==1.3.2
-tqdm==4.66.1
-
-# --- AI & Model Hub ---
-huggingface_hub==0.19.4
-filelock==3.13.1
-fsspec==2023.10.0
-packaging==23.2
-typing_extensions==4.8.0
-
-# --- Networking & API ---
-requests==2.31.0
-urllib3==2.0.7
-charset-normalizer==3.3.2
-idna==3.4
-certifi==2023.11.17
-httpx==0.25.1
-httpcore==1.0.2
-h11==0.14.0
-sniffio==1.3.0
-anyio==4.1.0
-
-# --- Web Scraping & Automation ---
-google-play-scraper==1.2.4
-selenium==4.15.2
-selenium-stealth==1.0.6
-webdriver-manager==4.0.1
-PySocks==1.7.1
-websocket-client==1.6.4
-
-# --- Terminal UI & Logging ---
 rich==13.7.0
+shellingham==1.5.4
+python-dateutil==2.9.0.post0
+pytz==2024.1
+six==1.16.0
+typing_extensions==4.10.0
+packaging==23.2
+filelock==3.13.1
+
+# --- Data Science & NLP ---
+numpy==1.26.4
+pandas==2.0.3
+scipy==1.10.1
+scikit-learn==1.3.2
+underthesea==6.8.3
+underthesea_core==1.0.4
+langdetect==1.0.9
+joblib==1.3.2
+
+# --- Deep Learning ---
+torch==2.2.0
+tokenizers==0.15.2
+transformers==4.38.2
+safetensors==0.4.2
+tqdm==4.66.2
+regex==2023.12.25
+fsspec==2024.2.0
+huggingface_hub==0.21.4
+
+# --- Networking & Scraping ---
+requests==2.31.0
+urllib3==2.2.1
+certifi==2024.2.2
+charset-normalizer==3.3.2
+idna==3.6
+httpx==0.27.0
+httpcore==1.0.4
+h11==0.14.0
+sniffio==1.3.1
+anyio==4.3.0
+google-play-scraper==1.2.6
+selenium==4.18.1
+webdriver-manager==4.0.1
+
+# --- UI/Template ---
+Jinja2==3.1.3
+MarkupSafe==2.1.5
 Pygments==2.17.2
 markdown-it-py==3.0.0
 mdurl==0.1.2
-
-# --- Async & Others ---
-trio==0.23.1
-outcome==1.3.0.post0
-sortedcontainers==2.4.0
-trio-websocket==0.11.1
-wsproto==1.2.0
-exceptiongroup==1.2.0
