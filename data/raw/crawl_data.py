@@ -236,13 +236,10 @@ train_df = balanced_df.drop(test_df.index)
 # 13. SAVE DATASET
 # ==========================================
 
-os.makedirs("data/processed", exist_ok=True)
 
-train_path = "data/processed/train_dataset.csv"
-test_path = "data/processed/test_dataset.csv"
+train_path = "data/raw/train_dataset.csv"
 
 train_df.to_csv(train_path, index=False, encoding="utf-8-sig")
-test_df.to_csv(test_path, index=False, encoding="utf-8-sig")
 
 print("\n🎉 DATASET READY")
 
@@ -254,4 +251,3 @@ print(test_df.sentiment.value_counts())
 
 print("\nSaved:")
 print(train_path)
-print(test_path)
