@@ -3,8 +3,10 @@ import re
 from tqdm import tqdm
 
 # 1. LOAD DATA
+
 print("Đang nạp dữ liệu...")
-train_df = pd.read_csv(r".\data\raw\train_dataset.csv")
+train_df = pd.read_csv("./data/raw/train_dataset.csv")
+
 
 # --- THÊM DÒNG NÀY ĐỂ FIX LỖI 'float' object has no attribute 'lower' ---
 train_df['review_segmented'] = train_df['review_segmented'].fillna("").astype(str)
@@ -159,7 +161,7 @@ df_binary = train_df[
     ~train_df['is_neutral']
 ].copy()
 df_binary['label'] = df_binary['sentiment'].map({'negative': 0, 'positive': 1})
-df_binary.to_csv(r".\data\processed\train_binary_clean.csv", index=False)
+df_binary.to_csv("./data/processed/train_binary_clean.csv", index=False)
 print(f"\nBinary (2 classes): {len(df_binary)} mẫu → train_binary_clean.csv")
 
 # OPTION 2: 3 classes
@@ -182,16 +184,16 @@ df_3class['sentiment_3class'] = df_3class['label'].map({
     1: 'neutral', 
     2: 'positive'
 })
-df_3class.to_csv(r".\data\processed\train_3class.csv", index=False)
+df_3class.to_csv("./data/processed/train_3class.csv", index=False)
 print(f"3-class: {len(df_3class)} mẫu → train_3class.csv")
 print(f"   Phân bố: {df_3class['sentiment_3class'].value_counts().to_dict()}")
 
 # Files riêng
 irrelevant_df = train_df[train_df['is_irrelevant']].copy()
-irrelevant_df.to_csv(r".\data\processed\irrelevant_samples.csv", index=False)
+irrelevant_df.to_csv("./data/processed/irrelevant_samples.csv", index=False)
 
 neutral_df = train_df[train_df['is_neutral'] & ~train_df['is_irrelevant']].copy()
-neutral_df.to_csv(r".\data\processed\neutral_samples.csv", index=False)
+neutral_df.to_csv("./data/processed/neutral_samples.csv", index=False)
 
 # ==============================
 # 6. HIỂN THỊ VÍ DỤ
