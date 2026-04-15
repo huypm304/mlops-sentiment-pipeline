@@ -1,3 +1,0 @@
-# Model scoring and validation for Sentiment Analysis
-
-# ...implement evaluation logic here...

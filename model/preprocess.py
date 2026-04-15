@@ -1,3 +1,0 @@
-# Text cleaning and tokenization for Vietnamese Sentiment Analysis
-
-# ...implement preprocessing functions here...
