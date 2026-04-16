@@ -1,0 +1,167 @@
+{
+  "base_input": "data/processed/train_final_v3.autofixed.jsonl",
+  "synthetic_input": "data/processed/train_final_v3.synthetic_multi_aspect_natural.jsonl",
+  "base_output": "data/processed/train_final_v3.autofixed_aspect_split.jsonl",
+  "synthetic_output": "data/processed/train_final_v3.synthetic_multi_aspect_natural_aspect_split.jsonl",
+  "final_output": "data/processed/train_final_v3.curated_augmented_natural_aspect_split.jsonl",
+  "remap_counts": {
+    "Product->Electronics": 910,
+    "Product->Fashion": 1282,
+    "Product->General": 3300
+  },
+  "base_aspect_counts": {
+    "App": 1058,
+    "Electronics": 888,
+    "Fashion": 1276,
+    "General": 3286,
+    "Price": 1520,
+    "Service": 1916,
+    "Ship": 841
+  },
+  "synthetic_aspect_counts": {
+    "App": 110,
+    "Electronics": 22,
+    "Fashion": 6,
+    "General": 14,
+    "Price": 65,
+    "Service": 50,
+    "Ship": 27
+  },
+  "final_aspect_counts": {
+    "App": 1168,
+    "Electronics": 910,
+    "Fashion": 1282,
+    "General": 3300,
+    "Price": 1585,
+    "Service": 1966,
+    "Ship": 868
+  },
+  "examples": {
+    "Fashion": [
+      {
+        "text": "size s mặc hơi bị chật vai , tay",
+        "target": "size",
+        "sentiment": 0
+      },
+      {
+        "text": "có 1 áo bị dín màu đỏ",
+        "target": "áo",
+        "sentiment": 2
+      },
+      {
+        "text": "áo rất nhăn",
+        "target": "áo",
+        "sentiment": 0
+      },
+      {
+        "text": "vải bình_thường , hình in không sắc nét , áo_rộng so với size đưa ra",
+        "target": "vải",
+        "sentiment": 2
+      },
+      {
+        "text": "có mẩu áo nhìn không giống mẫu đang mình đặt . nhìn_chung củng được",
+        "target": "áo",
+        "sentiment": 0
+      },
+      {
+        "text": "áo cỡ l form hơi to chắc cỡ mình mới vừa",
+        "target": "áo",
+        "sentiment": 0
+      },
+      {
+        "text": "tuy_nhiên quần legging nhưng phần gấu quần lại không bó vào chân cho lắm",
+        "target": "quần",
+        "sentiment": 2
+      },
+      {
+        "text": "minh đặt nhầm size nên hơi rông so voi ng",
+        "target": "size",
+        "sentiment": 2
+      }
+    ],
+    "General": [
+      {
+        "text": "ứng_dụng lỗi thì không nói nhưng cho 1 sao bởi dạo này shopee vận_chuyển như cựt_ý đơn hàng đã đến địa_kho cuối đã báo là sẽ giao trong 12 h tiếp_theo mà 3 4 5 ngày vẫn không nhận được",
+        "target": "hàng",
+        "sentiment": 0
+      },
+      {
+        "text": "chất_liệu không quá đẹp , mặc mát , với mức giá này chất_lượng rất hài_lòng",
+        "target": "chất_liệu",
+        "sentiment": 1
+      },
+      {
+        "text": "chất vải mỏng , nhìn thấy cả áo trong",
+        "target": "chất",
+        "sentiment": 0
+      },
+      {
+        "text": "không có tông xanh , tím . 3 cái màu hồng giống nhau",
+        "target": "màu",
+        "sentiment": 0
+      },
+      {
+        "text": "màu kem lại gửi màu 2 hic",
+        "target": "màu",
+        "sentiment": 2
+      },
+      {
+        "text": "đóng_gói cẩn_thận nhưng không check được mã_vạch",
+        "target": "đóng_gói",
+        "sentiment": 1
+      },
+      {
+        "text": "chất_liệu phù_hợp giá_cả sau sale",
+        "target": "chất_liệu",
+        "sentiment": 2
+      },
+      {
+        "text": "thuốc bị chảy",
+        "target": "thuốc",
+        "sentiment": 0
+      }
+    ],
+    "Electronics": [
+      {
+        "text": "Mới dùng được 10 ngày thấy ổn trong tầm giá. Chụp ảnh đẹp. Cấu hình tốt chới game liên quân, pubg ngon. Pin trâu. Điểm từ là cam sau lồi lên cao quá dễ bị sước mặc dù có ốp vẫn bị lồi lên. Cam trước chụp cũng bình thường nhưng có thể dùng phần mềm để hỗ trợ. Lúc mới mua thì ko sao giờ thì sạc máy hơi nóng ko biết phải lỗi ko nhưng cứ dùng thêm xem sao đã.",
+        "target": "Pin",
+        "sentiment": 1
+      },
+      {
+        "text": "cáp_sạc chuẩn ngoài đẹp hoen hình ủng_hộ dài_dài",
+        "target": "cáp_sạc",
+        "sentiment": 1
+      },
+      {
+        "text": "Sản phẩm thấy tệ. Pin 4k5 mà tụt chóng mặt, sài cả tháng rồi pin vẫn không khả dĩ như nhân viên tư vấn sau 1thang pin sẽ hoànn thiện. Vân tay k nhạy bọc trong túi dễ bị chạnm trúng cảm biến vân tay báo lỗi. Nói chung k hài lòng",
+        "target": "Pin",
+        "sentiment": 0
+      },
+      {
+        "text": "Ngon trong tầm giá,tôi khá hài lòng về chiếc đt này,pin ổn,tác vụ cơ bản mượt,game ổn ns chung là ok",
+        "target": "pin",
+        "sentiment": 1
+      },
+      {
+        "text": "có vài shop giao chậm_ý nhma kh sao củ_sạc vẫn ok lắm",
+        "target": "củ_sạc",
+        "sentiment": 2
+      },
+      {
+        "text": "Một vài nhân xét cho ai muốn mua con này. Nói thật thì tầm giá này thì vivo u10 nói trôi hơn nhiều mặt. Sau 3 tháng sử dụng, tớ cảm thấy rất hài lòng với số tiền bỏ ra. Chip snap665 quá ổn để chiến game + pin trâu. Đồ phân giải nói là HD+ nhưng ko tệ. Con về phần chụp ảnh thì hơi yêu, con hơi ko rõ nhưng đc cái sáng. Nhân viên vui tính, nhiệt huyết, sẽ có ngay trở lại .",
+        "target": "pin",
+        "sentiment": 1
+      },
+      {
+        "text": "Máy sử dụng khá tốt, tuy nhiên cảm biến vân tay còn chậm. Nhân viên bán hàng tư vấn nhiệt tình, đáp ứng được nhu cầu khách hàng.",
+        "target": "Máy",
+        "sentiment": 1
+      },
+      {
+        "text": "Mua tại Điện Máy Xanh đã hơn nữa tháng sử dụng rất tốt lúc mua đã cập nhật lên Miui 11. về camara chụp quay rất đẹp, còn pin thì đủ dùng cho một ngày có sạc nhanh nữa không lo về pin, còn về game free fire hay pubg thì chơi rất mượt máy chỉ hơi ấm thôi không nóng như mọi người đồn . Nhân viên ở Điện Máy Xanh tư vấn rất nhiệt tình mình rất thích . Quá tốt trong tầm giá mọi người nên mua dùng thử",
+        "target": "pin",
+        "sentiment": 1
+      }
+    ]
+  }
+}

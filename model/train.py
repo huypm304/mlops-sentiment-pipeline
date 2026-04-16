@@ -5,7 +5,9 @@ Bản dành riêng cho môi trường Colab Upload trực tiếp (Không dùng D
 Tự động tải file best_absa_v3.pt và log về máy tính nội bộ sau khi train xong.
 """
 
-import json, random, os, csv, math, unicodedata
+import json, random, os, csv, math, re, unicodedata
+from collections import Counter
+from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
@@ -28,13 +30,38 @@ except ImportError:
 # 1. CẤU HÌNH ĐƯỜNG DẪN LOCAL COLAB (/content/)
 # ══════════════════════════════════════════════════════════════════════════════
 
-# Đảm bảo bạn đã kéo thả 3 file này vào thư mục gốc của Colab
-TRAIN_FILE    = "/content/train_data_v3.jsonl"
-VAL_FILE      = "/content/val_data.jsonl"
-TEST_FILE     = "/content/test_data.jsonl"
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
-SAVE_PATH     = "/content/best_absa_v3.pt"
-LOG_FILE      = "/content/training_log_v3.csv"
+
+def resolve_path(*candidates: str) -> str:
+    for candidate in candidates:
+        if Path(candidate).exists():
+            return str(Path(candidate))
+    return candidates[0]
+
+
+TRAIN_FILE = resolve_path(
+    str(PROJECT_ROOT / "data" / "processed" / "train_final_v3.cleaned.jsonl"),
+    "/content/train_data_v3.jsonl",
+    str(PROJECT_ROOT / "data" / "processed" / "train_final_v3.jsonl"),
+)
+VAL_FILE = resolve_path(
+    "/content/val_data.jsonl",
+    str(PROJECT_ROOT / "data" / "processed" / "val_data.jsonl"),
+)
+TEST_FILE = resolve_path(
+    "/content/test_data.jsonl",
+    str(PROJECT_ROOT / "data" / "processed" / "test_data.jsonl"),
+)
+
+SAVE_PATH = resolve_path(
+    "/content/best_absa_v3.pt",
+    str(PROJECT_ROOT / "model" / "best_absa_v3.pt"),
+)
+LOG_FILE = resolve_path(
+    "/content/training_log_v3.csv",
+    str(PROJECT_ROOT / "model" / "training_log_v3.csv"),
+)
 
 MODEL_NAME    = "Fsoft-AIC/videberta-base"
 MAX_LEN       = 320
@@ -49,7 +76,7 @@ LAMBDA_BIO    = 1.0
 LAMBDA_SENT   = 1.5
 LAMBDA_GLOBAL = 0.3
 
-CONTEXT_TOKENS = 2
+CONTEXT_TOKENS = 5
 MAX_OPS        = 8
 SEED           = 42
 PATIENCE       = 4
@@ -75,6 +102,28 @@ N_BIO    = len(BIO_LABELS)   # 11
 N_SENT   = 3
 N_GLOBAL = 3
 
+OPINION_WORDS = {
+    "tệ", "xấu", "kém", "chậm", "đắt", "tồi", "dở", "lỗi", "mỏng", "rộng", "nhỏ",
+    "to", "bẩn", "hôi", "nhạt", "cứng", "nặng", "sai", "thiếu", "trễ", "lâu",
+    "đẹp", "tốt", "nhanh", "rẻ", "mượt", "mịn", "chắc", "chuẩn", "ổn", "xinh",
+    "ngon", "hay", "tuyệt", "ok", "oke", "bình_thường", "tạm", "được", "thôi",
+}
+NEG_KEYWORDS = [
+    "không", "tệ", "xấu", "kém", "chậm", "đắt", "tồi", "dở", "lỗi", "mỏng",
+    "thiếu", "sai", "trễ", "lâu", "hỏng", "rách", "bẩn", "hôi", "tệ_hại",
+    "không giống", "không đúng", "không đẹp", "thất_vọng", "thất vọng", "bực",
+]
+POS_KEYWORDS = [
+    "đẹp", "tốt", "nhanh", "rẻ", "mượt", "tuyệt", "xinh", "ngon", "chất",
+    "ưng", "thích", "hài_lòng", "hài lòng", "xuất_sắc", "xuất sắc", "hoàn_hảo",
+    "hoàn hảo", "chuẩn",
+]
+NEU_KEYWORDS = [
+    "bình_thường", "bình thường", "tạm_được", "tạm được", "cũng_được", "cũng được",
+    "ổn", "tạm_ổn", "tạm ổn", "bình thường thôi", "khắc_phục_được", "khắc phục được",
+    "cũng ok",
+]
+
 
 def set_seed(seed: int):
     random.seed(seed)
@@ -82,6 +131,57 @@ def set_seed(seed: int):
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def count_tokens(text: str) -> int:
+    return len(re.findall(r"\S+", text))
+
+
+def normalize_target_span(text: str, target: str, start: int, end: int):
+    if not target or start < 0 or end <= start or end > len(text):
+        return None
+
+    left_trim = len(target) - len(target.lstrip())
+    right_trim = len(target) - len(target.rstrip())
+    norm_target = target.strip()
+    norm_start = start + left_trim
+    norm_end = end - right_trim
+
+    if not norm_target or norm_start < 0 or norm_end <= norm_start or norm_end > len(text):
+        return None
+    if text[norm_start:norm_end] != norm_target:
+        return None
+    return norm_target, norm_start, norm_end
+
+
+def context_window(text: str, char_s: int, char_e: int, radius: int = 5) -> str:
+    spans = [m.span() for m in re.finditer(r"\S+", text)]
+    token_ids = []
+    for i, (tok_s, tok_e) in enumerate(spans):
+        if max(tok_s, char_s) < min(tok_e, char_e):
+            token_ids.append(i)
+    if not token_ids:
+        return text.lower()
+
+    lo = max(0, token_ids[0] - radius)
+    hi = min(len(spans) - 1, token_ids[-1] + radius)
+    return " ".join(text[s:e].lower() for s, e in spans[lo:hi + 1])
+
+
+def is_clear_sentiment_conflict(text: str, char_s: int, char_e: int, sentiment: int) -> bool:
+    ctx = context_window(text, char_s, char_e)
+    has_neg = any(keyword in ctx for keyword in NEG_KEYWORDS)
+    has_pos = any(keyword in ctx for keyword in POS_KEYWORDS)
+    has_neu = any(keyword in ctx for keyword in NEU_KEYWORDS)
+    return (has_neg and sentiment == 1) or (has_pos and sentiment == 0) or (has_neu and sentiment == 1)
+
+
+def compute_inverse_freq_weights(counts: Counter, classes):
+    valid_counts = [max(counts.get(label, 0), 1) for label in classes]
+    total = float(sum(valid_counts))
+    weights = [total / (len(classes) * count) for count in valid_counts]
+    mean_weight = sum(weights) / len(weights)
+    return torch.tensor([weight / mean_weight for weight in weights], dtype=torch.float)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # ALIGNMENT & DATASET (Giữ nguyên logic cực xịn)
@@ -100,9 +200,11 @@ def find_token_indices(offsets, special_mask, char_s: int, char_e: int):
     return indices
 
 class ABSADataset(Dataset):
-    def __init__(self, file_path: str, tokenizer, max_len: int):
+    def __init__(self, file_path: str, tokenizer, max_len: int, clean_noise: bool = False):
         self.tokenizer = tokenizer
         self.max_len   = max_len
+        self.clean_noise = clean_noise
+        self.stats = Counter()
         self.items     = self._load(file_path)
 
     def _load(self, file_path: str):
@@ -123,6 +225,9 @@ class ABSADataset(Dataset):
 
                 if len(text) < 2 or global_sent not in [0, 1, 2]:
                     skipped += 1; continue
+                if self.clean_noise and count_tokens(text) <= 2:
+                    self.stats["short_records"] += 1
+                    skipped += 1; continue
 
                 enc = self.tokenizer(
                     text, max_length=self.max_len, padding="max_length",
@@ -139,6 +244,7 @@ class ABSADataset(Dataset):
                 span_sents = torch.full((MAX_OPS,), -100, dtype=torch.long)
 
                 op_idx = 0
+                cleaned_sentiments = []
                 for op in opinions:
                     if op_idx >= MAX_OPS: break
 
@@ -146,9 +252,25 @@ class ABSADataset(Dataset):
                     sent_int = op.get("sentiment", -1)
                     char_s   = op.get("start", -1)
                     char_e   = op.get("end", -1)
+                    target   = op.get("target", "")
 
                     if asp not in ASPECTS or sent_int not in SENTIMENTS: continue
                     if char_s < 0 or char_e <= char_s: continue
+
+                    if self.clean_noise:
+                        normalized = normalize_target_span(text, target, char_s, char_e)
+                        if normalized is None:
+                            self.stats["invalid_target_span"] += 1
+                            continue
+                        target, char_s, char_e = normalized
+                        if target != op.get("target", ""):
+                            self.stats["trimmed_targets"] += 1
+                        if target in OPINION_WORDS:
+                            self.stats["opinion_word_targets"] += 1
+                            continue
+                        if is_clear_sentiment_conflict(text, char_s, char_e, sent_int):
+                            self.stats["clear_sentiment_conflicts"] += 1
+                            continue
 
                     token_indices = find_token_indices(offsets, special_mask, char_s, char_e)
                     if not token_indices: align_miss += 1; continue
@@ -165,7 +287,21 @@ class ABSADataset(Dataset):
                             span_masks[op_idx, i] = 1.0
 
                     span_sents[op_idx] = sent_int
+                    cleaned_sentiments.append(sent_int)
                     op_idx += 1
+
+                if op_idx == 0:
+                    self.stats["empty_after_cleaning"] += 1
+                    skipped += 1
+                    continue
+
+                if self.clean_noise and cleaned_sentiments:
+                    if all(sent == 0 for sent in cleaned_sentiments) and global_sent == 1:
+                        global_sent = -1
+                        self.stats["ignored_global_conflicts"] += 1
+                    elif all(sent == 1 for sent in cleaned_sentiments) and global_sent == 0:
+                        global_sent = -1
+                        self.stats["ignored_global_conflicts"] += 1
 
                 items.append({
                     "input_ids"     : torch.tensor(enc["input_ids"],      dtype=torch.long),
@@ -177,6 +313,9 @@ class ABSADataset(Dataset):
                 })
 
         print(f"  {os.path.basename(file_path)}: {len(items):,} items (skipped={skipped}, align_miss={align_miss})")
+        if self.clean_noise and self.stats:
+            summary = ", ".join(f"{k}={v}" for k, v in sorted(self.stats.items()))
+            print(f"    cleaned: {summary}")
         return items
 
     def __len__(self):        return len(self.items)
@@ -343,9 +482,9 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
     print("\n📊 Loading datasets (từ /content/)...")
-    train_ds = ABSADataset(TRAIN_FILE, tokenizer, MAX_LEN)
-    val_ds   = ABSADataset(VAL_FILE,   tokenizer, MAX_LEN)
-    test_ds  = ABSADataset(TEST_FILE,  tokenizer, MAX_LEN)
+    train_ds = ABSADataset(TRAIN_FILE, tokenizer, MAX_LEN, clean_noise=True)
+    val_ds   = ABSADataset(VAL_FILE,   tokenizer, MAX_LEN, clean_noise=False)
+    test_ds  = ABSADataset(TEST_FILE,  tokenizer, MAX_LEN, clean_noise=False)
 
     train_dl = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True,  num_workers=2, pin_memory=True)
     val_dl   = DataLoader(val_ds,   batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
@@ -365,8 +504,19 @@ def main():
     total_steps  = math.ceil(len(train_dl) / ACCUM_STEPS) * EPOCHS
     scheduler    = get_linear_schedule_with_warmup(optimizer, int(total_steps * WARMUP_RATIO), total_steps)
 
-    alpha_sent   = torch.tensor([1.2, 1.0, 1.8], device=device)
-    alpha_global = torch.tensor([1.0, 1.0, 1.2], device=device)
+    sent_counts = Counter()
+    global_counts = Counter()
+    for item in train_ds.items:
+        sent_counts.update(int(label) for label in item["span_sents"].tolist() if label != -100)
+        global_label = int(item["global_label"].item())
+        if global_label != -1:
+            global_counts.update([global_label])
+
+    alpha_sent   = compute_inverse_freq_weights(sent_counts, SENTIMENTS).to(device)
+    alpha_global = compute_inverse_freq_weights(global_counts, SENTIMENTS).to(device)
+
+    print(f"Sent weights  : {alpha_sent.tolist()}")
+    print(f"Global weights: {alpha_global.tolist()}")
 
     best_score, patience_cnt = 0.0, 0
     log_rows = []

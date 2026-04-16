@@ -1,0 +1,9 @@
+{
+  "dropped_empty_records": 151,
+  "fixed_dirty_targets": 6728,
+  "flagged_sentiment_conflicts": 299,
+  "input_opinions": 10985,
+  "input_records": 7411,
+  "output_opinions": 10686,
+  "output_records": 7260
+}
