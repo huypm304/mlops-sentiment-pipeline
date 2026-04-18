@@ -1,43 +1,28 @@
-import sys
-import os
-
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from fastapi import FastAPI, HTTPException
+import boto3
+import json
+from fastapi import FastAPI
 from pydantic import BaseModel
-from fastapi.middleware.cors import CORSMiddleware
-from model.inference import model_fn, predict_fn
-import uvicorn
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # dev thì để *
-    allow_credentials=True,
-    allow_methods=["*"],  # cho phép OPTIONS
-    allow_headers=["*"],
-)
-# Load model 1 lần duy nhất khi khởi động
-MODEL_DIR = "model" # Thư mục chứa .pt và inference.py
-model_dict = model_fn(MODEL_DIR)
-
-class FeedbackRequest(BaseModel):
+class SentimentRequest(BaseModel):
     text: str
 
-@app.post("/analyze")
-async def analyze(request: FeedbackRequest):
+@app.post("/predict")
+async def predict(request: SentimentRequest):
     try:
-        result = predict_fn(request.text, model_dict)
-        return result
+        # Gọi hàm get_prediction của Huy
+        prediction = get_prediction(request.text)
+        return {"status": "success", "data": prediction}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
-@app.get("/eda")
-def get_eda():
-    import json
-    with open("/frontend/public/eda.py", encoding="utf-8") as f:
-        return json.load(f)
-    
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+        return {"status": "error", "message": str(e)}
+client = boto3.client("sagemaker-runtime", region_name="ap-southeast-1")
+
+def get_prediction(text):
+    response = client.invoke_endpoint(
+        EndpointName="absa-mlops-huy-endpoint", # Thay đúng tên vào đây
+        ContentType="application/json",
+        Body=json.dumps({"inputs": text})
+    )
+    result = json.loads(response["Body"].read().decode())
+    return result
