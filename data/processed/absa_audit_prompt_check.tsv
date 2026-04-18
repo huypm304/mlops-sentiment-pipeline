@@ -1,8 +1,0 @@
-| Dòng số | Text | Lỗi phát hiện | Đề xuất sửa đổi |
-|:---|:---|:---|:---|
-| 1 | giày đẹp , hình , giao nhanh... | Target ' giao' không khớp vị trí start/end hoặc text trích xuất: 'iao n' | Xem lại từng opinion, offset, aspect, sentiment |
-| 9 | app khá ổn nhưng giá không quá tốt... | Câu đối lập nhưng tất cả sentiment giống nhau (nguy cơ leakage) | Xem lại từng opinion, offset, aspect, sentiment |
-| 32 | trước tết đặt bao_nhiêu chả giao 1 cái không nói gì qua tết ... | Câu đối lập nhưng tất cả sentiment giống nhau (nguy cơ leakage) | Xem lại từng opinion, offset, aspect, sentiment |
-| 39 | app rất chán_cách làm_việc hỗ_trợ khách_hàng cũng chán_quy_t... | Câu đối lập nhưng tất cả sentiment giống nhau (nguy cơ leakage) | Xem lại từng opinion, offset, aspect, sentiment |
-| 41 | 11 1 2026 khá hài_lòng khi chọn mua sản_phẩm tuy còn có nhữn... | Câu đối lập nhưng tất cả sentiment giống nhau (nguy cơ leakage) | Xem lại từng opinion, offset, aspect, sentiment |
-| 44 | giao sai sản_phẩm mà chịu hoàn tiền lại cho người ta ứng_dụn... | Target 'ứng_dụng' không khớp vị trí start/end hoặc text trích xuất: 'ng lừa_đ' | Câu đối lập nhưng tất cả sentiment giống nhau (nguy cơ leakage) | Xem lại từng opinion, offset, aspect, sentiment |

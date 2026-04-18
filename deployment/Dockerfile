@@ -1,3 +1,0 @@
-# Dockerfile for SageMaker/Lambda deployment
-
-# ...implement Dockerfile here...

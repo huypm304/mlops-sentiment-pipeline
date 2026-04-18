@@ -43,3 +43,39 @@ Please generate the Terraform HCL code organized into:
 - Finally, provide the **EC2 User Data** script that will pull the Docker images (Next.js/FastAPI) and run them.
 
 Please confirm you can handle this Terraform architecture and let's start with the `iam.tf` and `sagemaker.tf` files.
+# TERRAFORM FULL-STACK AUTOMATION (MLOPS PORTAL)
+
+I want to build a Terraform project where running `terraform apply` provisions EVERYTHING so that the system is immediately ready for user feedback.
+
+## 1. INFRASTRUCTURE REQUIREMENTS (AWS)
+- **VPC & Networking:** Setup a standard VPC with a Public Subnet and Security Groups.
+- **S3 Bucket:** Create a bucket and upload `model.tar.gz` (use `aws_s3_object`).
+- **SageMaker Endpoint:** - `aws_sagemaker_model`: Point to the S3 artifact and use a PyTorch inference container.
+    - `aws_sagemaker_endpoint_configuration`: Use `ml.t2.medium` for cost-saving.
+    - `aws_sagemaker_endpoint`: The live URL for inference.
+- **EC2 Instance (The Host):**
+    - Type: `t3.medium` (Ubuntu 22.04).
+    - IAM Role: Assign a role with `SageMakerFullAccess` so the backend can call the endpoint.
+
+## 2. THE "MAGIC" USER DATA (BOOTSTRAP SCRIPT)
+The EC2 instance must automatically:
+1. Install Docker and Docker Compose.
+2. Clone my Github Repository (or pull pre-built Docker images).
+3. Generate an `.env` file dynamically: 
+    - Insert the `SAGEMAKER_ENDPOINT_NAME` (exported from Terraform).
+    - Insert `AWS_REGION`.
+4. Run `docker-compose up -d`.
+
+## 3. PROJECT STRUCTURE FOR TERRAFORM
+Please generate the following files:
+- `main.tf`: Provider and VPC setup.
+- `s3_sagemaker.tf`: S3 bucket, model artifact upload, and SageMaker Endpoint.
+- `ec2_app.tf`: EC2 provisioning with the `user_data` script to start the Web/API containers.
+- `iam.tf`: Roles for EC2 to talk to SageMaker.
+- `outputs.tf`: Final Public IP of the web portal.
+
+## 4. INTEGRATION LOGIC
+- The **FastAPI Backend** inside the Docker container must use `boto3` to call the SageMaker endpoint name provided in the `.env`.
+- The **Next.js Frontend** must point to the FastAPI service.
+
+Please write the complete Terraform HCL code. For the EC2 `user_data`, make it robust enough to handle the Docker installation and environment injection.

@@ -1,3 +1,0 @@
-# Lambda handler for real-time predictions
-
-# ...implement inference logic here...
