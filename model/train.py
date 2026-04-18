@@ -1,234 +1,623 @@
-import os
-import json
-import csv
+# =============================================================================
+# ABSA v5 - A100 Optimized | Fixed Evaluation Pipeline
+# Fixes:
+#   [Critical] sent_f1 dùng span matching thay vì index alignment
+#   [Major]    build_span_mask_from_pred clip context theo neighbor spans
+#   [Major]    composite metric dùng sent_f1 đúng → best checkpoint đúng
+#   [Minor]    torch.compile tách khỏi checkpoint, resume-safe
+# =============================================================================
+import os, json, unicodedata, random, csv
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from transformers import AutoTokenizer, AutoModel, get_linear_schedule_with_warmup
-from torchcrf import CRF
 from torch.optim import AdamW
+from torchcrf import CRF
 from sklearn.metrics import f1_score
-from tqdm import tqdm
-import unicodedata
+from tqdm.auto import tqdm
 
-# -----------------------------------------------------------------------------
-# 1. CONFIGURATION (GIỮ NGUYÊN BẢN GỐC CỦA BẠN)
-# -----------------------------------------------------------------------------
-MODEL_NAME         = "Fsoft-AIC/videberta-base"
-TRAIN_FILE         = "/content/drive/MyDrive/Colab Notebooks/Dataset_v4/data_train_v4.jsonl"
-VAL_FILE           = "/content/drive/MyDrive/Colab Notebooks/Dataset_v4/val_data.jsonl"
-MODEL_SAVE         = "model/absa_v4.pt"
-LOG_FILE           = "model/training_log.csv"
+# =========================
+# CONFIG
+# =========================
+MODEL_NAME      = "Fsoft-AIC/videberta-base"
+TRAIN_FILE      = "/content/data_train_v5.jsonl"
+VAL_FILE        = "/content/val_data.jsonl"
+MODEL_SAVE      = "best_model_v5.pt"
+CSV_LOG         = "train_log_v5.csv"
 
-MAX_LEN            = 320
-BATCH_SIZE         = 16
-EPOCHS             = 15
-PATIENCE           = 4
-MAX_OPS            = 8
-NUM_WORKERS        = 2
+MAX_LEN        = 224
+BATCH_SIZE     = 16
+EPOCHS         = 30
+PATIENCE       = 6
+PHASE1_EPOCHS  = 5
+MAX_OPS        = 8
+VAL_BATCH_MULT = 2
+NUM_WORKERS    = min(4, os.cpu_count() or 2)
+PREFETCH_FACTOR = 2
 
-LR_BACKBONE        = 2e-5
-LR_HEADS           = 5e-5
-WEIGHT_DECAY       = 0.01
-MAX_GRAD_NORM      = 1.0
+LR_BACKBONE    = 8e-6
+LR_HEADS       = 2e-5
+WARMUP_RATIO   = 0.1
+DROPOUT_RATE   = 0.3
+CONTEXT_WINDOW = 5
 
-ASPECTS            = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
-SENTIMENTS         = [0, 1, 2] 
-STOP_WORDS         = {"nhưng", "tuy", "mà", "chứ"}
+LAMBDA_BIO     = 1.5
+LAMBDA_SENT    = 1.0
+LAMBDA_GLOBAL  = 0.5
+LAMBDA_CONS    = 0.1
 
-LAMBDA_BIO         = 2.0  
-LAMBDA_SENT        = 1.0  
-LAMBDA_GLOBAL      = 0.5  
+# Ngưỡng IoU để coi predicted span match gold span
+SPAN_MATCH_IOU = 0.5
 
-DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DEVICE   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+USE_BF16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+ASPECTS  = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
 
-def build_bio_labels():
+
+def get_runtime_profile():
+    if not torch.cuda.is_available():
+        return {
+            "gpu_name": "cpu",
+            "batch_size": 4,
+            "val_batch_mult": 1,
+            "num_workers": 2,
+            "prefetch_factor": 2,
+            "use_compile": False,
+            "max_len": MAX_LEN,
+        }
+
+    gpu_name = torch.cuda.get_device_name(0).lower()
+    if "t4" in gpu_name:
+        return {
+            "gpu_name": gpu_name,
+            "batch_size": 16,
+            "val_batch_mult": 2,
+            "num_workers": min(2, os.cpu_count() or 2),
+            "prefetch_factor": 2,
+            "use_compile": False,
+            "max_len": MAX_LEN,
+        }
+    if "a100" in gpu_name:
+        return {
+            "gpu_name": gpu_name,
+            "batch_size": 32,
+            "val_batch_mult": 4,
+            "num_workers": min(8, os.cpu_count() or 4),
+            "prefetch_factor": 4,
+            "use_compile": True,
+            "max_len": 256,
+        }
+    return {
+        "gpu_name": gpu_name,
+        "batch_size": BATCH_SIZE,
+        "val_batch_mult": VAL_BATCH_MULT,
+        "num_workers": NUM_WORKERS,
+        "prefetch_factor": PREFETCH_FACTOR,
+        "use_compile": False,
+        "max_len": MAX_LEN,
+    }
+
+# =========================
+# LABEL & UTILS
+# =========================
+def build_bio():
     labels = ["O"]
-    for asp in ASPECTS:
-        labels.extend([f"B-{asp}", f"I-{asp}"])
-    return labels, {l: i for i, l in enumerate(labels)}, {i: l for i, l in enumerate(labels)}
+    for a in ASPECTS:
+        labels += [f"B-{a}", f"I-{a}"]
+    l2i = {l: i for i, l in enumerate(labels)}
+    i2l = {i: l for i, l in enumerate(labels)}
+    return labels, l2i, i2l
 
-BIO_LABELS, BIO_LABEL2ID, BIO_ID2LABEL = build_bio_labels()
-N_BIO, N_SENT, N_GLOBAL = len(BIO_LABELS), len(SENTIMENTS), len(SENTIMENTS)
+BIO_LABELS, BIO_L2I, BIO_I2L = build_bio()
+N_BIO, N_SENT = len(BIO_LABELS), 3
 
-# -----------------------------------------------------------------------------
-# 2. UTILS & LOSS
-# -----------------------------------------------------------------------------
-def nfc(text: str) -> str: return unicodedata.normalize("NFC", text) if text else ""
+def nfc(x): return unicodedata.normalize("NFC", x)
 
-class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2.5, reduction="none"):
-        super().__init__()
-        self.gamma, self.reduction, self.alpha = gamma, reduction, alpha 
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
 
-    def forward(self, logits, targets):
-        ce_loss = F.cross_entropy(logits, targets, reduction="none", weight=self.alpha)
-        pt = torch.exp(-ce_loss)
-        focal_loss = ((1 - pt) ** self.gamma) * ce_loss
-        return focal_loss.mean() if self.reduction == "mean" else focal_loss
+# =========================
+# DATASET
+# =========================
+class ABSADataset(Dataset):
+    def __init__(self, file, tokenizer, max_len):
+        self.items = []
+        self.max_len = max_len
+        if not os.path.exists(file):
+            print(f"Warning: File not found at {file}")
+            return
 
-# -----------------------------------------------------------------------------
-# 3. MODEL (FIX LỖI KIỂU DỮ LIỆU CRF)
-# -----------------------------------------------------------------------------
+        with open(file, encoding="utf-8") as f:
+            lines = f.readlines()
+
+        print(f"  Pre-tokenizing {len(lines)} records...")
+        for line in lines:
+            rec  = json.loads(line)
+            text = nfc(rec["text"])
+
+            enc = tokenizer(
+                text,
+                max_length=self.max_len,
+                padding="max_length",
+                truncation=True,
+                return_offsets_mapping=True,
+                return_special_tokens_mask=True,
+            )
+
+            offsets      = enc.pop("offset_mapping")
+            special_mask = enc.pop("special_tokens_mask")
+            L            = len(enc["input_ids"])
+
+            bio       = [0] * L
+            span_mask = torch.zeros(MAX_OPS, L)
+            span_sent = torch.full((MAX_OPS,), -100, dtype=torch.long)
+
+            valid_ops = []
+            for op in rec.get("opinions", []):
+                s    = op.get("start", -1)
+                e    = op.get("end", -1)
+                asp  = op.get("aspect", "")
+                sent = op.get("sentiment", -1)
+                if not asp or sent == -1:
+                    continue
+                tokens = [
+                    i for i, (a, b) in enumerate(offsets)
+                    if not special_mask[i] and max(a, s) < min(b, e)
+                ]
+                if tokens:
+                    valid_ops.append((tokens, asp, sent))
+
+            valid_ops.sort(key=lambda x: x[0][0])
+
+            for op_idx, (tokens, asp, sent) in enumerate(valid_ops[:MAX_OPS]):
+                for k, i in enumerate(tokens):
+                    tag = f"B-{asp}" if k == 0 else f"I-{asp}"
+                    if tag in BIO_L2I:
+                        bio[i] = BIO_L2I[tag]
+
+                tmin, tmax = min(tokens), max(tokens)
+
+                lo = tmin - CONTEXT_WINDOW
+                if op_idx > 0:
+                    prev_end = max(valid_ops[op_idx - 1][0])
+                    lo = max(lo, prev_end + 1)
+                lo = max(lo, 1)
+
+                hi = tmax + CONTEXT_WINDOW
+                if op_idx < len(valid_ops) - 1:
+                    next_start = min(valid_ops[op_idx + 1][0])
+                    hi = min(hi, next_start - 1)
+                hi = min(hi, L - 1)
+
+                for i in range(lo, hi + 1):
+                    if not special_mask[i]:
+                        span_mask[op_idx, i] = 1.0
+
+                span_sent[op_idx] = sent
+
+            self.items.append({
+                "ids":       torch.tensor(enc["input_ids"],      dtype=torch.long),
+                "mask":      torch.tensor(enc["attention_mask"], dtype=torch.long),
+                "bio":       torch.tensor(bio,                   dtype=torch.long),
+                "span_mask": span_mask,
+                "span_sent": span_sent,
+                "global":    torch.tensor(rec.get("global_sentiment", -1), dtype=torch.long),
+            })
+
+    def __len__(self):        return len(self.items)
+    def __getitem__(self, i): return self.items[i]
+
+# =========================
+# MODEL
+# =========================
 class AttentionPooling(nn.Module):
     def __init__(self, hidden):
         super().__init__()
         self.fc = nn.Linear(hidden, 1)
+
     def forward(self, x, mask):
-        scores = self.fc(x).squeeze(-1).masked_fill(mask == 0, -1e4)
-        w = torch.softmax(scores, dim=-1)
+        score = self.fc(x).squeeze(-1).masked_fill(mask == 0, -1e9)
+        w     = torch.softmax(score, dim=-1)
         return (x * w.unsqueeze(-1)).sum(dim=2)
 
-class ABSAv4(nn.Module):
-    def __init__(self, model_name: str, dropout: float = 0.2): 
-        super().__init__()
-        self.backbone = AutoModel.from_pretrained(model_name)
-        hidden = self.backbone.config.hidden_size
-        self.dropout_seq  = nn.Dropout(dropout)
-        self.bio_head    = nn.Linear(hidden, N_BIO)
-        self.crf         = CRF(N_BIO, batch_first=True)
-        self.span_attn   = AttentionPooling(hidden)
-        self.sent_head   = nn.Sequential(nn.Dropout(dropout), nn.Linear(hidden, N_SENT))
-        self.global_head = nn.Linear(hidden, N_GLOBAL)
 
-    def forward(self, input_ids, attention_mask, span_masks=None, bio_labels=None):
-        out       = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-        seq_out   = self.dropout_seq(out.last_hidden_state)
-        cls_out   = self.dropout_seq(seq_out[:, 0, :])
-        
-        # BẮT BUỘC: Ép emissions sang float32 cho CRF
-        bio_emissions = self.bio_head(seq_out).float() 
-        mask_bool = attention_mask.bool()
+class ABSAModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.backbone    = AutoModel.from_pretrained(MODEL_NAME)
+        h                = self.backbone.config.hidden_size
+        self.dropout     = nn.Dropout(DROPOUT_RATE)
+        self.bio_head    = nn.Linear(h, N_BIO)
+        self.crf         = CRF(N_BIO, batch_first=True)
+        self.span_attn   = AttentionPooling(h)
+        self.sent_head   = nn.Sequential(nn.Dropout(0.2), nn.Linear(h, N_SENT))
+        self.global_head = nn.Linear(h, N_SENT)
+
+    def forward(self, ids, mask, span_mask=None, bio=None):
+        out       = self.backbone(ids, attention_mask=mask)
+        seq       = self.dropout(out.last_hidden_state)
+        cls       = self.dropout(seq[:, 0])
+        emissions = self.bio_head(seq)
+        mask_bool = mask.bool()
 
         crf_loss = None
-        if bio_labels is not None:
-            crf_loss = -self.crf(bio_emissions, bio_labels, mask=mask_bool, reduction="none")
-        
-        bio_preds = self.crf.decode(bio_emissions, mask=mask_bool)
-        global_logits = self.global_head(cls_out)
-        
+        if bio is not None:
+            crf_loss = -self.crf(emissions, bio, mask=mask_bool, reduction="mean")
+
+        bio_pred      = self.crf.decode(emissions, mask=mask_bool)
+        global_logits = self.global_head(cls)
+
         span_logits = None
-        if span_masks is not None:
-            B, L, H = seq_out.shape
-            seq_exp = seq_out.unsqueeze(1).expand(B, span_masks.shape[1], L, H)
-            span_logits = self.sent_head(self.span_attn(seq_exp, span_masks))
+        if span_mask is not None:
+            B, L, H   = seq.shape
+            M         = span_mask.shape[1]
+            seq_exp   = seq.unsqueeze(1).expand(B, M, L, H)
+            span_repr = self.span_attn(seq_exp, span_mask)
+            span_logits = self.sent_head(span_repr)
 
-        return crf_loss, bio_preds, span_logits, global_logits
+        return crf_loss, bio_pred, span_logits, global_logits
 
-# -----------------------------------------------------------------------------
-# 4. DATASET & TRAINING (GIỮ NGUYÊN LOGIC CỦA BẠN)
-# -----------------------------------------------------------------------------
-class ABSADataset(Dataset):
-    def __init__(self, file_path, tokenizer):
-        self.items = []
-        if not os.path.exists(file_path): return
-        with open(file_path, encoding="utf-8") as f:
-            for line in f:
-                rec = json.loads(line.strip())
-                text = nfc(rec.get("text", "").strip())
-                enc = tokenizer(text, max_length=MAX_LEN, padding="max_length", truncation=True, return_offsets_mapping=True, return_special_tokens_mask=True)
-                offsets, special_mask = enc.pop("offset_mapping"), enc.pop("special_tokens_mask")
-                seq_len = len(enc["input_ids"])
-                bio_labels, span_masks, span_sents = [0]*seq_len, torch.zeros(MAX_OPS, seq_len), torch.full((MAX_OPS,), -100, dtype=torch.long)
-                for op_idx, op in enumerate(rec.get("opinions", [])[:MAX_OPS]):
-                    asp, sent_int = op.get("aspect", ""), op.get("sentiment", -1)
-                    if asp not in ASPECTS or sent_int not in SENTIMENTS: continue
-                    char_s, char_e = op.get("start", -1), op.get("end", -1)
-                    tokens = [i for i, (ts, te) in enumerate(offsets) if not special_mask[i] and max(ts, char_s) < min(te, char_e)]
-                    if not tokens: continue
-                    for idx, i in enumerate(tokens): bio_labels[i] = BIO_LABEL2ID[f"{'B' if idx==0 else 'I'}-{asp}"]
-                    lo, hi = tokens[0], tokens[-1]
-                    while lo > 0 and not special_mask[lo-1] and text[offsets[lo-1][0]:offsets[lo-1][1]].lower() not in STOP_WORDS: lo -= 1
-                    while hi < seq_len-1 and not special_mask[hi+1] and text[offsets[hi+1][0]:offsets[hi+1][1]].lower() not in STOP_WORDS: hi += 1
-                    for i in range(lo, hi + 1): 
-                        if not special_mask[i]: span_masks[op_idx, i] = 1.0
-                    span_sents[op_idx] = sent_int
-                sents_list = [o.get("sentiment", -1) for o in rec.get("opinions", [])]
-                cw = 2.5 if (0 in sents_list and 1 in sents_list) else 1.0
-                self.items.append({"input_ids": torch.tensor(enc["input_ids"], dtype=torch.long), "attention_mask": torch.tensor(enc["attention_mask"], dtype=torch.long), "bio_labels": torch.tensor(bio_labels, dtype=torch.long), "span_masks": span_masks, "span_sents": span_sents, "global_label": torch.tensor(rec.get("global_sentiment", -1), dtype=torch.long), "conflict_weight": torch.tensor(cw, dtype=torch.float)})
-    def __len__(self): return len(self.items)
-    def __getitem__(self, i): return self.items[i]
-
-def train():
-    os.makedirs("model", exist_ok=True)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
-    train_dl = DataLoader(ABSADataset(TRAIN_FILE, tokenizer), batch_size=BATCH_SIZE, shuffle=True, num_workers=NUM_WORKERS)
-    val_dl   = DataLoader(ABSADataset(VAL_FILE, tokenizer), batch_size=BATCH_SIZE, shuffle=False)
-    model = ABSAv4(MODEL_NAME).to(DEVICE)
-    opt = AdamW([{"params": model.backbone.parameters(), "lr": LR_BACKBONE}, {"params": [p for n, p in model.named_parameters() if "backbone" not in n], "lr": LR_HEADS}], weight_decay=WEIGHT_DECAY)
-    sch = get_linear_schedule_with_warmup(opt, int(0.1*len(train_dl)*EPOCHS), len(train_dl)*EPOCHS)
-    
-    # Dùng GradScaler chuẩn PyTorch 2.x+
-    scaler = torch.amp.GradScaler('cuda')
-    crit_sent = FocalLoss(alpha=torch.tensor([1.2, 1.0, 1.2], device=DEVICE), gamma=2.5)
-    crit_global = FocalLoss(gamma=2.0)
-    best_score = 0
-
-    for epoch in range(1, EPOCHS + 1):
-        model.train()
-        total_tr_loss = 0
-        pbar = tqdm(train_dl, desc=f"Epoch {epoch}/{EPOCHS}")
-        for b in pbar:
-            opt.zero_grad()
-            ids, mask, bio, s_mask, s_sent, g_lbl, cw = [b[k].to(DEVICE) for k in b]
-            with torch.amp.autocast('cuda'):
-                c_loss_raw, _, s_logits, g_logits = model(ids, mask, s_mask, bio)
-                loss_bio = (c_loss_raw * cw).mean()
-                loss_s = torch.tensor(0.0, device=DEVICE)
-                if (s_sent != -100).any():
-                    ls_raw = crit_sent(s_logits.view(-1, N_SENT), s_sent.view(-1)).view(ids.size(0), MAX_OPS)
-                    loss_s = (ls_raw * cw.unsqueeze(1))[(s_sent != -100)].mean()
-                loss_g = torch.tensor(0.0, device=DEVICE)
-                if (g_lbl != -1).any(): loss_g = (crit_global(g_logits, g_lbl) * cw).mean()
-                loss = (LAMBDA_BIO * loss_bio) + (LAMBDA_SENT * loss_s) + (LAMBDA_GLOBAL * loss_g)
-
-            scaler.scale(loss).backward()
-            scaler.unscale_(opt) # Bước này cực kỳ quan trọng
-            torch.nn.utils.clip_grad_norm_(model.parameters(), MAX_GRAD_NORM)
-            scaler.step(opt)
-            scaler.update()
-            sch.step()
-            total_tr_loss += loss.item()
-            pbar.set_postfix({"loss": f"{loss.item():.4f}", "avg": f"{total_tr_loss/(pbar.n+1):.4f}"})
-
-        # Đoạn Evaluate và Metric (Giữ nguyên của bạn)
-        model.eval()
-        all_p, all_g, all_gs_p, all_gs_g = [], [], [], []
-        with torch.no_grad(), torch.amp.autocast('cuda'):
-            for b in val_dl:
-                ids, mask, bio, s_mask, s_sent, _, _ = [b[k].to(DEVICE) for k in b]
-                _, b_preds, s_logits, _ = model(ids, mask, s_mask)
-                for i, (p_seq, g_seq) in enumerate(zip(b_preds, bio.cpu().tolist())):
-                    vl = int(mask[i].sum())
-                    all_p.append(set(extract_bio_spans(p_seq[:vl])))
-                    all_g.append(set(extract_bio_spans(g_seq[:vl])))
-                if s_logits is not None:
-                    mask_s = s_sent != -100
-                    all_gs_p.extend(s_logits.argmax(-1)[mask_s].cpu().tolist()); all_gs_g.extend(s_sent[mask_s].cpu().tolist())
-
-        tp = fp = fn = 0
-        for ps, gs in zip(all_p, all_g): tp += len(ps & gs); fp += len(ps - gs); fn += len(gs - ps)
-        f1_span = 2*tp/(2*tp+fp+fn+1e-9)
-        f1_sent = f1_score(all_gs_g, all_gs_p, average="macro", zero_division=0)
-        composite = (f1_span * 0.6) + (f1_sent * 0.4)
-        print(f"Result: Span F1: {f1_span:.4f} | Sent F1: {f1_sent:.4f} | Score: {composite:.4f}")
-        if composite > best_score:
-            best_score = composite; torch.save(model.state_dict(), MODEL_SAVE)
-
-def extract_bio_spans(label_seq):
+# =========================
+# SPAN UTILS
+# =========================
+def extract_spans(seq):
+    """Parse BIO sequence → set of (start, end, aspect)."""
     spans, start, cur = set(), None, None
-    for i, lid in enumerate(label_seq):
-        s = BIO_ID2LABEL.get(lid, "O")
-        if s.startswith("B-"):
-            if start is not None: spans.add((start, i - 1, cur))
-            start, cur = i, s[2:]
-        elif s.startswith("I-") and cur and s[2:] == cur: pass
+    for i, lid in enumerate(seq):
+        tag = BIO_I2L.get(lid, "O")
+        if tag.startswith("B-"):
+            if start is not None:
+                spans.add((start, i - 1, cur))
+            start, cur = i, tag[2:]
+        elif tag.startswith("I-") and cur and cur == tag[2:]:
+            pass
         else:
-            if start is not None: spans.add((start, i - 1, cur))
-            start = cur = None
-    if start is not None: spans.add((start, len(label_seq) - 1, cur))
+            if start is not None:
+                spans.add((start, i - 1, cur))
+            start, cur = None, None
+    if start is not None:
+        spans.add((start, len(seq) - 1, cur))
     return spans
+
+
+def build_span_mask_from_pred(bio_preds, seq_len, device):
+    """
+    Tạo span_mask từ predicted BIO.
+    Context window được clip theo neighbor spans — đồng nhất với dataset builder.
+    Fix [Major]: thêm neighbor-aware clipping.
+    """
+    B = len(bio_preds)
+    span_mask = torch.zeros(B, MAX_OPS, seq_len, device=device)
+
+    for b, seq in enumerate(bio_preds):
+        # Thu thập tất cả spans trước để biết neighbor
+        pred_spans = sorted(extract_spans(seq))   # list of (tmin, tmax, asp)
+
+        for op_idx, (tmin, tmax, _) in enumerate(pred_spans[:MAX_OPS]):
+            lo = tmin - CONTEXT_WINDOW
+            if op_idx > 0:
+                prev_tmax = pred_spans[op_idx - 1][1]
+                lo = max(lo, prev_tmax + 1)
+            lo = max(lo, 1)
+
+            hi = tmax + CONTEXT_WINDOW
+            if op_idx < len(pred_spans) - 1:
+                next_tmin = pred_spans[op_idx + 1][0]
+                hi = min(hi, next_tmin - 1)
+            hi = min(hi, seq_len - 1)
+
+            if lo <= hi:
+                span_mask[b, op_idx, lo:hi + 1] = 1.0
+
+    return span_mask
+
+
+def match_pred_to_gold(pred_spans, gold_spans, iou_threshold=SPAN_MATCH_IOU):
+    """
+    Match predicted spans → gold spans theo token-level IoU.
+    Trả về list (pred_asp, gold_sent) cho các cặp matched.
+
+    Fix [Critical]: thay vì align theo index, dùng IoU matching để
+    sent_f1 phản ánh end-to-end inference thật.
+    """
+    matched = []
+    used_gold = set()
+
+    for p_start, p_end, p_asp in pred_spans:
+        p_set = set(range(p_start, p_end + 1))
+        best_iou, best_gold = 0.0, None
+
+        for g_idx, (g_start, g_end, g_asp, g_sent) in enumerate(gold_spans):
+            if g_idx in used_gold:
+                continue
+            if g_asp != p_asp:          # aspect phải khớp
+                continue
+            g_set  = set(range(g_start, g_end + 1))
+            inter  = len(p_set & g_set)
+            union  = len(p_set | g_set)
+            iou    = inter / union if union > 0 else 0.0
+            if iou > best_iou:
+                best_iou, best_gold = iou, g_idx
+
+        if best_iou >= iou_threshold and best_gold is not None:
+            matched.append((p_start, p_end, p_asp, gold_spans[best_gold][3]))
+            used_gold.add(best_gold)
+
+    return matched   # list of (p_start, p_end, p_asp, gold_sent)
+
+# =========================
+# EVALUATION — end-to-end pipeline
+# =========================
+def evaluate(model, dl):
+    model.eval()
+
+    # BIO span detection metrics
+    pred_spans_all, gold_spans_all = [], []
+
+    # sent_f1: chỉ tính trên matched spans (IoU ≥ threshold)
+    sent_preds, sent_golds = [], []
+
+    # global metrics
+    glob_preds, glob_golds = [], []
+
+    with torch.inference_mode():
+        for b in dl:
+            ids, mask, bio, s_mask, s_sent, glob = [
+                b[k].to(DEVICE, non_blocking=True)
+                for k in ["ids", "mask", "bio", "span_mask", "span_sent", "global"]
+            ]
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=USE_BF16):
+                _, bio_p, _, g_log = model(ids, mask, span_mask=None)
+
+            # Build predicted span mask với neighbor-aware clipping
+            pred_sm = build_span_mask_from_pred(bio_p, ids.shape[1], DEVICE)
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=USE_BF16):
+                _, _, s_log, g_log = model(ids, mask, span_mask=pred_sm)
+
+            for i, (p_seq, g_seq) in enumerate(zip(bio_p, bio.tolist())):
+                vl         = int(mask[i].sum())
+                pred_set   = extract_spans(p_seq[:vl])
+                gold_set   = extract_spans(g_seq[:vl])
+                pred_spans_all.append(pred_set)
+                gold_spans_all.append(gold_set)
+
+                # Xây gold_spans có kèm sentiment để matching
+                # Lấy từ s_sent theo op_idx tương ứng với gold BIO order
+                gold_sorted = sorted(gold_set)    # (start, end, asp) đã sort theo start
+                gold_with_sent = []
+                for op_idx, (gs, ge, ga) in enumerate(gold_sorted[:MAX_OPS]):
+                    gs_val = s_sent[i, op_idx].item()
+                    if gs_val != -100:
+                        gold_with_sent.append((gs, ge, ga, gs_val))
+
+                # predicted spans sorted theo start (đồng bộ với span_mask order)
+                pred_sorted = sorted(pred_set)
+
+                # Lấy predicted sentiment từ s_log theo op_idx
+                pred_with_sent = []
+                if s_log is not None:
+                    for op_idx, (ps, pe, pa) in enumerate(pred_sorted[:MAX_OPS]):
+                        p_sent = s_log[i, op_idx].argmax().item()
+                        pred_with_sent.append((ps, pe, pa, p_sent))
+
+                # IoU matching: pred → gold
+                matched = match_pred_to_gold(
+                    [(ps, pe, pa) for ps, pe, pa, _ in pred_with_sent],
+                    gold_with_sent,
+                )
+                # Thu thập pred/gold sentiment cho matched pairs
+                pred_sent_map = {(ps, pe, pa): psent for ps, pe, pa, psent in pred_with_sent}
+                for ps, pe, pa, g_sent_val in matched:
+                    p_sent_val = pred_sent_map.get((ps, pe, pa))
+                    if p_sent_val is not None:
+                        sent_preds.append(p_sent_val)
+                        sent_golds.append(g_sent_val)
+
+            valid_glob = (glob != -1)
+            if valid_glob.any():
+                glob_preds.extend(g_log.argmax(-1)[valid_glob].cpu().tolist())
+                glob_golds.extend(glob[valid_glob].cpu().tolist())
+
+    # BIO span F1
+    tp  = sum(len(p & g) for p, g in zip(pred_spans_all, gold_spans_all))
+    fp  = sum(len(p - g) for p, g in zip(pred_spans_all, gold_spans_all))
+    fn  = sum(len(g - p) for p, g in zip(pred_spans_all, gold_spans_all))
+    span_f1 = 2 * tp / (2 * tp + fp + fn + 1e-9)
+
+    # sent_f1: chỉ trên matched spans — phản ánh end-to-end thật
+    sent_f1 = f1_score(sent_golds, sent_preds, average="macro", zero_division=0) \
+              if sent_golds else 0.0
+
+    glob_f1 = f1_score(glob_golds, glob_preds, average="macro", zero_division=0) \
+              if glob_golds else 0.0
+
+    # Log thêm số matched để monitor
+    match_rate = len(sent_golds) / max(sum(len(g) for g in gold_spans_all), 1)
+
+    composite = 0.5 * span_f1 + 0.3 * sent_f1 + 0.2 * glob_f1
+    return composite, span_f1, sent_f1, glob_f1, match_rate
+
+# =========================
+# TRAINING
+# =========================
+def train():
+    set_seed()
+    profile = get_runtime_profile()
+    batch_size = profile["batch_size"]
+    val_batch_mult = profile["val_batch_mult"]
+    num_workers = profile["num_workers"]
+    prefetch_factor = profile["prefetch_factor"]
+    use_compile = profile["use_compile"]
+    max_len = profile["max_len"]
+
+    torch.set_float32_matmul_precision("high")
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32       = True
+    torch.backends.cudnn.benchmark        = True
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+
+    print("Loading & pre-tokenizing data...")
+    train_ds = ABSADataset(TRAIN_FILE, tokenizer, max_len=max_len)
+    val_ds   = ABSADataset(VAL_FILE,   tokenizer, max_len=max_len)
+
+    train_dl = DataLoader(
+        train_ds, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0),
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+    )
+    val_dl = DataLoader(
+        val_ds, batch_size=batch_size * val_batch_mult, shuffle=False,
+        num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0),
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
+    )
+    print(
+        f"Train: {len(train_ds)} | Val: {len(val_ds)} | bf16: {USE_BF16} | "
+        f"gpu: {profile['gpu_name']} | batch: {batch_size} | max_len: {max_len} | workers: {num_workers}"
+    )
+
+    # Khởi tạo raw model cho run train mới từ đầu
+    raw_model = ABSAModel().to(DEVICE).float()
+
+    opt = AdamW([
+        {"params": raw_model.backbone.parameters(),
+         "lr": LR_BACKBONE, "weight_decay": 0.01},
+        {"params": [p for n, p in raw_model.named_parameters() if "backbone" not in n],
+         "lr": LR_HEADS, "weight_decay": 0.0},
+    ])
+
+    total_steps  = EPOCHS * len(train_dl)
+    warmup_steps = int(total_steps * WARMUP_RATIO)
+    scheduler    = get_linear_schedule_with_warmup(opt, warmup_steps, total_steps)
+
+    start_epoch, best_f1, patience_cnt = 1, 0.0, 0
+
+    # Compile sau khi khởi tạo xong
+    if use_compile and hasattr(torch, "compile"):
+        print("Compiling model (epoch 1 sẽ chậm hơn ~3-5 phút do JIT warmup)...")
+        model = torch.compile(raw_model)
+    else:
+        model = raw_model
+
+    csv_file   = open(CSV_LOG, "w", newline="", encoding="utf-8")
+    csv_writer = csv.writer(csv_file)
+    csv_writer.writerow([
+        "epoch", "phase", "train_loss",
+        "span_f1", "sent_f1", "glob_f1", "composite",
+        "match_rate", "is_best",
+    ])
+
+    print(f"\nDevice: {DEVICE} | Steps: {total_steps} | Warmup: {warmup_steps}")
+    print(f"Batch: {batch_size} | AMP: {'bfloat16' if USE_BF16 else 'float16'} | compile: {use_compile}")
+    print(f"Phase 1: epoch 1-{PHASE1_EPOCHS} (BIO+Global)")
+    print(f"Phase 2: epoch {PHASE1_EPOCHS+1}-{EPOCHS} (full loss)\n")
+
+    for ep in range(start_epoch, EPOCHS + 1):
+        model.train()
+        total_loss = 0.0
+        in_phase1  = (ep <= PHASE1_EPOCHS)
+        phase_tag  = "BIO" if in_phase1 else "FULL"
+
+        pbar = tqdm(train_dl, desc=f"Ep {ep:02d}/{EPOCHS} [{phase_tag}]")
+        for b in pbar:
+            ids, mask, bio, span_mask, span_sent, g = [
+                b[k].to(DEVICE, non_blocking=True)
+                for k in ["ids", "mask", "bio", "span_mask", "span_sent", "global"]
+            ]
+            opt.zero_grad(set_to_none=True)
+
+            with torch.autocast(device_type="cuda", dtype=torch.bfloat16, enabled=USE_BF16):
+                if in_phase1:
+                    crf_l, _, _, g_logits = model(ids, mask, span_mask=None, bio=bio)
+                    l_s    = torch.tensor(0.0, device=DEVICE)
+                    l_cons = torch.tensor(0.0, device=DEVICE)
+                else:
+                    crf_l, _, s_logits, g_logits = model(ids, mask, span_mask, bio)
+                    l_s = F.cross_entropy(
+                        s_logits.view(-1, N_SENT), span_sent.view(-1), ignore_index=-100
+                    )
+                    valid_mask = (span_sent != -100).float()
+                    if valid_mask.sum() > 0:
+                        span_avg = (s_logits * valid_mask.unsqueeze(-1)).sum(1) / \
+                                   valid_mask.sum(1, keepdim=True).clamp(min=1)
+                        l_cons = F.kl_div(
+                            F.log_softmax(span_avg, dim=-1),
+                            F.softmax(g_logits.detach(), dim=-1),
+                            reduction="batchmean",
+                        )
+                    else:
+                        l_cons = torch.tensor(0.0, device=DEVICE)
+
+                valid_g = (g != -1)
+                l_g = F.cross_entropy(g_logits[valid_g], g[valid_g]) if valid_g.any() \
+                      else torch.tensor(0.0, device=DEVICE)
+
+                loss = (LAMBDA_BIO * crf_l + LAMBDA_GLOBAL * l_g
+                        + LAMBDA_SENT * l_s + LAMBDA_CONS * l_cons)
+
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+            opt.step()
+            scheduler.step()
+
+            total_loss += loss.item()
+            pbar.set_postfix({"loss": f"{loss.item():.4f}", "lr": f"{scheduler.get_last_lr()[0]:.2e}"})
+
+        avg_loss = total_loss / len(train_dl)
+
+        # Phase 1 không dùng để chọn best model, nên chỉ eval ở epoch cuối phase 1
+        if in_phase1 and ep < PHASE1_EPOCHS:
+            print(f"Ep {ep:02d} | loss={avg_loss:.4f} | skip val (phase1 warmup)")
+            csv_writer.writerow([ep, "phase1", f"{avg_loss:.4f}", "", "", "", "", "", ""])
+            csv_file.flush()
+            continue
+
+        composite, span_f1, sent_f1, glob_f1, match_rate = evaluate(model, val_dl)
+        print(
+            f"Ep {ep:02d} | loss={avg_loss:.4f} | "
+            f"span={span_f1:.4f} sent={sent_f1:.4f} glob={glob_f1:.4f} | "
+            f"composite={composite:.4f} | match={match_rate:.2%}"
+        )
+
+        if ep == PHASE1_EPOCHS:
+            csv_writer.writerow([ep, "phase1", f"{avg_loss:.4f}", f"{span_f1:.4f}",
+                                  f"{sent_f1:.4f}", f"{glob_f1:.4f}", f"{composite:.4f}",
+                                  f"{match_rate:.4f}", ""])
+            csv_file.flush()
+            best_f1, patience_cnt = 0.0, 0
+            print(f"--- Phase 2 start: reset early-stop ---")
+            continue
+
+        is_best = composite > best_f1
+        if is_best:
+            best_f1, patience_cnt = composite, 0
+            torch.save(raw_model.state_dict(), MODEL_SAVE)
+            print(f"  ⭐ Saved best model (composite={best_f1:.4f})")
+        else:
+            patience_cnt += 1
+
+        phase_label = "phase1" if in_phase1 else "phase2"
+        csv_writer.writerow([ep, phase_label, f"{avg_loss:.4f}", f"{span_f1:.4f}",
+                              f"{sent_f1:.4f}", f"{glob_f1:.4f}", f"{composite:.4f}",
+                              f"{match_rate:.4f}", "best" if is_best else ""])
+        csv_file.flush()
+
+        if patience_cnt >= PATIENCE:
+            print(f"Early stopping tại epoch {ep}.")
+            break
+
+    csv_file.close()
+    print(f"\nDone. Best composite F1: {best_f1:.4f}")
+    print(f"Model : {MODEL_SAVE} | Log: {CSV_LOG}")
+
 
 if __name__ == "__main__":
     train()
