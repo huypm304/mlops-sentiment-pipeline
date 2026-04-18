@@ -28,15 +28,15 @@ CHECKPOINT_SAVE = "checkpoint_v5.pt"
 MODEL_SAVE      = "best_model_v5.pt"
 CSV_LOG         = "train_log_v5.csv"
 
-MAX_LEN        = 256
-BATCH_SIZE     = 48
+MAX_LEN        = 224
+BATCH_SIZE     = 16
 EPOCHS         = 30
 PATIENCE       = 6
 PHASE1_EPOCHS  = 5
 MAX_OPS        = 8
-VAL_BATCH_MULT = 4
-NUM_WORKERS    = min(8, os.cpu_count() or 4)
-PREFETCH_FACTOR = 4
+VAL_BATCH_MULT = 2
+NUM_WORKERS    = min(4, os.cpu_count() or 2)
+PREFETCH_FACTOR = 2
 
 LR_BACKBONE    = 8e-6
 LR_HEADS       = 2e-5
@@ -55,6 +55,50 @@ SPAN_MATCH_IOU = 0.5
 DEVICE   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 USE_BF16 = torch.cuda.is_available() and torch.cuda.is_bf16_supported()
 ASPECTS  = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
+
+
+def get_runtime_profile():
+    if not torch.cuda.is_available():
+        return {
+            "gpu_name": "cpu",
+            "batch_size": 4,
+            "val_batch_mult": 1,
+            "num_workers": 2,
+            "prefetch_factor": 2,
+            "use_compile": False,
+            "max_len": MAX_LEN,
+        }
+
+    gpu_name = torch.cuda.get_device_name(0).lower()
+    if "t4" in gpu_name:
+        return {
+            "gpu_name": gpu_name,
+            "batch_size": 16,
+            "val_batch_mult": 2,
+            "num_workers": min(2, os.cpu_count() or 2),
+            "prefetch_factor": 2,
+            "use_compile": False,
+            "max_len": MAX_LEN,
+        }
+    if "a100" in gpu_name:
+        return {
+            "gpu_name": gpu_name,
+            "batch_size": 32,
+            "val_batch_mult": 4,
+            "num_workers": min(8, os.cpu_count() or 4),
+            "prefetch_factor": 4,
+            "use_compile": True,
+            "max_len": 256,
+        }
+    return {
+        "gpu_name": gpu_name,
+        "batch_size": BATCH_SIZE,
+        "val_batch_mult": VAL_BATCH_MULT,
+        "num_workers": NUM_WORKERS,
+        "prefetch_factor": PREFETCH_FACTOR,
+        "use_compile": False,
+        "max_len": MAX_LEN,
+    }
 
 # =========================
 # LABEL & UTILS
@@ -83,8 +127,9 @@ def set_seed(seed=42):
 # DATASET
 # =========================
 class ABSADataset(Dataset):
-    def __init__(self, file, tokenizer):
+    def __init__(self, file, tokenizer, max_len):
         self.items = []
+        self.max_len = max_len
         if not os.path.exists(file):
             print(f"Warning: File not found at {file}")
             return
@@ -99,7 +144,7 @@ class ABSADataset(Dataset):
 
             enc = tokenizer(
                 text,
-                max_length=MAX_LEN,
+                max_length=self.max_len,
                 padding="max_length",
                 truncation=True,
                 return_offsets_mapping=True,
@@ -439,6 +484,13 @@ def evaluate(model, dl):
 # =========================
 def train():
     set_seed()
+    profile = get_runtime_profile()
+    batch_size = profile["batch_size"]
+    val_batch_mult = profile["val_batch_mult"]
+    num_workers = profile["num_workers"]
+    prefetch_factor = profile["prefetch_factor"]
+    use_compile = profile["use_compile"]
+    max_len = profile["max_len"]
 
     torch.set_float32_matmul_precision("high")
     torch.backends.cuda.matmul.allow_tf32 = True
@@ -448,20 +500,23 @@ def train():
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
     print("Loading & pre-tokenizing data...")
-    train_ds = ABSADataset(TRAIN_FILE, tokenizer)
-    val_ds   = ABSADataset(VAL_FILE,   tokenizer)
+    train_ds = ABSADataset(TRAIN_FILE, tokenizer, max_len=max_len)
+    val_ds   = ABSADataset(VAL_FILE,   tokenizer, max_len=max_len)
 
     train_dl = DataLoader(
-        train_ds, batch_size=BATCH_SIZE, shuffle=True,
-        num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True,
-        prefetch_factor=PREFETCH_FACTOR,
+        train_ds, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0),
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
     )
     val_dl = DataLoader(
-        val_ds, batch_size=BATCH_SIZE * VAL_BATCH_MULT, shuffle=False,
-        num_workers=NUM_WORKERS, pin_memory=True, persistent_workers=True,
-        prefetch_factor=PREFETCH_FACTOR,
+        val_ds, batch_size=batch_size * val_batch_mult, shuffle=False,
+        num_workers=num_workers, pin_memory=True, persistent_workers=(num_workers > 0),
+        prefetch_factor=prefetch_factor if num_workers > 0 else None,
     )
-    print(f"Train: {len(train_ds)} | Val: {len(val_ds)} | bf16: {USE_BF16} | workers: {NUM_WORKERS}")
+    print(
+        f"Train: {len(train_ds)} | Val: {len(val_ds)} | bf16: {USE_BF16} | "
+        f"gpu: {profile['gpu_name']} | batch: {batch_size} | max_len: {max_len} | workers: {num_workers}"
+    )
 
     # Khởi tạo raw model trước compile để checkpoint load đúng
     raw_model = ABSAModel().to(DEVICE).float()
@@ -484,7 +539,7 @@ def train():
     )
 
     # Compile sau khi load xong
-    if hasattr(torch, "compile"):
+    if use_compile and hasattr(torch, "compile"):
         print("Compiling model (epoch 1 sẽ chậm hơn ~3-5 phút do JIT warmup)...")
         model = torch.compile(raw_model)
     else:
@@ -501,7 +556,7 @@ def train():
         ])
 
     print(f"\nDevice: {DEVICE} | Steps: {total_steps} | Warmup: {warmup_steps}")
-    print(f"Batch: {BATCH_SIZE} | AMP: {'bfloat16' if USE_BF16 else 'float16'}")
+    print(f"Batch: {batch_size} | AMP: {'bfloat16' if USE_BF16 else 'float16'} | compile: {use_compile}")
     if start_epoch == 1:
         print(f"Phase 1: epoch 1-{PHASE1_EPOCHS} (BIO+Global)")
         print(f"Phase 2: epoch {PHASE1_EPOCHS+1}-{EPOCHS} (full loss)\n")
