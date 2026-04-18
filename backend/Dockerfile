@@ -1,15 +1,17 @@
-# Sử dụng Python image nhẹ
-FROM python:3.9-slim
+FROM python:3.10-slim
 
 WORKDIR /app
 
-# Cài đặt các thư viện cần thiết
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Cài đặt build-essential vì torch/pandas đôi khi cần biên dịch nhẹ
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy toàn bộ code backend
+COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
+
 COPY . .
 
-# Chạy FastAPI bằng uvicorn
 EXPOSE 8000
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
