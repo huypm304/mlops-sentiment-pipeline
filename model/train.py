@@ -24,7 +24,6 @@ from tqdm.auto import tqdm
 MODEL_NAME      = "Fsoft-AIC/videberta-base"
 TRAIN_FILE      = "/content/data_train_v5.jsonl"
 VAL_FILE        = "/content/val_data.jsonl"
-CHECKPOINT_SAVE = "checkpoint_v5.pt"
 MODEL_SAVE      = "best_model_v5.pt"
 CSV_LOG         = "train_log_v5.csv"
 
@@ -353,39 +352,6 @@ def match_pred_to_gold(pred_spans, gold_spans, iou_threshold=SPAN_MATCH_IOU):
     return matched   # list of (p_start, p_end, p_asp, gold_sent)
 
 # =========================
-# CHECKPOINT
-# =========================
-def save_checkpoint(epoch, model, opt, scheduler, best_f1, patience_cnt, path):
-    # Unwrap compiled model trước khi save để resume-safe trên runtime khác
-    # Fix [Minor]: tách compile state khỏi checkpoint
-    raw = model._orig_mod if hasattr(model, "_orig_mod") else model
-    torch.save({
-        "epoch":        epoch,
-        "model_state":  raw.state_dict(),
-        "opt_state":    opt.state_dict(),
-        "sched_state":  scheduler.state_dict(),
-        "best_f1":      best_f1,
-        "patience_cnt": patience_cnt,
-    }, path)
-
-
-def load_checkpoint(path, model, opt, scheduler):
-    if not os.path.exists(path):
-        print("Không tìm thấy checkpoint — train từ đầu.")
-        return 1, 0.0, 0
-
-    ckpt = torch.load(path, map_location=DEVICE)
-    raw  = model._orig_mod if hasattr(model, "_orig_mod") else model
-    raw.load_state_dict(ckpt["model_state"])
-    if ckpt.get("opt_state"):
-        opt.load_state_dict(ckpt["opt_state"])
-    if ckpt.get("sched_state"):
-        scheduler.load_state_dict(ckpt["sched_state"])
-
-    print(f"Resume từ epoch {ckpt['epoch']} | best_f1={ckpt['best_f1']:.4f} | patience={ckpt['patience_cnt']}")
-    return ckpt["epoch"] + 1, ckpt["best_f1"], ckpt["patience_cnt"]
-
-# =========================
 # EVALUATION — end-to-end pipeline
 # =========================
 def evaluate(model, dl):
@@ -518,7 +484,7 @@ def train():
         f"gpu: {profile['gpu_name']} | batch: {batch_size} | max_len: {max_len} | workers: {num_workers}"
     )
 
-    # Khởi tạo raw model trước compile để checkpoint load đúng
+    # Khởi tạo raw model cho run train mới từ đầu
     raw_model = ABSAModel().to(DEVICE).float()
 
     opt = AdamW([
@@ -532,36 +498,27 @@ def train():
     warmup_steps = int(total_steps * WARMUP_RATIO)
     scheduler    = get_linear_schedule_with_warmup(opt, warmup_steps, total_steps)
 
-    # Load checkpoint vào raw_model trước khi compile
-    # Fix [Minor]: compile sau load → tránh mismatch khi resume
-    start_epoch, best_f1, patience_cnt = load_checkpoint(
-        CHECKPOINT_SAVE, raw_model, opt, scheduler
-    )
+    start_epoch, best_f1, patience_cnt = 1, 0.0, 0
 
-    # Compile sau khi load xong
+    # Compile sau khi khởi tạo xong
     if use_compile and hasattr(torch, "compile"):
         print("Compiling model (epoch 1 sẽ chậm hơn ~3-5 phút do JIT warmup)...")
         model = torch.compile(raw_model)
     else:
         model = raw_model
 
-    csv_mode   = "a" if start_epoch > 1 else "w"
-    csv_file   = open(CSV_LOG, csv_mode, newline="", encoding="utf-8")
+    csv_file   = open(CSV_LOG, "w", newline="", encoding="utf-8")
     csv_writer = csv.writer(csv_file)
-    if csv_mode == "w":
-        csv_writer.writerow([
-            "epoch", "phase", "train_loss",
-            "span_f1", "sent_f1", "glob_f1", "composite",
-            "match_rate", "is_best",
-        ])
+    csv_writer.writerow([
+        "epoch", "phase", "train_loss",
+        "span_f1", "sent_f1", "glob_f1", "composite",
+        "match_rate", "is_best",
+    ])
 
     print(f"\nDevice: {DEVICE} | Steps: {total_steps} | Warmup: {warmup_steps}")
     print(f"Batch: {batch_size} | AMP: {'bfloat16' if USE_BF16 else 'float16'} | compile: {use_compile}")
-    if start_epoch == 1:
-        print(f"Phase 1: epoch 1-{PHASE1_EPOCHS} (BIO+Global)")
-        print(f"Phase 2: epoch {PHASE1_EPOCHS+1}-{EPOCHS} (full loss)\n")
-    else:
-        print(f"Resume từ epoch {start_epoch}\n")
+    print(f"Phase 1: epoch 1-{PHASE1_EPOCHS} (BIO+Global)")
+    print(f"Phase 2: epoch {PHASE1_EPOCHS+1}-{EPOCHS} (full loss)\n")
 
     for ep in range(start_epoch, EPOCHS + 1):
         model.train()
@@ -619,7 +576,6 @@ def train():
         # Phase 1 không dùng để chọn best model, nên chỉ eval ở epoch cuối phase 1
         if in_phase1 and ep < PHASE1_EPOCHS:
             print(f"Ep {ep:02d} | loss={avg_loss:.4f} | skip val (phase1 warmup)")
-            save_checkpoint(ep, model, opt, scheduler, best_f1, patience_cnt, CHECKPOINT_SAVE)
             csv_writer.writerow([ep, "phase1", f"{avg_loss:.4f}", "", "", "", "", "", ""])
             csv_file.flush()
             continue
@@ -637,8 +593,7 @@ def train():
                                   f"{match_rate:.4f}", ""])
             csv_file.flush()
             best_f1, patience_cnt = 0.0, 0
-            save_checkpoint(ep, model, opt, scheduler, best_f1, patience_cnt, CHECKPOINT_SAVE)
-            print(f"--- Phase 2 start: reset early-stop | checkpoint saved ---")
+            print(f"--- Phase 2 start: reset early-stop ---")
             continue
 
         is_best = composite > best_f1
@@ -648,8 +603,6 @@ def train():
             print(f"  ⭐ Saved best model (composite={best_f1:.4f})")
         else:
             patience_cnt += 1
-
-        save_checkpoint(ep, model, opt, scheduler, best_f1, patience_cnt, CHECKPOINT_SAVE)
 
         phase_label = "phase1" if in_phase1 else "phase2"
         csv_writer.writerow([ep, phase_label, f"{avg_loss:.4f}", f"{span_f1:.4f}",
