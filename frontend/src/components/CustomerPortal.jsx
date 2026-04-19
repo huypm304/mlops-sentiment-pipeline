@@ -11,7 +11,7 @@ export default function CustomerPortal() {
     if (!text.trim()) return;
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/analyze', {
+      const response = await fetch('http://175.41.165.133:8000/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
