@@ -28,10 +28,19 @@ def get_prediction(text):
     result = json.loads(response["Body"].read().decode())
     return result
 
-@app.post("/predict")
+@app.post("/analyze") 
 async def predict(request: SentimentRequest):
     try:
-        prediction = get_prediction(request.text)
-        return {"status": "success", "data": prediction}
+        raw_result = get_prediction(request.text)
+        
+        print(f"DEBUG FROM SAGEMAKER: {raw_result}")
+
+        processed_data = {
+            "global_sentiment": "Positive" if any(x.get('sentiment') == 'Positive' for x in raw_result) else "Negative",
+            "aspects": raw_result  
+        }
+        
+        return processed_data
     except Exception as e:
-        return {"status": "error", "message": str(e)}
+        print(f"Lỗi: {str(e)}")
+        return {"global_sentiment": "Neutral", "aspects": []}
