@@ -1,6 +1,6 @@
 # 1. Khai báo Security Group (Mở cổng 80 cho Web và 8000 cho API)
 resource "aws_security_group" "web_sg" {
-  name        = "${var.project_name}-web-sg"
+  name        = "${var.project_name}-web-sg-v2"
   description = "Allow HTTP and API traffic"
 
   ingress {
@@ -35,7 +35,7 @@ resource "aws_security_group" "web_sg" {
 
 # 2. Khai báo SageMaker Endpoint Configuration
 resource "aws_sagemaker_endpoint_configuration" "config" {
-  name = "${var.project_name}-config"
+  name = "${var.project_name}-config-v2"
   production_variants {
     variant_name           = "AllTraffic"
     model_name             = aws_sagemaker_model.absa_model.name
@@ -45,6 +45,6 @@ resource "aws_sagemaker_endpoint_configuration" "config" {
 }
 # 3. Khai báo SageMaker Endpoint (Cái mà EC2 đang đợi tên đây)
 resource "aws_sagemaker_endpoint" "endpoint" {
-  name                 = "${var.project_name}-endpoint"
+  name                 = "${var.project_name}-endpoint-v2"
   endpoint_config_name = aws_sagemaker_endpoint_configuration.config.name
 }

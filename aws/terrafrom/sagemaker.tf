@@ -12,13 +12,13 @@ resource "aws_s3_bucket" "model_bucket" {
 resource "aws_s3_object" "model_artifact" {
   bucket = aws_s3_bucket.model_bucket.id
   key    = "model.tar.gz"
-  source = "model.tar.gz" # File này phải nằm cùng thư mục với file .tf
+  source = "model.tar.gz" 
   etag   = filemd5("model.tar.gz")
 }
 
 # 3. Định nghĩa Model SageMaker
 resource "aws_sagemaker_model" "absa_model" {
-  name               = "${var.project_name}-model"
+  name               = "${var.project_name}-model-v2"
   execution_role_arn = aws_iam_role.sagemaker_execution_role.arn
 
   depends_on = [aws_s3_object.model_artifact]

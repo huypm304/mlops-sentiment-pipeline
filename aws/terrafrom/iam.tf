@@ -1,5 +1,5 @@
 resource "aws_iam_role" "ec2_role" {
-  name = "${var.project_name}-ec2-role"
+  name = "${var.project_name}-ec2-role-v2"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -18,12 +18,12 @@ resource "aws_iam_role_policy_attachment" "sagemaker_full" {
 }
 
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.project_name}-ec2-profile"
+  name = "${var.project_name}-ec2-profile-v2"
   role = aws_iam_role.ec2_role.name
 }
 
 resource "aws_iam_role" "sagemaker_execution_role" {
-  name = "sagemaker_execution_role"
+  name = "${var.project_name}-sagemaker-execution-role-v2"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"

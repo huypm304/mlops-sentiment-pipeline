@@ -1,5 +1,5 @@
 resource "aws_key_pair" "deployer" {
-  key_name   = "my-ssh-key"
+  key_name   = "my-ssh-key-v2"
   public_key = file("~/.ssh/id_rsa.pub") 
 }
 
