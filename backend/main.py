@@ -20,7 +20,7 @@ client = boto3.client("sagemaker-runtime", region_name="ap-southeast-1")
 
 def get_prediction(text):
     response = client.invoke_endpoint(
-        EndpointName="absa-mlops-huy-endpoint", # Thay đúng tên vào đây
+        EndpointName="absa-mlops-huy-endpoint-v2", 
         ContentType="application/json",
         Body=json.dumps({"inputs": text})
     )

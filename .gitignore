@@ -25,3 +25,6 @@ aws/terrafrom/terraform
 aws/terrafrom/model.tar.gz
 *.tar.gz
 terraform
+terraform.tfstate
+terraform.tfstate.backup
+.terraform.lock.hcl
