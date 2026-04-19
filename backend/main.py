@@ -28,7 +28,7 @@ def get_prediction(text):
     result = json.loads(response["Body"].read().decode())
     return result
 
-@app.post("/predict") 
+@app.post("/analyze") 
 async def predict(request: SentimentRequest):
     try:
         raw_result = get_prediction(request.text)
