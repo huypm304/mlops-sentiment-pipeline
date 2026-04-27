@@ -1,0 +1,9 @@
+{
+  "mode": "auto",
+  "auto_decisions_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.modifier_auto_review.jsonl",
+  "auto_merged_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.modifier_auto_merged.jsonl",
+  "total_review_items": 274,
+  "auto_accept_items": 206,
+  "auto_skip_items": 68,
+  "applied_updates": 206
+}

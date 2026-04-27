@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/electronics_device__plain.part_01.jsonl",
+  "family": "electronics_device",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_10_app_platform__plain.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_11_electronics_device__plain.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_11_electronics_device__plain.part_01.decisions.jsonl",
+  "total_rows": 27,
+  "accepted": 4,
+  "skipped": 28,
+  "applied_updates": 4
+}

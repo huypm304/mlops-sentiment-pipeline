@@ -4172,7 +4172,7 @@
 {"text": "xài mấy hôm thì thấy giao_diện xài ở mức ổn, chưa có gì nổi bật", "opinions": [{"target": "giao_diện", "aspect": "App", "sentiment": 2, "start": 21, "end": 30}], "global_sentiment": 2}
 {"text": "Máy toàn bị lỗi camera. Không biết lỗi tại phần mềm hay sao.pin thì nhanh hết......chán quakjkkkkkk", "opinions": [{"target": "phần_mềm", "aspect": "App", "sentiment": 0, "start": 43, "end": 51}, {"target": "pin", "aspect": "Electronics", "sentiment": 0, "start": 60, "end": 63}], "global_sentiment": 0}
 {"text": "app rất tốt", "opinions": [{"target": "app", "aspect": "App", "start": 0, "end": 3, "sentiment": 1}], "global_sentiment": 1}
-{"text": "giá các sản_phẩm cao hơn các trang mua_sắm khác", "opinions": [{"target": "giá", "aspect": "Price", "start": 0, "end": 3, "sentiment": 0}], "global_sentiment": 1}
+{"text": "giá các sản_phẩm cao hơn các trang mua_sắm khác", "opinions": [{"target": "giá", "aspect": "Price", "start": 0, "end": 3, "sentiment": 2}], "global_sentiment": 0}
 {"text": "chuẩn hàng như trên", "opinions": [{"target": "hàng", "aspect": "General", "sentiment": 1, "start": 6, "end": 10}], "global_sentiment": 1}
 {"text": "cho hỏi đấy là chất nilon hay sao mà ib shop không trả_lời ? ?", "opinions": [{"target": "chất", "aspect": "General", "sentiment": 0, "start": 15, "end": 19}, {"target": "shop", "aspect": "Service", "sentiment": 0, "start": 40, "end": 44}], "global_sentiment": 0}
 {"text": "Căn bản sau 2 tháng không có gì phàn nàn. Nhưng đến hôm nay sử dụng note đã xuất hiện khoảng đen tròn trên nền. Không viết được vào khoảng đen đó. Có bảo hành không, và bảo hành như thế nào ?", "opinions": [{"target": "bảo_hành", "aspect": "Service", "sentiment": 0, "start": 150, "end": 158}], "global_sentiment": 0}

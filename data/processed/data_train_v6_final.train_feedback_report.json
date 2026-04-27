@@ -1,0 +1,15 @@
+{
+  "input_file": "data/processed/data_train_v6_final.jsonl",
+  "output_file": "data/processed/data_train_v6_final.train_feedback_fixed.jsonl",
+  "review_file": "data/processed/data_train_v6_final.train_feedback_review.jsonl",
+  "total_records": 7565,
+  "records_changed": 1229,
+  "records_for_review": 445,
+  "change_counts": {
+    "ShipGeneralReview": 445,
+    "records_for_review": 445,
+    "GeneralToShip": 98,
+    "records_changed": 1229,
+    "global_unanimous_aspect_fix": 1131
+  }
+}

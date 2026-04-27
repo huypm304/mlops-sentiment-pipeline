@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/price_value__plain.part_01.jsonl",
+  "family": "price_value",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_5_service_shop_support__plain.part_02.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_6_price_value__plain.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_6_price_value__plain.part_01.decisions.jsonl",
+  "total_rows": 99,
+  "accepted": 12,
+  "skipped": 105,
+  "applied_updates": 12
+}

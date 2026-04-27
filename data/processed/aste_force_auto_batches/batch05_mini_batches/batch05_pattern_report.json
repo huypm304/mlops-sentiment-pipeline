@@ -1,0 +1,443 @@
+{
+  "input_dir": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/manifests",
+  "output_dir": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/batch05_mini_batches",
+  "total_rows": 1737,
+  "chunk_size": 100,
+  "family_distribution": {
+    "electronics_device": 157,
+    "service_shop_support": 398,
+    "fashion_color_size": 404,
+    "general_product": 158,
+    "price_value": 304,
+    "ship_delivery_packaging": 137,
+    "app_platform": 179
+  },
+  "pattern_distribution": {
+    "negation": 502,
+    "plain": 817,
+    "comparison": 116,
+    "error_defect": 64,
+    "modifier": 238
+  },
+  "buckets": [
+    {
+      "bucket": "fashion_color_size__plain",
+      "records": 238,
+      "chunks": 3,
+      "sample_lines": [
+        31,
+        44,
+        57,
+        76,
+        101
+      ]
+    },
+    {
+      "bucket": "service_shop_support__plain",
+      "records": 197,
+      "chunks": 2,
+      "sample_lines": [
+        64,
+        102,
+        119,
+        134,
+        258
+      ]
+    },
+    {
+      "bucket": "service_shop_support__negation",
+      "records": 123,
+      "chunks": 2,
+      "sample_lines": [
+        18,
+        38,
+        103,
+        122,
+        164
+      ]
+    },
+    {
+      "bucket": "price_value__negation",
+      "records": 110,
+      "chunks": 2,
+      "sample_lines": [
+        142,
+        204,
+        282,
+        330,
+        454
+      ]
+    },
+    {
+      "bucket": "general_product__plain",
+      "records": 104,
+      "chunks": 2,
+      "sample_lines": [
+        112,
+        162,
+        193,
+        389,
+        396
+      ]
+    },
+    {
+      "bucket": "price_value__plain",
+      "records": 99,
+      "chunks": 1,
+      "sample_lines": [
+        139,
+        181,
+        309,
+        314,
+        476
+      ]
+    },
+    {
+      "bucket": "electronics_device__negation",
+      "records": 88,
+      "chunks": 1,
+      "sample_lines": [
+        16,
+        37,
+        95,
+        339,
+        388
+      ]
+    },
+    {
+      "bucket": "ship_delivery_packaging__plain",
+      "records": 82,
+      "chunks": 1,
+      "sample_lines": [
+        127,
+        140,
+        196,
+        201,
+        223
+      ]
+    },
+    {
+      "bucket": "fashion_color_size__negation",
+      "records": 73,
+      "chunks": 1,
+      "sample_lines": [
+        61,
+        124,
+        325,
+        720,
+        735
+      ]
+    },
+    {
+      "bucket": "app_platform__plain",
+      "records": 70,
+      "chunks": 1,
+      "sample_lines": [
+        172,
+        247,
+        296,
+        338,
+        364
+      ]
+    },
+    {
+      "bucket": "app_platform__negation",
+      "records": 59,
+      "chunks": 1,
+      "sample_lines": [
+        138,
+        212,
+        265,
+        428,
+        453
+      ]
+    },
+    {
+      "bucket": "price_value__modifier",
+      "records": 57,
+      "chunks": 1,
+      "sample_lines": [
+        136,
+        531,
+        534,
+        556,
+        600
+      ]
+    },
+    {
+      "bucket": "service_shop_support__modifier",
+      "records": 49,
+      "chunks": 1,
+      "sample_lines": [
+        575,
+        659,
+        707,
+        851,
+        881
+      ]
+    },
+    {
+      "bucket": "fashion_color_size__modifier",
+      "records": 48,
+      "chunks": 1,
+      "sample_lines": [
+        90,
+        333,
+        972,
+        1271,
+        1298
+      ]
+    },
+    {
+      "bucket": "fashion_color_size__comparison",
+      "records": 36,
+      "chunks": 1,
+      "sample_lines": [
+        81,
+        130,
+        271,
+        288,
+        372
+      ]
+    },
+    {
+      "bucket": "ship_delivery_packaging__negation",
+      "records": 29,
+      "chunks": 1,
+      "sample_lines": [
+        290,
+        432,
+        617,
+        1236,
+        1253
+      ]
+    },
+    {
+      "bucket": "electronics_device__plain",
+      "records": 27,
+      "chunks": 1,
+      "sample_lines": [
+        355,
+        401,
+        427,
+        1140,
+        1144
+      ]
+    },
+    {
+      "bucket": "app_platform__modifier",
+      "records": 25,
+      "chunks": 1,
+      "sample_lines": [
+        1025,
+        1110,
+        1138,
+        2228,
+        2379
+      ]
+    },
+    {
+      "bucket": "electronics_device__modifier",
+      "records": 23,
+      "chunks": 1,
+      "sample_lines": [
+        228,
+        714,
+        795,
+        815,
+        1326
+      ]
+    },
+    {
+      "bucket": "general_product__modifier",
+      "records": 20,
+      "chunks": 1,
+      "sample_lines": [
+        148,
+        581,
+        1404,
+        1943,
+        2117
+      ]
+    },
+    {
+      "bucket": "general_product__negation",
+      "records": 20,
+      "chunks": 1,
+      "sample_lines": [
+        151,
+        278,
+        514,
+        1111,
+        1381
+      ]
+    },
+    {
+      "bucket": "price_value__comparison",
+      "records": 20,
+      "chunks": 1,
+      "sample_lines": [
+        419,
+        565,
+        570,
+        642,
+        644
+      ]
+    },
+    {
+      "bucket": "service_shop_support__comparison",
+      "records": 19,
+      "chunks": 1,
+      "sample_lines": [
+        175,
+        259,
+        2968,
+        3067,
+        3095
+      ]
+    },
+    {
+      "bucket": "app_platform__comparison",
+      "records": 18,
+      "chunks": 1,
+      "sample_lines": [
+        611,
+        1733,
+        1758,
+        1864,
+        2208
+      ]
+    },
+    {
+      "bucket": "price_value__error_defect",
+      "records": 18,
+      "chunks": 1,
+      "sample_lines": [
+        70,
+        232,
+        603,
+        656,
+        681
+      ]
+    },
+    {
+      "bucket": "ship_delivery_packaging__modifier",
+      "records": 16,
+      "chunks": 1,
+      "sample_lines": [
+        343,
+        1002,
+        2166,
+        2384,
+        2418
+      ]
+    },
+    {
+      "bucket": "electronics_device__error_defect",
+      "records": 11,
+      "chunks": 1,
+      "sample_lines": [
+        638,
+        1169,
+        1532,
+        2658,
+        3129
+      ]
+    },
+    {
+      "bucket": "general_product__comparison",
+      "records": 10,
+      "chunks": 1,
+      "sample_lines": [
+        56,
+        78,
+        553,
+        3260,
+        3711
+      ]
+    },
+    {
+      "bucket": "service_shop_support__error_defect",
+      "records": 10,
+      "chunks": 1,
+      "sample_lines": [
+        771,
+        1978,
+        1979,
+        3478,
+        3765
+      ]
+    },
+    {
+      "bucket": "fashion_color_size__error_defect",
+      "records": 9,
+      "chunks": 1,
+      "sample_lines": [
+        281,
+        831,
+        1072,
+        1450,
+        3666
+      ]
+    },
+    {
+      "bucket": "electronics_device__comparison",
+      "records": 8,
+      "chunks": 1,
+      "sample_lines": [
+        226,
+        624,
+        758,
+        2488,
+        2845
+      ]
+    },
+    {
+      "bucket": "app_platform__error_defect",
+      "records": 7,
+      "chunks": 1,
+      "sample_lines": [
+        544,
+        800,
+        1330,
+        2149,
+        2871
+      ]
+    },
+    {
+      "bucket": "ship_delivery_packaging__comparison",
+      "records": 5,
+      "chunks": 1,
+      "sample_lines": [
+        1022,
+        4948,
+        6080,
+        6655,
+        7369
+      ]
+    },
+    {
+      "bucket": "ship_delivery_packaging__error_defect",
+      "records": 5,
+      "chunks": 1,
+      "sample_lines": [
+        4325,
+        4643,
+        4987,
+        7270,
+        7396
+      ]
+    },
+    {
+      "bucket": "general_product__error_defect",
+      "records": 4,
+      "chunks": 1,
+      "sample_lines": [
+        3948,
+        4440,
+        6725,
+        7521
+      ]
+    }
+  ]
+}

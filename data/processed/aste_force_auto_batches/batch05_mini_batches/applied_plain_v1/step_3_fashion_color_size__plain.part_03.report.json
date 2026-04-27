@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/fashion_color_size__plain.part_03.jsonl",
+  "family": "fashion_color_size",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_2_fashion_color_size__plain.part_02.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_3_fashion_color_size__plain.part_03.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_3_fashion_color_size__plain.part_03.decisions.jsonl",
+  "total_rows": 38,
+  "accepted": 2,
+  "skipped": 49,
+  "applied_updates": 2
+}

@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/app_platform__plain.part_01.jsonl",
+  "family": "app_platform",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_9_ship_delivery_packaging__plain.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_10_app_platform__plain.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_10_app_platform__plain.part_01.decisions.jsonl",
+  "total_rows": 70,
+  "accepted": 12,
+  "skipped": 69,
+  "applied_updates": 12
+}

@@ -1,0 +1,12 @@
+{
+  "queue_file": "data/processed/data_train_v6_final.train_feedback_review.jsonl",
+  "base_file": "data/processed/data_train_v6_final.train_feedback_fixed.jsonl",
+  "decisions_file": "data/processed/data_train_v6_final.giao_review_decisions.jsonl",
+  "output_file": "data/processed/data_train_v6_final.giao_review_fixed.jsonl",
+  "records_reviewed": 445,
+  "label_counts": {
+    "Ship": 287,
+    "General": 152,
+    "App": 6
+  }
+}

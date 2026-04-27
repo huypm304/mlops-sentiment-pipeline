@@ -1,0 +1,338 @@
+Áo thun vải rất mát, mặc cực kỳ thoải mái luôn.
+Giao hàng siêu nhanh nhưng chất lượng tai nghe thì quá tệ, nghe bị rè.
+Cái điện thoại này mình mua tặng mẹ hồi tháng trước xài tới giờ thấy pin trâu lắm.
+Giá rẻ bèo mà shop tư vấn nhiệt tình dễ thương nữa, sẽ ủng hộ tiếp.
+App dạo này lag quá, tìm đồ không được bực mình ghê.
+Quần form đẹp tôn dáng nhưng mà đường chỉ may bị lỗi bung từ lưa.
+Tuy đóng gói hơi sơ sài nhưng bù lại chất lượng sản phẩm rất ok trong tầm tiền.
+Màn hình sắc nét, nói chung là ngon bổ rẻ, shipper thân thiện dễ thương.
+Dùng tạm được thôi, không xuất sắc như shop quảng cáo đâu mọi người ạ.
+Giày đẹp, đi êm chân; giá hơi chát tí nhưng được cái nhân viên hỗ trợ đổi size lẹ.
+[
+  {
+    "text": "Áo thun vải rất mát, mặc cực kỳ thoải mái luôn.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.7140344381332397,
+      "probabilities": {
+        "negative": 0.11954895406961441,
+        "positive": 0.16641655564308167,
+        "neutral": 0.7140344381332397
+      }
+    },
+    "opinions": [
+      {
+        "target": "Áo",
+        "aspect": "Fashion",
+        "sentiment": "negative",
+        "sentiment_id": 0,
+        "start": 0,
+        "end": 2,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.4602610170841217
+      }
+    ]
+  },
+  {
+    "text": "Giao hàng siêu nhanh nhưng chất lượng tai nghe thì quá tệ, nghe bị rè.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.6888970136642456,
+      "probabilities": {
+        "negative": 0.09705228358507156,
+        "positive": 0.21405072510242462,
+        "neutral": 0.6888970136642456
+      }
+    },
+    "opinions": [
+      {
+        "target": "Giao hàng",
+        "aspect": "Ship",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 0,
+        "end": 9,
+        "token_start": 1,
+        "token_end": 2,
+        "confidence": 0.46258050203323364
+      }
+    ]
+  },
+  {
+    "text": "Cái điện thoại này mình mua tặng mẹ hồi tháng trước xài tới giờ thấy pin trâu lắm.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.5495518445968628,
+      "probabilities": {
+        "negative": 0.19709967076778412,
+        "positive": 0.2533484995365143,
+        "neutral": 0.5495518445968628
+      }
+    },
+    "opinions": [
+      {
+        "target": "Cái",
+        "aspect": "App",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 0,
+        "end": 3,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.36974814534187317
+      },
+      {
+        "target": " điện thoại",
+        "aspect": "Electronics",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 3,
+        "end": 14,
+        "token_start": 2,
+        "token_end": 3,
+        "confidence": 0.4435218274593353
+      }
+    ]
+  },
+  {
+    "text": "Giá rẻ bèo mà shop tư vấn nhiệt tình dễ thương nữa, sẽ ủng hộ tiếp.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.4783940017223358,
+      "probabilities": {
+        "negative": 0.12076584249734879,
+        "positive": 0.400840163230896,
+        "neutral": 0.4783940017223358
+      }
+    },
+    "opinions": [
+      {
+        "target": "Giá",
+        "aspect": "Price",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 0,
+        "end": 3,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.41568681597709656
+      },
+      {
+        "target": " shop",
+        "aspect": "Service",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 13,
+        "end": 18,
+        "token_start": 6,
+        "token_end": 6,
+        "confidence": 0.4449475109577179
+      },
+      {
+        "target": " tư vấn",
+        "aspect": "Service",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 18,
+        "end": 25,
+        "token_start": 7,
+        "token_end": 8,
+        "confidence": 0.5278480052947998
+      }
+    ]
+  },
+  {
+    "text": "App dạo này lag quá, tìm đồ không được bực mình ghê.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.7387234568595886,
+      "probabilities": {
+        "negative": 0.09580749273300171,
+        "positive": 0.16546902060508728,
+        "neutral": 0.7387234568595886
+      }
+    },
+    "opinions": [
+      {
+        "target": "App",
+        "aspect": "App",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 0,
+        "end": 3,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.43951937556266785
+      }
+    ]
+  },
+  {
+    "text": "Quần form đẹp tôn dáng nhưng mà đường chỉ may bị lỗi bung từ lưa.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.661178708076477,
+      "probabilities": {
+        "negative": 0.1476248949766159,
+        "positive": 0.19119641184806824,
+        "neutral": 0.661178708076477
+      }
+    },
+    "opinions": [
+      {
+        "target": "Quần",
+        "aspect": "Fashion",
+        "sentiment": "negative",
+        "sentiment_id": 0,
+        "start": 0,
+        "end": 4,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.475897878408432
+      }
+    ]
+  },
+  {
+    "text": "Tuy đóng gói hơi sơ sài nhưng bù lại chất lượng sản phẩm rất ok trong tầm tiền.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.720506489276886,
+      "probabilities": {
+        "negative": 0.11929268389940262,
+        "positive": 0.160200834274292,
+        "neutral": 0.720506489276886
+      }
+    },
+    "opinions": [
+      {
+        "target": "Tuy",
+        "aspect": "Electronics",
+        "sentiment": "negative",
+        "sentiment_id": 0,
+        "start": 0,
+        "end": 3,
+        "token_start": 1,
+        "token_end": 1,
+        "confidence": 0.4935913681983948
+      },
+      {
+        "target": " tầm tiền",
+        "aspect": "Price",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 69,
+        "end": 78,
+        "token_start": 17,
+        "token_end": 18,
+        "confidence": 0.5775001049041748
+      }
+    ]
+  },
+  {
+    "text": "Màn hình sắc nét, nói chung là ngon bổ rẻ, shipper thân thiện dễ thương.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.7435479164123535,
+      "probabilities": {
+        "negative": 0.06627928465604782,
+        "positive": 0.19017279148101807,
+        "neutral": 0.7435479164123535
+      }
+    },
+    "opinions": [
+      {
+        "target": "Màn hình",
+        "aspect": "Electronics",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 0,
+        "end": 8,
+        "token_start": 1,
+        "token_end": 2,
+        "confidence": 0.4469919800758362
+      },
+      {
+        "target": " shipper",
+        "aspect": "Ship",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 42,
+        "end": 50,
+        "token_start": 13,
+        "token_end": 14,
+        "confidence": 0.4523710608482361
+      }
+    ]
+  },
+  {
+    "text": "Dùng tạm được thôi, không xuất sắc như shop quảng cáo đâu mọi người ạ.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.604809045791626,
+      "probabilities": {
+        "negative": 0.12223932147026062,
+        "positive": 0.2729516625404358,
+        "neutral": 0.604809045791626
+      }
+    },
+    "opinions": [
+      {
+        "target": " shop",
+        "aspect": "Service",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 38,
+        "end": 43,
+        "token_start": 10,
+        "token_end": 10,
+        "confidence": 0.5280101299285889
+      }
+    ]
+  },
+  {
+    "text": "Giày đẹp, đi êm chân; giá hơi chát tí nhưng được cái nhân viên hỗ trợ đổi size lẹ.",
+    "global_sentiment": {
+      "label": "neutral",
+      "sentiment_id": 2,
+      "confidence": 0.4592069089412689,
+      "probabilities": {
+        "negative": 0.16799262166023254,
+        "positive": 0.37280046939849854,
+        "neutral": 0.4592069089412689
+      }
+    },
+    "opinions": [
+      {
+        "target": " giá",
+        "aspect": "Price",
+        "sentiment": "neutral",
+        "sentiment_id": 2,
+        "start": 21,
+        "end": 25,
+        "token_start": 9,
+        "token_end": 9,
+        "confidence": 0.404935359954834
+      },
+      {
+        "target": " nhân viên",
+        "aspect": "Service",
+        "sentiment": "positive",
+        "sentiment_id": 1,
+        "start": 52,
+        "end": 62,
+        "token_start": 17,
+        "token_end": 18,
+        "confidence": 0.6996715068817139
+      }
+    ]
+  }
+]

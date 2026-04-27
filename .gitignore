@@ -3,3 +3,4 @@ venv/
 model/*.pt
 __pycache__/
 .github/*.md
+*.pt

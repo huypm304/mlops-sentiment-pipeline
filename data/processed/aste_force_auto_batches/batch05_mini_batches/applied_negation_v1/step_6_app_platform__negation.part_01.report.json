@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/app_platform__negation.part_01.jsonl",
+  "family": "app_platform",
+  "pattern": "negation",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_5_fashion_color_size__negation.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_6_app_platform__negation.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_6_app_platform__negation.part_01.decisions.jsonl",
+  "total_rows": 59,
+  "accepted": 35,
+  "skipped": 31,
+  "applied_updates": 35
+}

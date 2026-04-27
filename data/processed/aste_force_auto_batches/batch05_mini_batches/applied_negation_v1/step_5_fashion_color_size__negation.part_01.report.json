@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/fashion_color_size__negation.part_01.jsonl",
+  "family": "fashion_color_size",
+  "pattern": "negation",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_4_service_shop_support__negation.part_02.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_5_fashion_color_size__negation.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_5_fashion_color_size__negation.part_01.decisions.jsonl",
+  "total_rows": 73,
+  "accepted": 33,
+  "skipped": 52,
+  "applied_updates": 25
+}

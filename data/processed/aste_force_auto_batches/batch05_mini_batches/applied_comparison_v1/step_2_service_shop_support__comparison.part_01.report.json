@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/service_shop_support__comparison.part_01.jsonl",
+  "family": "service_shop_support",
+  "pattern": "comparison",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_1_price_value__comparison.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_2_service_shop_support__comparison.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_2_service_shop_support__comparison.part_01.decisions.jsonl",
+  "total_rows": 19,
+  "accepted": 10,
+  "skipped": 14,
+  "applied_updates": 10
+}

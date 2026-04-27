@@ -1,0 +1,13 @@
+{
+  "input_file": "data/processed/data_train_v5.jsonl",
+  "output_file": "data/processed/data_train_v5.autofixed.jsonl",
+  "review_file": "data/processed/data_train_v5.autofix_review.jsonl",
+  "total_records": 7565,
+  "clean_records": 7565,
+  "review_records": 0,
+  "fixed_surface_form_target": 3137,
+  "trimmed_target_spaces": 0,
+  "removed_opinion_word": 15,
+  "review_reason_counts": {},
+  "sample_review_lines": {}
+}

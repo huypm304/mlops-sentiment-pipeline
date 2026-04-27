@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/app_platform__error_defect.part_01.jsonl",
+  "family": "app_platform",
+  "pattern": "error_defect",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect_v2/step_4_fashion_color_size__error_defect.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect_v2/step_5_app_platform__error_defect.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect_v2/step_5_app_platform__error_defect.part_01.decisions.jsonl",
+  "total_rows": 7,
+  "accepted": 1,
+  "skipped": 8,
+  "applied_updates": 1
+}

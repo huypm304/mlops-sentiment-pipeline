@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/service_shop_support__plain.part_02.jsonl",
+  "family": "service_shop_support",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_4_service_shop_support__plain.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_5_service_shop_support__plain.part_02.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_5_service_shop_support__plain.part_02.decisions.jsonl",
+  "total_rows": 97,
+  "accepted": 1,
+  "skipped": 124,
+  "applied_updates": 1
+}

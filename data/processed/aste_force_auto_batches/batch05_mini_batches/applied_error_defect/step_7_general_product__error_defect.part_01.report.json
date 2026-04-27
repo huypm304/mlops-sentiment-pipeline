@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/general_product__error_defect.part_01.jsonl",
+  "family": "general_product",
+  "pattern": "error_defect",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect/step_6_ship_delivery_packaging__error_defect.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect/step_7_general_product__error_defect.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_error_defect/step_7_general_product__error_defect.part_01.decisions.jsonl",
+  "total_rows": 4,
+  "accepted": 6,
+  "skipped": 0,
+  "applied_updates": 6
+}

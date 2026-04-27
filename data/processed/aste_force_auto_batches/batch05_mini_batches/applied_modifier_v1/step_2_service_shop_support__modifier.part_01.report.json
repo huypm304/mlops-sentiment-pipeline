@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/service_shop_support__modifier.part_01.jsonl",
+  "family": "service_shop_support",
+  "pattern": "modifier",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v1/step_1_price_value__modifier.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v1/step_2_service_shop_support__modifier.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v1/step_2_service_shop_support__modifier.part_01.decisions.jsonl",
+  "total_rows": 49,
+  "accepted": 28,
+  "skipped": 29,
+  "applied_updates": 28
+}

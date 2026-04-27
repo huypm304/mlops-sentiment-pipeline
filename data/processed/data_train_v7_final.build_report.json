@@ -1,0 +1,15 @@
+{
+  "output_file": "data/processed/data_train_v7_final.jsonl",
+  "source_file": "data/processed/data_train_v6_final.giao_review_fixed.jsonl",
+  "record_count": 7565,
+  "pipeline": [
+    "data_train_v6_final.jsonl",
+    "data_train_v6_final.train_feedback_fixed.jsonl",
+    "data_train_v6_final.giao_review_fixed.jsonl",
+    "data_train_v7_final.jsonl"
+  ],
+  "reports": {
+    "train_feedback_report": "data/processed/data_train_v6_final.train_feedback_report.json",
+    "giao_review_report": "data/processed/data_train_v6_final.giao_review_report.json"
+  }
+}

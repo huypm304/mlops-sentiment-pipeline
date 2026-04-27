@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/price_value__negation.part_02.jsonl",
+  "family": "price_value",
+  "pattern": "negation",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_1_price_value__negation.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_2_price_value__negation.part_02.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1/step_2_price_value__negation.part_02.decisions.jsonl",
+  "total_rows": 10,
+  "accepted": 3,
+  "skipped": 9,
+  "applied_updates": 3
+}

@@ -1,99 +1,98 @@
 import torch
-import torch.nn as nn
-from transformers import AutoModel
-from torchcrf import CRF
+import unicodedata
+from transformers import AutoTokenizer
 
-class AttentionPooling(nn.Module):
-    def __init__(self, hidden: int):
-        super().__init__()
-        # Đổi từ nn.Sequential thành nn.Linear với tên 'scorer' cho khớp file .pt
-        self.scorer = nn.Linear(hidden, 1)
+# --- CẤU HÌNH ---
+MODEL_PATH = "/content/drive/MyDrive/Colab Notebooks/Dataset/best_model_v5.pt" # Đường dẫn file Huy vừa train xong
+MODEL_NAME = "Fsoft-AIC/videberta-base"
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def forward(self, x, mask):
-        # Giữ nguyên logic forward của file train
-        scores  = self.scorer(x).squeeze(-1)           
-        scores  = scores.masked_fill(mask == 0, -1e9)
-        weights = torch.softmax(scores, dim=-1)        
-        return (x * weights.unsqueeze(-1)).sum(dim=2)
+class ABSAEngine:
+    def __init__(self, model_path, model_name, device):
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.device = device
+        # Khởi tạo model và nạp trọng số
+        self.model = ABSAModel().to(device).float()
+        self.model.load_state_dict(torch.load(model_path, map_location=device))
+        self.model.eval()
 
-class ABSAv3(nn.Module):
-    def __init__(self, model_name: str, dropout: float = 0.15):
-        super().__init__()
-        self.backbone    = AutoModel.from_pretrained(model_name)
-        hidden           = self.backbone.config.hidden_size
-        self.dropout     = nn.Dropout(dropout)
-        
-        self.bio_head    = nn.Linear(hidden, 11) # Khớp với N_BIO=11
-        self.crf         = CRF(11, batch_first=True)
-        
-        self.span_attn   = AttentionPooling(hidden)
-        # Lưu ý: Trong file train sent_head là nn.Sequential
-        self.sent_head   = nn.Sequential(nn.Dropout(0.2), nn.Linear(hidden, 3)) 
-        
-        self.global_head = nn.Linear(hidden, 3)
-    def forward(self, input_ids, attention_mask, span_masks=None, bio_labels=None):
-        # 1. Chạy Backbone (Huy đã đổi thành self.backbone)
-        out = self.backbone(input_ids=input_ids, attention_mask=attention_mask)
-        
-        # 2. Lấy output (Đoạn này bị NameError vì chưa định nghĩa sequence_output)
-        sequence_output = out.last_hidden_state  # <-- THÊM DÒNG NÀY
-        
-        # 3. Dropout và lấy CLS (Token <s> ở vị trí 0)
-        seq_out = self.dropout(sequence_output)
-        cls_out = self.dropout(seq_out[:, 0, :])
-        mask_bool = attention_mask.bool()
+        # MAPPING CHUẨN: Dựa trên phân tích RawID của Huy
+        self.sent_map = {1: "Positive", 0: "Negative", 2: "Neutral"}
 
-        # 4. BIO Head
-        bio_emissions = self.bio_head(seq_out)
+    def predict(self, text):
+        clean_text = nfc(text)
+        enc = self.tokenizer(clean_text, max_length=MAX_LEN, padding="max_length",
+                             truncation=True, return_offsets_mapping=True,
+                             return_special_tokens_mask=True, return_tensors="pt")
 
-        # 5. Xử lý CRF Loss hoặc Decode
-        if bio_labels is not None:
-            crf_loss = -self.crf(bio_emissions, bio_labels, mask=mask_bool, reduction="mean")
-            bio_preds = None
-        else:
-            crf_loss = None
-            bio_preds = self.crf.decode(bio_emissions, mask=mask_bool)
+        ids = enc['input_ids'].to(self.device)
+        mask = enc['attention_mask'].to(self.device)
+        spec_mask = enc.pop("special_tokens_mask")[0]
 
-        # 6. Global Head
-        global_logits = self.global_head(cls_out)
+        with torch.no_grad():
+            # 1. Trích xuất BIO Spans
+            _, bio_preds, _, _ = self.model(ids, mask)
+            spans = sorted(list(extract_spans(bio_preds[0])), key=lambda x: x[0])
 
-        # 7. Span Head (Sentiment cục bộ)
-        span_logits = None
-        if span_masks is not None:
-            B, L, H = seq_out.shape
-            M = span_masks.shape[1]
-            # Mở rộng seq_out để tính Attention Pooling cho từng Span
-            seq_exp = seq_out.unsqueeze(1).expand(B, M, L, H)
-            span_repr = self.span_attn(seq_exp, span_masks)
-            span_logits = self.sent_head(span_repr)
+            if not spans:
+                return {"global_sentiment": "N/A", "aspects": []}
 
-        return bio_emissions, crf_loss, bio_preds, span_logits, global_logits
+            # 2. Build span_mask NGHIÊM NGẶT (Tránh rò rỉ context)
+            L = ids.shape[1]
+            span_mask = torch.zeros(1, MAX_OPS, L).to(self.device)
 
-def extract_bio_spans(bio_labels):
-    """Hàm giải mã ID thành Spans"""
-    ASPECTS = ["Product", "Service", "Ship", "Price", "App"]
-    id2label = {0: "O"}
-    idx = 1
-    for asp in ASPECTS:
-        id2label[idx] = f"B-{asp}"
-        id2label[idx+1] = f"I-{asp}"
-        idx += 2
+            for i, (start, end, asp) in enumerate(spans[:MAX_OPS]):
+                # Xác định vùng giới hạn trái/phải để không nhìn lấn sang Aspect khác
+                left_limit = spans[i-1][1] + 1 if i > 0 else 1
+                right_limit = spans[i+1][0] - 1 if i < len(spans) - 1 else L - 2
 
-    spans = set()
-    current_span = None
-    for i, label_id in enumerate(bio_labels):
-        label = id2label.get(label_id, "O")
-        if label.startswith("B-"):
-            if current_span: spans.add(current_span)
-            current_span = (i, i, label[2:])
-        elif label.startswith("I-"):
-            if current_span and current_span[2] == label[2:]:
-                current_span = (current_span[0], i, current_span[2])
-            else:
-                current_span = None
-        else:
-            if current_span:
-                spans.add(current_span)
-                current_span = None
-    if current_span: spans.add(current_span)
-    return spans
+                # Áp dụng Window nhưng không vượt quá giới hạn
+                lo = max(start - 3, left_limit)
+                hi = min(end + 8, right_limit)
+
+                for j in range(lo, hi + 1):
+                    if not spec_mask[j]:
+                        span_mask[0, i, j] = 1.0
+
+            # 3. Forward Pass lấy Sentiment & Global
+            _, _, sent_logits, glob_logits = self.model(ids, mask, span_mask=span_mask)
+            print(f"DEBUG Logits: {sent_logits[0][i]}")
+            # 4. Đóng gói kết quả
+            g_id = torch.argmax(glob_logits).item()
+            results = {
+                "global_sentiment": self.sent_map.get(g_id, "Unknown"),
+                "aspects": []
+            }
+
+            for i, (start, end, asp) in enumerate(spans[:MAX_OPS]):
+                s_id = torch.argmax(sent_logits[0][i]).item()
+                results["aspects"].append({
+                    "aspect": asp,
+                    "sentiment": self.sent_map.get(s_id, "Unknown"),
+                    "target": self.tokenizer.decode(ids[0][start:end+1]).strip(),
+                    "audit_trace": f"RawID: {s_id}"
+                })
+            return results
+
+# ==========================================
+# THỰC THI BATCH TEST
+# ==========================================
+engine = ABSAEngine(MODEL_PATH, MODEL_NAME, DEVICE)
+
+test_cases = [
+    "để nói so sánh về giá bên tiktok và shopee thì củng không chênh lệch mấy nhưng lazada phí vận chuyển quá cao thế là mình gở ứng dụng luôn",
+    "Sản phẩm tốt trong tầm giá pin trâu  chiến game ngon camera tạm ổn nhân viên hỗ trợ nhiệt tình",
+    "Sản phẩm tốt , phục vụ nhiệt tình . Nhân viên rất tốt  . Điện thoại lướt rất mượt mà . Đáng túi tiền",
+    "Sạc nhanh. Pin trâu. Loa bé tẹo. Màu máy xấu. So với giá tiền thì cũng tạm duyệt đc.",
+    "Sản phẩm tốt trong tầm giá pin trâu chiến game ngon camera tạm ổn nhân viên hỗ trợ không tốt",
+    "Giao hàng nhanh, nhân viên hỗ trợ nhanh chóng",
+    "Sản phẩm quá tệ trong tầm giá. Pin tụt nhanh"
+]
+
+for i, text in enumerate(test_cases):
+    res = engine.predict(text)
+    print(f"\n📝 [TEST #{i+1}] Input: {text}")
+    print(f"🌍 Global Sentiment: {res['global_sentiment']}")
+    print("-" * 70)
+    for asp in res['aspects']:
+        print(f"👉 [{asp['aspect']:^12}] | Sentiment: {asp['sentiment']:^10} | Target: '{asp['target']:<12}' | {asp['audit_trace']}")

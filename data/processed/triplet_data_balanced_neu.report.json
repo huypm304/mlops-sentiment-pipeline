@@ -1,0 +1,53 @@
+{
+  "seed": 42,
+  "similarity_metric": "token_trigram_jaccard",
+  "similarity_threshold": 0.3,
+  "target_ratio": 1.5,
+  "input_records": 6428,
+  "augment_records": 256,
+  "output_records": 6684,
+  "cell_report": {
+    "Fashion-Neu": {
+      "needed": 347,
+      "source_candidates_available": 0,
+      "source_used": 0,
+      "synthetic_used": 167,
+      "generated_total": 167
+    },
+    "Electronics-Neu": {
+      "needed": 89,
+      "source_candidates_available": 0,
+      "source_used": 0,
+      "synthetic_used": 89,
+      "generated_total": 89
+    }
+  },
+  "before": {
+    "Fashion": {
+      "Neg": 820,
+      "Pos": 487,
+      "Neu": 200,
+      "ratio": 4.1
+    },
+    "Electronics": {
+      "Neg": 440,
+      "Pos": 463,
+      "Neu": 220,
+      "ratio": 2.1045454545454545
+    }
+  },
+  "after": {
+    "Fashion": {
+      "Neg": 820,
+      "Pos": 487,
+      "Neu": 367,
+      "ratio": 2.23433242506812
+    },
+    "Electronics": {
+      "Neg": 440,
+      "Pos": 463,
+      "Neu": 309,
+      "ratio": 1.4983818770226538
+    }
+  }
+}

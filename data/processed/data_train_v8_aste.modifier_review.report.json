@@ -1,0 +1,8 @@
+{
+  "mode": "apply",
+  "aste_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.jsonl",
+  "decisions_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.modifier_review.jsonl",
+  "merged_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.modifier_merged.jsonl",
+  "accepted_decisions": 88,
+  "applied_updates": 88
+}

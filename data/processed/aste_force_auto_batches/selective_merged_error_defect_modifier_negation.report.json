@@ -1,0 +1,8 @@
+{
+  "base": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v2/step_7_ship_delivery_packaging__modifier.part_01.jsonl",
+  "negation_dir": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/batch05_mini_batches/applied_negation_v1",
+  "output": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/selective_merged_error_defect_modifier_negation.jsonl",
+  "decisions": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/selective_merged_error_defect_modifier_negation.decisions.jsonl",
+  "safe_negation_decisions": 22,
+  "applied_updates": 22
+}

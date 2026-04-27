@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/ship_delivery_packaging__modifier.part_01.jsonl",
+  "family": "ship_delivery_packaging",
+  "pattern": "modifier",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v2/step_6_general_product__modifier.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v2/step_7_ship_delivery_packaging__modifier.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_modifier_v2/step_7_ship_delivery_packaging__modifier.part_01.decisions.jsonl",
+  "total_rows": 16,
+  "accepted": 7,
+  "skipped": 11,
+  "applied_updates": 6
+}

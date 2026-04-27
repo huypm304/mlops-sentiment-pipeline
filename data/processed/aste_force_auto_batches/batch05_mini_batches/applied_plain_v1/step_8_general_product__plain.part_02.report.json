@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/general_product__plain.part_02.jsonl",
+  "family": "general_product",
+  "pattern": "plain",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_7_general_product__plain.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_8_general_product__plain.part_02.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_plain_v1/step_8_general_product__plain.part_02.decisions.jsonl",
+  "total_rows": 4,
+  "accepted": 0,
+  "skipped": 4,
+  "applied_updates": 0
+}

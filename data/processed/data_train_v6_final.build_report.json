@@ -1,0 +1,33 @@
+{
+  "input": "data/processed/data_train_v6.jsonl",
+  "e5_queue": "data/processed/data_train_v6.e5_review_queue.jsonl",
+  "e5_manual_tsv": "data/processed/data_train_v6.e5_manual_edit.tsv",
+  "e6_queue": "data/processed/data_train_v6.e6_review_queue.jsonl",
+  "e6_manual_tsv": "data/processed/data_train_v6.e6_manual_edit.tsv",
+  "e6_opinion_manual_tsv": "data/processed/data_train_v6.e6_opinion_manual_edit.tsv",
+  "output": "data/processed/data_train_v6_final.jsonl",
+  "total_records": 7565,
+  "e5_queue_records": 159,
+  "e5_reviewed_items": 170,
+  "e5_changed_items": 4,
+  "e5_unchanged_items": 166,
+  "e5_changed_transitions": {
+    "1->0": 4
+  },
+  "e6_queue_records": 121,
+  "e6_reviewed_items": 121,
+  "e6_changed_items": 5,
+  "e6_unchanged_items": 116,
+  "e6_changed_transitions": {
+    "0->1": 2,
+    "1->2": 2,
+    "1->0": 1
+  },
+  "e6_opinion_reviewed_items": 46,
+  "e6_opinion_changed_items": 46,
+  "e6_opinion_unchanged_items": 0,
+  "e6_opinion_changed_transitions": {
+    "1->0": 45,
+    "0->2": 1
+  }
+}

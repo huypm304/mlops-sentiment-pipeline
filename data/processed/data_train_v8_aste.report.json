@@ -1,0 +1,32 @@
+{
+  "input_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8.jsonl",
+  "output_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.jsonl",
+  "review_file": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.review.jsonl",
+  "total_records": 7565,
+  "total_triplets": 11274,
+  "review_records": 2537,
+  "resolved_triplets": 8875,
+  "unresolved_triplets": 2399,
+  "resolved_rate": 0.7872,
+  "sentiment_distribution": {
+    "0": 4166,
+    "1": 4168,
+    "2": 2940
+  },
+  "aspect_distribution": {
+    "Service": 1947,
+    "General": 1909,
+    "App": 1444,
+    "Ship": 1249,
+    "Price": 1768,
+    "Electronics": 1372,
+    "Fashion": 1585
+  },
+  "grouped_review_records": {
+    "qua_adj": 100,
+    "bi_loi": 84,
+    "other": 1643,
+    "hoi_adj": 147,
+    "khong_co": 20
+  }
+}

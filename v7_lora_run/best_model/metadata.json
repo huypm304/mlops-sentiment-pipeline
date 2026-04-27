@@ -1,0 +1,9 @@
+{
+  "epoch": 20,
+  "phase": "phase2",
+  "composite": 0.386883905155626,
+  "lora_target_modules": [
+    "query_proj",
+    "value_proj"
+  ]
+}

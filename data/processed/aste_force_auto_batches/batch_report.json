@@ -1,0 +1,50 @@
+{
+  "input": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/data_train_v8_aste.modifier_force_auto_merged.jsonl",
+  "errors": "/home/uph3hc/project/mlops-sentiment-pipeline/aste_force_audit_errors.jsonl",
+  "out_dir": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches",
+  "chunk_size": 250,
+  "batches": [
+    {
+      "batch": "batch_01_span_exact",
+      "description": "Span-only fixes with exact actionable span corrections",
+      "applyable": true,
+      "records": 16,
+      "chunks": 1
+    },
+    {
+      "batch": "batch_02_sentiment_only",
+      "description": "Sentiment-only fixes with clear polarity cues",
+      "applyable": true,
+      "records": 1060,
+      "chunks": 5
+    },
+    {
+      "batch": "batch_03_aspect_only",
+      "description": "Aspect-only fixes based on target keyword matches",
+      "applyable": true,
+      "records": 303,
+      "chunks": 2
+    },
+    {
+      "batch": "batch_04_mixed_safe",
+      "description": "Mixed safe fixes without unresolved span issues",
+      "applyable": true,
+      "records": 56,
+      "chunks": 1
+    },
+    {
+      "batch": "batch_05_unresolved_review",
+      "description": "Records still needing manual review because span cannot be fixed safely",
+      "applyable": false,
+      "records": 1737,
+      "chunks": 7
+    }
+  ],
+  "checkpoint_paths": [
+    "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/checkpoints/step_01_batch_01_span_exact.jsonl",
+    "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/checkpoints/step_02_batch_02_sentiment_only.jsonl",
+    "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/checkpoints/step_03_batch_03_aspect_only.jsonl",
+    "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/checkpoints/step_04_batch_04_mixed_safe.jsonl"
+  ],
+  "final_safe_output": "/home/uph3hc/project/mlops-sentiment-pipeline/data/processed/aste_force_auto_batches/checkpoints/final_safe_batched_fix.jsonl"
+}

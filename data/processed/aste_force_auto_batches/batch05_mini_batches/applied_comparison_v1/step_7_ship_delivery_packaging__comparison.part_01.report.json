@@ -1,0 +1,12 @@
+{
+  "manifest": "data/processed/aste_force_auto_batches/batch05_mini_batches/manifests/ship_delivery_packaging__comparison.part_01.jsonl",
+  "family": "ship_delivery_packaging",
+  "pattern": "comparison",
+  "input": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_6_general_product__comparison.part_01.jsonl",
+  "output": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_7_ship_delivery_packaging__comparison.part_01.jsonl",
+  "decisions": "data/processed/aste_force_auto_batches/batch05_mini_batches/applied_comparison_v1/step_7_ship_delivery_packaging__comparison.part_01.decisions.jsonl",
+  "total_rows": 5,
+  "accepted": 2,
+  "skipped": 3,
+  "applied_updates": 2
+}

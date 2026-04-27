@@ -1,0 +1,16 @@
+{
+  "input": "data/processed/data_train_v5.autofixed.jsonl",
+  "queue": "data/processed/data_train_v5.e5_review_queue.jsonl",
+  "manual_tsv": "data/processed/data_train_v5.e5_manual_edit.tsv",
+  "output": "data/processed/data_train_v6.jsonl",
+  "total_records": 7565,
+  "queue_records": 593,
+  "reviewed_items": 647,
+  "changed_items": 391,
+  "unchanged_items": 256,
+  "changed_transitions": {
+    "1->0": 91,
+    "0->1": 251,
+    "1->2": 49
+  }
+}
