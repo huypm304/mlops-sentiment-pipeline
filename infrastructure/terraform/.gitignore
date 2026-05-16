@@ -1,0 +1,13 @@
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+terraform.tfvars
+**/terraform.tfvars
+!terraform.tfvars.example
+!**/terraform.tfvars.example
+modules/lambda/build/
+*.zip
+*.tfplan
+
+# Commit .terraform.lock.hcl for reproducible CI applies

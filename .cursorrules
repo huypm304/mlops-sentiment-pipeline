@@ -1,0 +1,207 @@
+# AI-Powered ABSA MLOps Platform
+
+This project is a production-inspired AI/MLOps platform for Vietnamese Aspect-Based Sentiment Analysis (ABSA) running on AWS with a serverless-first architecture.
+
+### PROJECT GOALS
+
+The system must support:
+- AI inference
+- dataset auditing
+- analytics dashboard
+- retraining pipeline
+- monitoring
+- CI/CD
+- Infrastructure as Code
+- model versioning
+- production-inspired deployment
+
+This project is:
+- cloud-native
+- serverless-first
+- MLOps-oriented
+- event-driven
+- portfolio-quality
+- graduation thesis quality
+
+### TECH STACK
+
+Frontend:
+- Next.js App Router
+- TypeScript
+- TailwindCSS
+- shadcn/ui
+- Recharts
+- Framer Motion
+
+Backend:
+- Python
+- FastAPI-style architecture
+- AWS Lambda
+
+Cloud:
+- AWS API Gateway
+- AWS Lambda
+- AWS SageMaker
+- AWS Step Functions
+- Amazon S3
+- PostgreSQL RDS
+- CloudWatch
+- Route53
+- ACM
+
+Infrastructure:
+- Terraform
+- GitHub Actions
+
+AI/ML:
+- PyTorch
+- Transformers
+- ViBERTa
+- CRF decoding
+- Multi-task learning
+
+### ARCHITECTURE RULES
+
+Important:
+- Prefer serverless AWS services
+- Avoid overengineering
+- Do NOT use Kubernetes/EKS
+- Do NOT use Kafka
+- Keep architecture realistic and deployable by a single engineer
+- Focus on maintainability and demoability
+- Use modular architecture
+- Use production-inspired folder structures
+
+### FRONTEND RULES
+
+Frontend style:
+- Modern SaaS dashboard
+- shadcn admin dashboard style
+- Clean enterprise UI
+- Dark mode support
+- Responsive design
+- Dashboard-oriented layout
+
+Frontend sections:
+- Prediction page
+- Analytics dashboard
+- Admin dashboard
+- Monitoring dashboard
+
+Use:
+- reusable components
+- modular structure
+- clean Tailwind styling
+- loading skeletons
+- charts for analytics
+
+Follow installed skills:
+- vercel-react-best-practices
+- frontend-design
+- web-design-guidelines
+
+Frontend expectations:
+- Use clean spacing and layout hierarchy
+- Use reusable shadcn/ui components
+- Use enterprise SaaS dashboard patterns
+- Prefer composable React components
+- Keep pages modular and scalable
+- Prioritize UX clarity and responsive behavior
+
+### BACKEND RULES
+
+Backend must:
+- use modular architecture
+- separate business logic
+- use service layers
+- keep Lambda handlers lightweight
+- support scalability
+- follow clean API design
+
+Backend structure expectations:
+- routes/
+- services/
+- models/
+- utils/
+- schemas/
+- config/
+
+Prefer:
+- dependency injection patterns
+- reusable utilities
+- structured logging
+- environment-based configuration
+
+### MLOPS RULES
+
+The platform must support:
+- dataset auditing
+- model versioning
+- retraining pipeline
+- inference logging
+- monitoring
+- drift observation
+- evaluation pipeline
+
+MLOps principles:
+- reproducibility
+- modular pipelines
+- maintainable workflows
+- production-inspired lifecycle
+
+### TERRAFORM RULES
+
+Terraform structure:
+- modular
+- reusable
+- environment-based
+- production-inspired
+
+Modules:
+- lambda
+- api_gateway
+- s3
+- iam
+- sagemaker
+- step_functions
+- cloudwatch
+- route53
+- acm
+
+Terraform expectations:
+- separate environments
+- reusable variables
+- outputs
+- clean module boundaries
+- scalable infrastructure layout
+
+### CI/CD RULES
+
+GitHub Actions should support:
+- frontend deployment
+- lambda deployment
+- terraform validation
+- terraform plan/apply
+- automated testing
+
+CI/CD expectations:
+- reusable workflows
+- clean deployment stages
+- environment separation
+- scalable automation structure
+
+### REPOSITORY STRUCTURE
+
+```text
+absa-mlops-platform/
+│
+├── frontend/
+├── backend/
+├── lambda/
+├── training/
+├── model/
+├── infrastructure/
+│   └── terraform/
+├── scripts/
+├── docs/
+└── .github/workflows/

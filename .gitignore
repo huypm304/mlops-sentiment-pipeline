@@ -1,2 +1,136 @@
-/venv
+# =============================================================================
+# ABSA MLOps Platform — root .gitignore
+# =============================================================================
+
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
 *.deb
+
+# --- Secrets & env (never commit) ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+/venv
+venv/
+env/
+ENV/
+backend/venv/
+backend/env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+
+# --- ML / model artifacts (large binaries) ---
+*.pt
+*.pth
+*.onnx
+*.safetensors
+model/*.pt
+model/checkpoints/
+training/runs/
+training/outputs/
+wandb/
+mlruns/
+lightning_logs/
+*.ckpt
+
+# --- Frontend (Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/.turbo/
+frontend/.vercel/
+frontend/.npm/
+frontend/.eslintcache
+frontend/.vite/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# --- Terraform & IaC ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+# Local secrets / per-machine vars (keep *.example)
+terraform.tfvars
+**/terraform.tfvars
+!terraform.tfvars.example
+!**/terraform.tfvars.example
+# Lambda zip artifacts from terraform archive / deploy
+infrastructure/terraform/modules/lambda/build/
+*.zip
+
+# --- Deploy / CI build output ---
+.build/
+
+# --- Archives & dumps ---
+*.tar.gz
+*.tgz
+*.zip
+!infrastructure/**/*.zip.example
+
+# --- Logs & temp ---
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# --- Cursor / AI agent (local IDE — do not commit) ---
+.cursor/
+.cursor/rules/
+.cursorrules
+.agents/
+skills-config.json
+skills-lock.json
+
+# Agent instruction files (Cursor, Claude Code, Copilot, etc.)
+AGENTS.md
+CLAUDE.md
+**/AGENTS.md
+**/CLAUDE.md
+**/SKILL.md
+
+# Optional tool-specific agent dirs
+.codex/
+.continue/
+
+# --- Legacy / typo paths (safe to ignore if present) ---
+aws/terrafrom/

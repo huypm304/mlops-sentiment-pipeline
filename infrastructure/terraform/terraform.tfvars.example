@@ -1,0 +1,25 @@
+# Copy to terraform.tfvars or environments/<env>/terraform.tfvars
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region   = "ap-southeast-1"
+project_name = "absa-mlops-platform"
+environment  = "dev"
+
+lambda_memory_mb       = 512
+lambda_timeout_seconds = 30
+
+# Set true only when ready to provision a SageMaker endpoint (incurs cost).
+enable_sagemaker_endpoint = false
+sagemaker_instance_type   = "ml.m5.large"
+
+cors_allow_origins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]
+
+# --- Route53 + ACM (Option B) ---
+domain_name          = "minhhuy.me"
+enable_custom_domain = true
+create_hosted_zone   = true   # dev: true | prod: false (reuse zone)
+api_subdomain        = "api.dev" # dev: api.dev | prod: api
+www_cname_target     = ""     # Vercel CNAME for www, e.g. cname.vercel-dns.com
