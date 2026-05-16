@@ -1,0 +1,2 @@
+# Add boto3 only when packaging with pip install -t . (often provided by Lambda runtime).
+# boto3>=1.34.0

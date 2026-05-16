@@ -6,6 +6,8 @@ frontend/.eslintcache
 frontend/.vite/
 
 
+.build/
+
 __pycache__/
 *.py[cod]
 *$py.class
@@ -28,3 +30,5 @@ terraform
 terraform.tfstate
 terraform.tfstate.backup
 .terraform.lock.hcl
+
+*.pt

@@ -1,0 +1,60 @@
+# Tear down infra to save AWS costs when not demoing / testing.
+name: Terraform Destroy
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to destroy
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+      confirm:
+        description: "Type destroy-dev or destroy-prod to confirm"
+        required: true
+        type: string
+
+concurrency:
+  group: terraform-destroy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm destruction
+        run: |
+          expected="destroy-${{ inputs.environment }}"
+          if [[ "${{ inputs.confirm }}" != "$expected" ]]; then
+            echo "::error::Confirmation must be exactly: $expected"
+            exit 1
+          fi
+          echo "Confirmed destroy for ${{ inputs.environment }}"
+
+  destroy:
+    needs: guard
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION || 'ap-southeast-1' }}
+      TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+      TF_STATE_LOCK_TABLE: ${{ secrets.TF_STATE_LOCK_TABLE }}
+      TF_STATE_KEY: absa-mlops-platform/${{ inputs.environment }}/terraform.tfstate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/terraform
+        with:
+          environment: ${{ inputs.environment }}
+          command: destroy
+          auto_approve: "true"
+
+      - name: Destroy summary
+        run: |
+          echo "## Destroyed (${{ inputs.environment }})" >> "$GITHUB_STEP_SUMMARY"
+          echo "Resources removed. State file kept in S3 for next apply." >> "$GITHUB_STEP_SUMMARY"
+          echo "Empty S3 buckets manually if destroy failed on non-empty bucket." >> "$GITHUB_STEP_SUMMARY"
