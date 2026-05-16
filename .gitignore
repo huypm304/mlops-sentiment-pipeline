@@ -111,9 +111,24 @@ tmp/
 temp/
 .cache/
 
-# --- Cursor / local agent config (optional local only) ---
-skills-config.json
+# --- Cursor / AI agent (local IDE — do not commit) ---
 .cursor/
+.cursor/rules/
+.cursorrules
+.agents/
+skills-config.json
+skills-lock.json
+
+# Agent instruction files (Cursor, Claude Code, Copilot, etc.)
+AGENTS.md
+CLAUDE.md
+**/AGENTS.md
+**/CLAUDE.md
+**/SKILL.md
+
+# Optional tool-specific agent dirs
+.codex/
+.continue/
 
 # --- Legacy / typo paths (safe to ignore if present) ---
 aws/terrafrom/
