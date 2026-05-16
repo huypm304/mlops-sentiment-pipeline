@@ -132,3 +132,7 @@ CLAUDE.md
 
 # --- Legacy / typo paths (safe to ignore if present) ---
 aws/terrafrom/
+*.json
+.cursorrules
+skills-config.json
+skills-lock.json
