@@ -1,34 +1,119 @@
-model/*.pt  
-frontend/node_modules/
-frontend/dist/
-frontend/.npm/
-frontend/.eslintcache
-frontend/.vite/
+# =============================================================================
+# ABSA MLOps Platform — root .gitignore
+# =============================================================================
 
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.code-workspace
 
-.build/
+# --- Secrets & env (never commit) ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+credentials.json
+secrets.json
 
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
 backend/venv/
 backend/env/
-backend/.pytest_cache/
-.env
-/venv
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
 
+# --- ML / model artifacts (large binaries) ---
+*.pt
+*.pth
+*.onnx
+*.safetensors
+model/*.pt
+model/checkpoints/
+training/runs/
+training/outputs/
+wandb/
+mlruns/
+lightning_logs/
+*.ckpt
+
+# --- Frontend (Next.js) ---
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/.turbo/
+frontend/.vercel/
+frontend/.npm/
+frontend/.eslintcache
+frontend/.vite/
+frontend/coverage/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# --- Terraform & IaC ---
 .terraform/
 *.tfstate
-*.tfstate.backup
-.DS_Store
-.vscode/
-.idea/
-aws/terrafrom/terraform
-aws/terrafrom/model.tar.gz
-*.tar.gz
-terraform
-terraform.tfstate
-terraform.tfstate.backup
-.terraform.lock.hcl
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.tfstate.lock.info
+# Local secrets / per-machine vars (keep *.example)
+terraform.tfvars
+**/terraform.tfvars
+!terraform.tfvars.example
+!**/terraform.tfvars.example
+# Lambda zip artifacts from terraform archive / deploy
+infrastructure/terraform/modules/lambda/build/
+*.zip
 
-*.pt
+# --- Deploy / CI build output ---
+.build/
+
+# --- Archives & dumps ---
+*.tar.gz
+*.tgz
+*.zip
+!infrastructure/**/*.zip.example
+
+# --- Logs & temp ---
+*.log
+logs/
+tmp/
+temp/
+.cache/
+
+# --- Cursor / local agent config (optional local only) ---
+skills-config.json
+.cursor/
+
+# --- Legacy / typo paths (safe to ignore if present) ---
+aws/terrafrom/
