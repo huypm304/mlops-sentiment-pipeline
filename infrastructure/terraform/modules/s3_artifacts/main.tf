@@ -90,10 +90,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {
     status = "Enabled"
     filter { prefix = "prediction-logs/raw/" }
     transition {
-      days          = 14
+      days          = 30
       storage_class = "STANDARD_IA"
     }
-    expiration { days = 30 }
+    expiration { days = 90 }
     noncurrent_version_expiration { noncurrent_days = 7 }
   }
 
