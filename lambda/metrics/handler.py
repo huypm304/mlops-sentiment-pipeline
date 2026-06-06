@@ -21,6 +21,11 @@ PRODUCTION_BASELINE = {
     "global_f1": 0.73,
 }
 
+ASPECT_ORDER = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
+SENTIMENT_KEYS = ["negative", "positive", "neutral"]
+DRIFT_THRESHOLD = 0.18
+MIN_PRODUCTION_SAMPLES = 5
+
 
 def _get_store() -> RegistryStore:
     global _store
@@ -240,44 +245,193 @@ def _model_evaluation(version: str) -> dict[str, Any] | None:
     return None
 
 
-def _monitoring_summary() -> dict[str, Any]:
-    store = _get_store()
-    snapshot = store.get_latest_monitoring_snapshot() if store.config.monitoring_table else None
-    review_items = store.list_review_queue(limit=50, status="PENDING") if store.config.review_queue_table else []
-    predictions = store.list_predictions(limit=50) if store.config.predictions_table else []
+def _normalize_sentiment(label: str) -> str:
+    value = str(label or "neutral").strip().lower()
+    if value in SENTIMENT_KEYS:
+        return value
+    if value in ("neg", "negative", "0"):
+        return "negative"
+    if value in ("pos", "positive", "1"):
+        return "positive"
+    return "neutral"
+
+
+def _dist_from_counter(counter: Counter[str], keys: list[str]) -> dict[str, float]:
+    total = sum(counter.get(key, 0) for key in keys) or 1
+    return {key: round(counter.get(key, 0) / total, 4) for key in keys}
+
+
+def _l1_drift(a: dict[str, float], b: dict[str, float], keys: list[str]) -> float:
+    return round(sum(abs(a.get(key, 0) - b.get(key, 0)) for key in keys) / 2, 4)
+
+
+def _default_baseline() -> dict[str, Any]:
     return {
-        "status": "ok",
-        "model_ready": True,
-        "request_volume_total": len(predictions),
+        "source": "default_uniform",
+        "sample_size": 0,
+        "aspect_distribution": _dist_from_counter(Counter(), ASPECT_ORDER),
+        "global_sentiment_distribution": _dist_from_counter(Counter(), SENTIMENT_KEYS),
+        "avg_text_length": 0,
+    }
+
+
+def _production_window(predictions: list[dict[str, Any]]) -> dict[str, Any]:
+    aspect_c: Counter[str] = Counter()
+    global_c: Counter[str] = Counter()
+    confidences: list[float] = []
+
+    for row in predictions:
+        global_c[_normalize_sentiment(str(row.get("global_sentiment", "neutral")))] += 1
+        confidences.append(float(row.get("confidence", 0) or 0))
+        for aspect in row.get("aspects") or []:
+            asp = str(aspect)
+            if asp in ASPECT_ORDER:
+                aspect_c[asp] += 1
+
+    sample_size = len(predictions)
+    return {
+        "sample_size": sample_size,
+        "aspect_distribution": _dist_from_counter(aspect_c, ASPECT_ORDER),
+        "global_sentiment_distribution": _dist_from_counter(global_c, SENTIMENT_KEYS),
+        "avg_global_confidence": round(sum(confidences) / sample_size, 4) if sample_size else 0.0,
+    }
+
+
+def _runtime_stats(predictions: list[dict[str, Any]], *, model_ready: bool = True) -> dict[str, Any]:
+    latencies = [float(row.get("latency_ms", 0) or 0) for row in predictions if row.get("latency_ms") is not None]
+    avg = sum(latencies) / len(latencies) if latencies else 0.0
+    sorted_latencies = sorted(latencies)
+    p95 = sorted_latencies[int(len(sorted_latencies) * 0.95)] if sorted_latencies else 0.0
+
+    return {
+        "endpoint_health": "healthy" if model_ready else "degraded",
+        "api_status": "ok" if model_ready else "starting",
         "uptime_seconds": 0,
-        "snapshot": snapshot,
-        "review_queue_pending": len(review_items),
-        "drift": _drift_summary(),
+        "request_volume_total": len(predictions),
+        "error_count": 0,
+        "error_rate_pct": 0.0,
+        "avg_latency_ms": round(avg, 1),
+        "p95_latency_ms": round(p95, 1),
+        "recent_latency_ms": [round(x, 1) for x in latencies[-24:]],
     }
 
 
 def _drift_summary() -> dict[str, Any]:
     store = _get_store()
+    baseline = _default_baseline()
     if not store.config.predictions_table:
+        production = _production_window([])
         return {
             "status": "insufficient_data",
-            "sample_size": 0,
-            "global_sentiment_distribution": {"negative": 0.0, "positive": 0.0, "neutral": 0.0},
+            "message": "Predictions table is not configured",
+            "production_sample_size": 0,
+            "baseline": baseline,
+            "production": production,
             "drift_score": 0.0,
-            "threshold": 0.18,
+            "aspect_drift": 0.0,
+            "sentiment_drift": 0.0,
+            "confidence_delta": 0.0,
+            "threshold": DRIFT_THRESHOLD,
+            "suggest_retrain": False,
+            "signals": [],
+            "comparison": [],
         }
-    predictions = store.list_predictions(limit=100)
-    sentiments = Counter(str(row.get("global_sentiment", "neutral")) for row in predictions)
-    total = len(predictions) or 1
+
+    predictions = store.list_predictions(limit=200)
+    production = _production_window(predictions)
+    sample_size = production["sample_size"]
+
+    if sample_size < MIN_PRODUCTION_SAMPLES:
+        return {
+            "status": "insufficient_data",
+            "message": f"Need at least {MIN_PRODUCTION_SAMPLES} predictions (have {sample_size})",
+            "production_sample_size": sample_size,
+            "baseline": baseline,
+            "production": production,
+            "drift_score": 0.0,
+            "aspect_drift": 0.0,
+            "sentiment_drift": 0.0,
+            "confidence_delta": 0.0,
+            "threshold": DRIFT_THRESHOLD,
+            "suggest_retrain": False,
+            "signals": [],
+            "comparison": [],
+        }
+
+    aspect_drift = _l1_drift(
+        baseline["aspect_distribution"],
+        production["aspect_distribution"],
+        ASPECT_ORDER,
+    )
+    sentiment_drift = _l1_drift(
+        baseline["global_sentiment_distribution"],
+        production["global_sentiment_distribution"],
+        SENTIMENT_KEYS,
+    )
+    drift_score = round(0.6 * aspect_drift + 0.4 * sentiment_drift, 4)
+    avg_conf = float(production.get("avg_global_confidence") or 0.0)
+    confidence_delta = round(0.7 - avg_conf, 4) if avg_conf else 0.0
+
+    signals: list[str] = []
+    if aspect_drift >= DRIFT_THRESHOLD:
+        signals.append("Aspect distribution shifted vs training data")
+    if sentiment_drift >= DRIFT_THRESHOLD:
+        signals.append("Global sentiment mix shifted vs training data")
+    if avg_conf and avg_conf < 0.32:
+        signals.append("Low average prediction confidence")
+    if drift_score >= DRIFT_THRESHOLD:
+        signals.append("Overall drift exceeds threshold — consider audit & retrain")
+
+    suggest_retrain = drift_score >= DRIFT_THRESHOLD or len(signals) >= 2
+    status = "alert" if suggest_retrain else "ok"
+    if drift_score >= DRIFT_THRESHOLD * 0.7:
+        status = "warning"
+
+    comparison: list[dict[str, Any]] = []
+    for aspect in ASPECT_ORDER:
+        base_value = baseline["aspect_distribution"].get(aspect, 0)
+        prod_value = production["aspect_distribution"].get(aspect, 0)
+        comparison.append(
+            {
+                "name": aspect,
+                "baseline": base_value,
+                "production": prod_value,
+                "delta": round(prod_value - base_value, 4),
+            }
+        )
+
     return {
-        "status": "ok" if predictions else "insufficient_data",
-        "sample_size": len(predictions),
-        "global_sentiment_distribution": {
-            key: round(sentiments.get(key, 0) / total, 4) for key in ("negative", "positive", "neutral")
-        },
-        "drift_score": 0.0,
-        "threshold": 0.18,
+        "status": status,
+        "message": "Drift within normal range"
+        if status == "ok"
+        else "Elevated drift — review before next training cycle",
+        "production_sample_size": sample_size,
+        "baseline": baseline,
+        "production": production,
+        "drift_score": drift_score,
+        "aspect_drift": aspect_drift,
+        "sentiment_drift": sentiment_drift,
+        "confidence_delta": confidence_delta,
+        "threshold": DRIFT_THRESHOLD,
+        "suggest_retrain": suggest_retrain,
+        "signals": signals,
+        "comparison": comparison,
     }
+
+
+def _monitoring_summary() -> dict[str, Any]:
+    store = _get_store()
+    snapshot = store.get_latest_monitoring_snapshot() if store.config.monitoring_table else None
+    review_items = store.list_review_queue(limit=50, status="PENDING") if store.config.review_queue_table else []
+    predictions = store.list_predictions(limit=500) if store.config.predictions_table else []
+    payload = {
+        **_runtime_stats(predictions),
+        "drift": _drift_summary(),
+        "review_queue_pending": len(review_items),
+    }
+    if snapshot:
+        payload["snapshot"] = snapshot
+    return payload
 
 
 def _analytics_payload(params: dict[str, str]) -> dict[str, Any]:
@@ -383,16 +537,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     if route.endswith("/metrics/runtime"):
         predictions = store.list_predictions(limit=500) if store.config.predictions_table else []
-        return _response(
-            200,
-            {
-                "status": "ok",
-                "model_ready": True,
-                "request_volume_total": len(predictions),
-                "uptime_seconds": 0,
-                "avg_latency_ms": 0,
-            },
-        )
+        return _response(200, _runtime_stats(predictions))
 
     if route.endswith("/metrics/training/history"):
         return _response(200, {"history": []})

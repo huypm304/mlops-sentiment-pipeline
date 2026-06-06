@@ -38,7 +38,7 @@ export default function DashboardPage() {
       fetchHealth().then(setHealth),
       fetchAnalytics(24).then(setAnalytics).catch(() => null),
       fetchMonitoring()
-        .then((m) => setDriftStatus(m.drift.status.replace("_", " ")))
+        .then((m) => setDriftStatus((m.drift?.status ?? "unknown").replace("_", " ")))
         .catch(() => null),
     ]).finally(() => setLoading(false))
   }, [])

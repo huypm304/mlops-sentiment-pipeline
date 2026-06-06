@@ -233,8 +233,8 @@ export function MonitoringView() {
         <div className="flex items-center justify-between border-b border-border/50 px-3 py-2">
           <p className="text-[12px] font-medium">Drift signals</p>
           <span className="font-mono text-[10px] text-muted-foreground">
-            baseline n={drift?.baseline.sample_size ?? 0} · live n=
-            {drift?.production_sample_size ?? 0}
+            baseline n={drift?.baseline?.sample_size ?? 0} · live n=
+            {drift?.production_sample_size ?? drift?.production?.sample_size ?? 0}
           </span>
         </div>
         <dl className="grid gap-px bg-border/40 sm:grid-cols-2 lg:grid-cols-4">

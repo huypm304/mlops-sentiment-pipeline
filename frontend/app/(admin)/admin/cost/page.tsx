@@ -94,7 +94,10 @@ export default function CostPage() {
             <UsageRow label="Environment" value={platform.environment} />
             <UsageRow label="Production model" value={platform.production_model} />
             <UsageRow label="Model directory" value={platform.model_dir} />
-            <UsageRow label="Drift predictions logged" value={String(runtime.drift.production_sample_size)} />
+            <UsageRow
+              label="Drift predictions logged"
+              value={String(runtime.drift?.production_sample_size ?? runtime.drift?.production?.sample_size ?? 0)}
+            />
             <UsageRow label="Error rate" value={`${runtime.error_rate_pct}%`} />
             <UsageRow label="Pipeline demo mode" value={platform.pipeline_demo_mode ? "enabled" : "disabled"} />
             <UsageRow label="Artifacts bucket" value={platform.artifacts_bucket ?? "not configured"} />
