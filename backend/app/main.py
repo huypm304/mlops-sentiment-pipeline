@@ -11,7 +11,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.config.settings import CORS_ORIGINS
+from backend.app.routes.audit import router as audit_router
 from backend.app.routes.metrics import router as metrics_router
+from backend.app.routes.pipeline import router as pipeline_router
 from backend.app.routes.predict import router as predict_router
 from backend.app.services.inference import init_model
 
@@ -39,6 +41,8 @@ app.add_middleware(
 
 app.include_router(predict_router)
 app.include_router(metrics_router)
+app.include_router(audit_router)
+app.include_router(pipeline_router)
 
 
 if __name__ == "__main__":

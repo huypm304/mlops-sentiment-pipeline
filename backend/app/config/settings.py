@@ -9,3 +9,8 @@ CORS_ORIGINS = os.getenv(
     "CORS_ORIGINS",
     "http://localhost:3000,http://127.0.0.1:3000",
 ).split(",")
+
+# Step Functions retrain pipeline (optional — demo mode when unset)
+RETRAIN_STATE_MACHINE_ARN = os.getenv("RETRAIN_STATE_MACHINE_ARN", "").strip()
+ARTIFACTS_BUCKET = os.getenv("ARTIFACTS_BUCKET", "").strip()
+PIPELINE_DEMO_MODE = os.getenv("PIPELINE_DEMO_MODE", "").lower() in ("1", "true", "yes")

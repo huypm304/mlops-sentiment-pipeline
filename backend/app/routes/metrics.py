@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from backend.app.services import drift as drift_service
 from backend.app.services import inference as inference_service
 from backend.app.services import metrics as metrics_service
 from backend.app.services import runtime as runtime_service
@@ -33,3 +34,17 @@ async def get_model_metrics(version: str):
 @router.get("/metrics/training/history")
 async def training_history():
     return {"history": metrics_service.get_training_history()}
+
+
+@router.get("/metrics/monitoring")
+async def monitoring_dashboard():
+    """Runtime ops + model/data drift vs training baseline."""
+    try:
+        inference_service.get_model_bundle()
+        model_ready = True
+    except RuntimeError:
+        model_ready = False
+    return {
+        **runtime_service.get_runtime_stats(model_ready),
+        "drift": drift_service.get_drift_report(),
+    }

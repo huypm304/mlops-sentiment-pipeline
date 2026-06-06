@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from backend.app.schemas.predict import OpinionOut, PredictRequest, PredictResponse
+from backend.app.services import drift as drift_service
 from backend.app.services import inference as inference_service
 from backend.app.services import runtime as runtime_service
 
@@ -19,6 +20,12 @@ async def predict(request: PredictRequest) -> PredictResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     runtime_service.record_predict(raw["latency_ms"], error=False)
+    drift_service.record_inference(
+        global_sentiment=raw["global_sentiment"],
+        global_confidence=float(raw.get("global_confidence", 0)),
+        opinions=raw["opinions"],
+        latency_ms=raw["latency_ms"],
+    )
 
     opinions = [
         OpinionOut(

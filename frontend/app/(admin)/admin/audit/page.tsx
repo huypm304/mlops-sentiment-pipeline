@@ -1,6 +1,6 @@
-import { EmptyState } from "@/components/ui/empty-state"
+import { AuditDashboard } from "@/components/admin/audit-dashboard"
 
-export const metadata = { title: "Audit" }
+export const metadata = { title: "Dataset audit" }
 
 export default function AuditPage() {
   return (
@@ -8,13 +8,10 @@ export default function AuditPage() {
       <header>
         <h1 className="text-xl font-semibold tracking-tight">Dataset audit</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Quality checks before training
+          VLSP-style quality checks and benchmarks before training
         </p>
       </header>
-      <EmptyState
-        title="No audit reports"
-        description="Dataset audit results will appear after running the data quality pipeline."
-      />
+      <AuditDashboard />
     </div>
   )
 }
