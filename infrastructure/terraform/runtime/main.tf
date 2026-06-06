@@ -121,7 +121,6 @@ module "lambda_predict" {
     SAGEMAKER_ENDPOINT_NAME   = module.sagemaker_optional.endpoint_name
     ENABLE_SAGEMAKER_ENDPOINT = tostring(var.enable_sagemaker_endpoint)
     PRODUCTION_MODEL_ID       = "absa-v1"
-    AWS_REGION                = var.aws_region
   })
 }
 
@@ -160,7 +159,6 @@ module "lambda_pipeline" {
     STATE_MACHINE_ARN         = local.state_machine_arn
     ENABLE_SAGEMAKER_TRAINING = tostring(var.enable_sagemaker_training)
     SAGEMAKER_ROLE_ARN        = module.iam_runtime.sagemaker_role_arn
-    AWS_REGION                = var.aws_region
   })
 }
 

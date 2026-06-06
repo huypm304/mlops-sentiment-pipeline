@@ -4,8 +4,10 @@ locals {
   model_name    = "${local.name_prefix}-absa"
   model_s3_uri  = "s3://${var.artifact_bucket_name}/${var.model_s3_key}"
 
-  # Default to public PyTorch inference image if no custom image is provided
-  inference_image = var.inference_image != "" ? var.inference_image : "763104351884.dkr.ecr.${var.aws_region}.amazonaws.com/pytorch-inference:2.1.0-cpu-py311"
+  # ap-southeast-1 DLC tag is 2.1.0-cpu-py310 (py311 tag does not exist for 2.1.0).
+  inference_image = var.inference_image != "" ? var.inference_image : (
+    "763104351884.dkr.ecr.${var.aws_region}.amazonaws.com/pytorch-inference:${var.pytorch_inference_version}-cpu-${var.pytorch_inference_py_version}"
+  )
 }
 
 # Endpoint resources are conditionally created via count.

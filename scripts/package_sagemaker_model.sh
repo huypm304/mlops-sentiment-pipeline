@@ -69,10 +69,17 @@ if [[ ! -f "${MODEL_DIR}/run_config.json" ]]; then
 fi
 
 STAGING="$(mktemp -d)"
-trap 'rm -rf "$STAGING"' EXIT
+TARBALL="$(mktemp "${TMPDIR:-/tmp}/sagemaker-model.XXXXXX.tar.gz")"
+cleanup() {
+  rm -rf "${STAGING}"
+  if [[ -n "${TARBALL:-}" && -f "${TARBALL}" ]]; then
+    rm -f "${TARBALL}"
+  fi
+}
+trap cleanup EXIT
 
 mkdir -p "${STAGING}/code/src"
-cp -a "${ROOT}/src/absa" "${STAGING}/code/src/"
+rsync -a --exclude '__pycache__/' --exclude '*.pyc' "${ROOT}/src/absa/" "${STAGING}/code/src/absa/"
 cp "${ROOT}/serving/inference.py" "${STAGING}/code/inference.py"
 cp "${ROOT}/serving/requirements.txt" "${STAGING}/code/requirements.txt"
 
@@ -82,8 +89,19 @@ for file in best_model.pt run_config.json postprocess_config.json label_mapping.
   fi
 done
 
+# Ensure large checkpoint writes are flushed before archiving.
+sync "${STAGING}/best_model.pt" 2>/dev/null || sync
+
 mkdir -p "$(dirname "${OUTPUT}")"
-tar -C "${STAGING}" -czf "${OUTPUT}" .
+
+TAR_EXTRA=()
+if tar --version 2>/dev/null | grep -qi gnu; then
+  TAR_EXTRA=(--warning=no-file-changed)
+fi
+
+tar -C "${STAGING}" -czf "${TARBALL}" "${TAR_EXTRA[@]}" .
+mv -f "${TARBALL}" "${OUTPUT}"
+TARBALL=""
 
 SIZE_MB=$(python3 - <<PY
 from pathlib import Path
@@ -93,8 +111,9 @@ PY
 
 echo "Created ${OUTPUT} (${SIZE_MB} MB)"
 echo "Contents:"
-tar -tzf "${OUTPUT}" | head -20
-COUNT=$(tar -tzf "${OUTPUT}" | wc -l)
+mapfile -t _TAR_LIST < <(tar -tzf "${OUTPUT}")
+printf '%s\n' "${_TAR_LIST[@]:0:20}"
+COUNT="${#_TAR_LIST[@]}"
 if [[ "${COUNT}" -gt 20 ]]; then
   echo "... (${COUNT} files total)"
 fi

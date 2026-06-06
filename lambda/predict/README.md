@@ -22,7 +22,6 @@ HTTP API handler for Vietnamese ABSA inference.
 | `SAGEMAKER_ENDPOINT_NAME` | SageMaker endpoint (e.g. `absa-mlops-demo-endpoint`) |
 | `ENABLE_SAGEMAKER_ENDPOINT` | `true` to invoke SageMaker |
 | `PRODUCTION_MODEL_ID` | Model id stored in DynamoDB predictions log |
-| `AWS_REGION` | Region for SageMaker Runtime client |
 
 ## Deploy real inference on AWS
 

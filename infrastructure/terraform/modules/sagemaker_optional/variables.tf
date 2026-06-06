@@ -42,6 +42,18 @@ variable "inference_image" {
   default     = ""
 }
 
+variable "pytorch_inference_version" {
+  description = "PyTorch DLC version when inference_image is empty (CPU tag for ml.m5.*)."
+  type        = string
+  default     = "2.1.0"
+}
+
+variable "pytorch_inference_py_version" {
+  description = "Python version suffix for the default PyTorch inference DLC (e.g. py310)."
+  type        = string
+  default     = "py310"
+}
+
 variable "aws_region" {
   type    = string
   default = "ap-southeast-1"

@@ -13,7 +13,6 @@ _ENDPOINT = os.getenv("SAGEMAKER_ENDPOINT_NAME", "").strip()
 _ENABLE_SAGEMAKER = os.getenv("ENABLE_SAGEMAKER_ENDPOINT", "false").lower() == "true"
 _BUCKET = os.getenv("ARTIFACTS_BUCKET", "")
 _DEFAULT_MODEL_VERSION = os.getenv("PRODUCTION_MODEL_ID", "absa-v1").strip() or "absa-v1"
-_AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-1")
 _store: RegistryStore | None = None
 _sagemaker_client: Any | None = None
 
@@ -30,7 +29,7 @@ def _get_sagemaker_client() -> Any:
     if _sagemaker_client is None:
         import boto3
 
-        _sagemaker_client = boto3.client("sagemaker-runtime", region_name=_AWS_REGION)
+        _sagemaker_client = boto3.client("sagemaker-runtime")
     return _sagemaker_client
 
 
