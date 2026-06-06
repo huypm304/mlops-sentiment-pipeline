@@ -30,11 +30,15 @@ export type AbsaAspect = {
   target: string
   sentiment: "positive" | "negative" | "neutral"
   confidence: number
+  rawConfidence?: number
+  calibratedConfidence?: number
 }
 
 export type InferenceResult = {
   globalSentiment: "positive" | "negative" | "neutral"
   globalConfidence: number
+  globalRawConfidence?: number
+  modelVersion?: string
   aspects: AbsaAspect[]
   spans: AspectSpan[]
   latencyMs: number

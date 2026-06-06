@@ -28,11 +28,14 @@ export type ModelEvaluation = {
   inferenceLatencyMs: number
   epoch?: number
   phase?: string
+  primaryMetric?: string
   scores?: {
+    tas_strict_f1: number
+    tas_relaxed_f1: number
     span_f1: number
-    sent_f1: number
-    glob_f1: number
-    composite: number
+    sent_matched_f1: number
+    sent_goldspan_f1: number
+    global_f1: number
     train_loss: number
   }
   dataset: {

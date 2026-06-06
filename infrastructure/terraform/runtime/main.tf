@@ -36,8 +36,12 @@ locals {
   approval_requests_table_name    = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.approval_requests_table_name : var.approval_requests_table_name
   review_queue_table_name         = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.review_queue_table_name : var.review_queue_table_name
 
+  route53_zone_id = local.use_remote_state ? (
+    try(data.terraform_remote_state.core[0].outputs.route53_zone_id, "")
+  ) : var.route53_zone_id
+
   # Custom domain assembly
-  custom_domain_enabled = var.domain_name != "" && var.enable_custom_domain
+  custom_domain_enabled = var.domain_name != "" && var.enable_custom_domain && local.route53_zone_id != ""
   api_fqdn              = local.custom_domain_enabled ? "${var.api_subdomain}.${var.domain_name}" : ""
 
   # Full CORS origins including custom domain if enabled
@@ -106,7 +110,7 @@ module "lambda_predict" {
   environment        = var.environment
   function_name      = "predict"
   role_arn           = module.iam_runtime.lambda_role_arn
-  source_path        = "${local.lambda_root}/predict"
+  source_path        = "${local.lambda_root}/.build/predict"
   runtime            = var.lambda_runtime
   memory_size        = var.lambda_memory_mb
   timeout            = var.lambda_timeout_seconds
@@ -126,10 +130,10 @@ module "lambda_audit" {
   environment        = var.environment
   function_name      = "audit"
   role_arn           = module.iam_runtime.lambda_role_arn
-  source_path        = "${local.lambda_root}/audit"
+  source_path        = "${local.lambda_root}/.build/audit"
   runtime            = var.lambda_runtime
-  memory_size        = 512
-  timeout            = 120
+  memory_size        = 1024
+  timeout            = 300
   log_retention_days = var.log_retention_days
   common_tags        = local.common_tags
 
@@ -143,10 +147,10 @@ module "lambda_pipeline" {
   environment        = var.environment
   function_name      = "pipeline"
   role_arn           = module.iam_runtime.lambda_role_arn
-  source_path        = "${local.lambda_root}/pipeline"
+  source_path        = "${local.lambda_root}/.build/pipeline"
   runtime            = var.lambda_runtime
   memory_size        = 512
-  timeout            = 60
+  timeout            = 900
   log_retention_days = var.log_retention_days
   common_tags        = local.common_tags
 
@@ -154,6 +158,7 @@ module "lambda_pipeline" {
     STATE_MACHINE_ARN         = local.state_machine_arn
     ENABLE_SAGEMAKER_TRAINING = tostring(var.enable_sagemaker_training)
     SAGEMAKER_ROLE_ARN        = module.iam_runtime.sagemaker_role_arn
+    AWS_REGION                = var.aws_region
   })
 }
 
@@ -164,7 +169,7 @@ module "lambda_metrics" {
   environment        = var.environment
   function_name      = "metrics"
   role_arn           = module.iam_runtime.lambda_role_arn
-  source_path        = "${local.lambda_root}/metrics"
+  source_path        = "${local.lambda_root}/.build/metrics"
   runtime            = var.lambda_runtime
   memory_size        = 256
   timeout            = 30
@@ -199,7 +204,7 @@ module "api_gateway" {
   metrics_lambda_function_name = module.lambda_metrics.function_name
 
   custom_domain_name = local.api_fqdn
-  certificate_arn    = local.custom_domain_enabled ? module.acm[0].certificate_arn : ""
+  certificate_arn    = local.custom_domain_enabled ? module.acm_api[0].certificate_arn : ""
   log_retention_days = var.log_retention_days
   common_tags        = local.common_tags
 }
@@ -262,7 +267,7 @@ module "cloudwatch" {
   api_gateway_id    = module.api_gateway.api_id
   state_machine_arn = local.state_machine_arn
 
-  enable_api_5xx_alarm  = true
+  enable_api_5xx_alarm    = true
   enable_sfn_failed_alarm = true
 }
 
@@ -284,31 +289,46 @@ module "sagemaker_optional" {
 }
 
 # ---------------------------------------------------------------------------
-# Optional: Route53 hosted zone (shared between custom domain + ACM)
+# Custom domain — ACM (API regional) + CloudFront (frontend) + Route53 records
 # ---------------------------------------------------------------------------
 
-module "route53" {
-  count  = local.custom_domain_enabled ? 1 : 0
-  source = "../modules/route53"
-
-  domain_name        = var.domain_name
-  create_hosted_zone = var.create_hosted_zone
-  zone_id            = var.route53_zone_id
-  www_cname_target   = var.www_cname_target
-}
-
-module "acm" {
+module "acm_api" {
   count  = local.custom_domain_enabled ? 1 : 0
   source = "../modules/acm"
 
   domain_name = local.api_fqdn
-  zone_id     = module.route53[0].zone_id
+  zone_id     = local.route53_zone_id
+}
+
+module "acm_cloudfront" {
+  count  = local.custom_domain_enabled ? 1 : 0
+  source = "../modules/acm"
+  providers = {
+    aws = aws.us_east_1
+  }
+
+  domain_name               = var.domain_name
+  subject_alternative_names = ["www.${var.domain_name}"]
+  zone_id                   = local.route53_zone_id
+}
+
+module "frontend_cdn" {
+  count  = local.custom_domain_enabled ? 1 : 0
+  source = "../modules/frontend_cdn"
+
+  project         = var.project
+  environment     = var.environment
+  domain_name     = var.domain_name
+  aliases         = [var.domain_name, "www.${var.domain_name}"]
+  certificate_arn = module.acm_cloudfront[0].certificate_arn
+  zone_id         = local.route53_zone_id
+  common_tags     = local.common_tags
 }
 
 resource "aws_route53_record" "api" {
   count = local.custom_domain_enabled ? 1 : 0
 
-  zone_id = module.route53[0].zone_id
+  zone_id = local.route53_zone_id
   name    = var.api_subdomain
   type    = "A"
 

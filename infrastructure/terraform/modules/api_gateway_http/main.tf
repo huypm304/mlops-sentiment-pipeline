@@ -38,6 +38,11 @@ locals {
       invoke_arn    = var.audit_lambda_invoke_arn
       function_name = var.audit_lambda_function_name
     }
+    dataset_get = {
+      route_key     = "GET /datasets/{dataset_id}"
+      invoke_arn    = var.audit_lambda_invoke_arn
+      function_name = var.audit_lambda_function_name
+    }
     pipeline_trigger = {
       route_key     = "POST /pipeline/trigger"
       invoke_arn    = var.pipeline_lambda_invoke_arn
@@ -50,6 +55,26 @@ locals {
     }
     pipeline_runs_list = {
       route_key     = "GET /pipeline/runs"
+      invoke_arn    = var.pipeline_lambda_invoke_arn
+      function_name = var.pipeline_lambda_function_name
+    }
+    pipeline_training_config = {
+      route_key     = "GET /pipeline/training-config"
+      invoke_arn    = var.pipeline_lambda_invoke_arn
+      function_name = var.pipeline_lambda_function_name
+    }
+    pipeline_config = {
+      route_key     = "GET /pipeline/config"
+      invoke_arn    = var.pipeline_lambda_invoke_arn
+      function_name = var.pipeline_lambda_function_name
+    }
+    pipeline_approval_get = {
+      route_key     = "GET /pipeline/approvals/{approval_id}"
+      invoke_arn    = var.pipeline_lambda_invoke_arn
+      function_name = var.pipeline_lambda_function_name
+    }
+    pipeline_approval_decide = {
+      route_key     = "POST /pipeline/approvals/{approval_id}/decide"
       invoke_arn    = var.pipeline_lambda_invoke_arn
       function_name = var.pipeline_lambda_function_name
     }
@@ -80,6 +105,36 @@ locals {
     }
     metrics_drift = {
       route_key     = "GET /metrics/drift"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_models = {
+      route_key     = "GET /metrics/models"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_model_version = {
+      route_key     = "GET /metrics/models/{version}"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_analytics = {
+      route_key     = "GET /metrics/analytics"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_platform = {
+      route_key     = "GET /metrics/platform"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_runtime = {
+      route_key     = "GET /metrics/runtime"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_training_history = {
+      route_key     = "GET /metrics/training/history"
       invoke_arn    = var.metrics_lambda_invoke_arn
       function_name = var.metrics_lambda_function_name
     }

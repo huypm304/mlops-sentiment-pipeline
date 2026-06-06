@@ -8,6 +8,10 @@ on:
         description: Auto-approve apply
         type: boolean
         default: true
+      budget_alert_email:
+        description: Email for AWS budget alerts (leave empty to skip)
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -23,8 +27,8 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
-      TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL || '' }}
+      AWS_REGION: ap-southeast-1
+      TF_VAR_budget_alert_email: ${{ inputs.budget_alert_email }}
     steps:
       - uses: actions/checkout@v4
 

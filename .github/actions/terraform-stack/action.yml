@@ -12,6 +12,18 @@ inputs:
     description: Skip interactive approval for apply/destroy
     required: false
     default: "true"
+  domain_name:
+    description: Root domain for core (Route53 zone) and runtime (ACM/CloudFront/API)
+    required: false
+    default: ""
+  enable_custom_domain:
+    description: Runtime — enable Route53 records, ACM, and CloudFront frontend
+    required: false
+    default: "false"
+  api_subdomain:
+    description: Runtime — API subdomain prefix (api → api.minhhuy.me)
+    required: false
+    default: "api"
   enable_sagemaker_endpoint:
     description: Runtime only — create SageMaker inference endpoint (~$50+/month if always on)
     required: false
@@ -61,6 +73,11 @@ runs:
       run: terraform fmt -check -recursive
       working-directory: infrastructure/terraform
 
+    - name: Build Lambda bundles
+      if: inputs.stack == 'runtime' && inputs.command != 'fmt-check'
+      shell: bash
+      run: bash scripts/build_audit_lambda.sh
+
     - name: Terraform init
       if: inputs.command != 'fmt-check'
       shell: bash
@@ -100,10 +117,16 @@ runs:
             -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
             -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
             -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+            -var="domain_name=${{ inputs.domain_name }}"
+            -var="enable_custom_domain=${{ inputs.enable_custom_domain }}"
+            -var="api_subdomain=${{ inputs.api_subdomain }}"
           )
           if [[ -n "${TF_STATE_BUCKET:-}" ]]; then
             EXTRA_ARGS+=(-var="core_state_bucket=${TF_STATE_BUCKET}")
           fi
+        fi
+        if [[ "${{ inputs.stack }}" == "core" && -n "${{ inputs.domain_name }}" ]]; then
+          EXTRA_ARGS+=(-var="domain_name=${{ inputs.domain_name }}")
         fi
         terraform plan -input=false -no-color "${EXTRA_ARGS[@]}"
 
@@ -119,10 +142,16 @@ runs:
             -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
             -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
             -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+            -var="domain_name=${{ inputs.domain_name }}"
+            -var="enable_custom_domain=${{ inputs.enable_custom_domain }}"
+            -var="api_subdomain=${{ inputs.api_subdomain }}"
           )
           if [[ -n "${TF_STATE_BUCKET:-}" ]]; then
             EXTRA_ARGS+=(-var="core_state_bucket=${TF_STATE_BUCKET}")
           fi
+        fi
+        if [[ "${{ inputs.stack }}" == "core" && -n "${{ inputs.domain_name }}" ]]; then
+          EXTRA_ARGS+=(-var="domain_name=${{ inputs.domain_name }}")
         fi
         if [[ "${{ inputs.auto_approve }}" == "true" ]]; then
           terraform apply -input=false -auto-approve "${EXTRA_ARGS[@]}"

@@ -1,0 +1,338 @@
+{
+  "train": {
+    "file": "data_stratified/train_aug500_boundary200.jsonl",
+    "rows": 7234,
+    "opinions": 12434,
+    "metrics": {
+      "exact_offset_match_count": 12434,
+      "exact_offset_match_pct": 100.0,
+      "trimmed_offset_match_count": 12434,
+      "trimmed_offset_match_pct": 100.0,
+      "empty_span_count": 0,
+      "empty_span_pct": 0.0,
+      "out_of_bound_count": 0,
+      "out_of_bound_pct": 0.0,
+      "span_too_wide_count": 0,
+      "span_too_wide_pct": 0.0,
+      "duplicate_exact_opinion_count": 0,
+      "duplicate_exact_opinion_pct": 0.0,
+      "duplicate_same_aspect_rows_count": 815,
+      "duplicate_same_aspect_rows_pct": 11.2662,
+      "missing_offsets_count": 0,
+      "missing_offsets_pct": 0.0
+    },
+    "thresholds": {
+      "exact_offset_match_target_pct": 99.5,
+      "trimmed_offset_match_target_pct": 99.8,
+      "empty_span_target_pct": 0.0,
+      "out_of_bound_target_pct": 0.0,
+      "span_too_wide_target_pct_lt": 1.0,
+      "duplicate_exact_opinion_target_pct_lt": 0.5,
+      "pass_exact_offset": true,
+      "pass_trimmed_offset": true,
+      "pass_empty_span": true,
+      "pass_out_of_bound": true,
+      "pass_span_too_wide": true,
+      "pass_duplicate_exact_opinion": true
+    },
+    "samples": {
+      "offset_mismatch": [],
+      "empty_span": [],
+      "out_of_bound": [],
+      "too_wide_span": [],
+      "duplicate_exact_opinion": [],
+      "duplicate_same_aspect": [
+        {
+          "line": 21,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 53,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 65,
+          "aspects": {
+            "Electronics": 3
+          }
+        },
+        {
+          "line": 91,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 106,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 116,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 120,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 125,
+          "aspects": {
+            "Electronics": 3
+          }
+        },
+        {
+          "line": 133,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 150,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 155,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 161,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 166,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 174,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 177,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 193,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 200,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 210,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 217,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 237,
+          "aspects": {
+            "Electronics": 2
+          }
+        }
+      ]
+    }
+  },
+  "dev": {
+    "file": "data_stratified/dev_clean.jsonl",
+    "rows": 765,
+    "opinions": 1280,
+    "metrics": {
+      "exact_offset_match_count": 1280,
+      "exact_offset_match_pct": 100.0,
+      "trimmed_offset_match_count": 1280,
+      "trimmed_offset_match_pct": 100.0,
+      "empty_span_count": 0,
+      "empty_span_pct": 0.0,
+      "out_of_bound_count": 0,
+      "out_of_bound_pct": 0.0,
+      "span_too_wide_count": 0,
+      "span_too_wide_pct": 0.0,
+      "duplicate_exact_opinion_count": 0,
+      "duplicate_exact_opinion_pct": 0.0,
+      "duplicate_same_aspect_rows_count": 80,
+      "duplicate_same_aspect_rows_pct": 10.4575,
+      "missing_offsets_count": 0,
+      "missing_offsets_pct": 0.0
+    },
+    "thresholds": {
+      "exact_offset_match_target_pct": 99.5,
+      "trimmed_offset_match_target_pct": 99.8,
+      "empty_span_target_pct": 0.0,
+      "out_of_bound_target_pct": 0.0,
+      "span_too_wide_target_pct_lt": 1.0,
+      "duplicate_exact_opinion_target_pct_lt": 0.5,
+      "pass_exact_offset": true,
+      "pass_trimmed_offset": true,
+      "pass_empty_span": true,
+      "pass_out_of_bound": true,
+      "pass_span_too_wide": true,
+      "pass_duplicate_exact_opinion": true
+    },
+    "samples": {
+      "offset_mismatch": [],
+      "empty_span": [],
+      "out_of_bound": [],
+      "too_wide_span": [],
+      "duplicate_exact_opinion": [],
+      "duplicate_same_aspect": [
+        {
+          "line": 1,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 9,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 13,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 21,
+          "aspects": {
+            "Service": 2
+          }
+        },
+        {
+          "line": 22,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 27,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 34,
+          "aspects": {
+            "Electronics": 3
+          }
+        },
+        {
+          "line": 42,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 77,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 82,
+          "aspects": {
+            "App": 2
+          }
+        },
+        {
+          "line": 97,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 101,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 125,
+          "aspects": {
+            "General": 2
+          }
+        },
+        {
+          "line": 129,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 132,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 137,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 150,
+          "aspects": {
+            "Fashion": 2
+          }
+        },
+        {
+          "line": 183,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 190,
+          "aspects": {
+            "Electronics": 2
+          }
+        },
+        {
+          "line": 201,
+          "aspects": {
+            "Electronics": 2
+          }
+        }
+      ]
+    }
+  },
+  "combined": {
+    "rows": 7999,
+    "opinions": 13714
+  }
+}

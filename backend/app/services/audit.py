@@ -1,4 +1,4 @@
-"""Dataset audit — uses shared engine under lambda/audit/dataset_audit."""
+"""Dataset audit — uses data_benchmark suite (train + dev bundle)."""
 
 from __future__ import annotations
 
@@ -7,16 +7,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-_REPO = Path(__file__).resolve().parents[3]
-_AUDIT_PKG = _REPO / "lambda" / "audit"
+from backend.app.config.settings import REPO_ROOT
+
+_AUDIT_PKG = REPO_ROOT / "lambda" / "audit"
 if str(_AUDIT_PKG) not in sys.path:
     sys.path.insert(0, str(_AUDIT_PKG))
 
 from dataset_audit import run_dataset_audit  # noqa: E402
 
-REPORTS_DIR = _REPO / "reports" / "audit"
-DEFAULT_DATASET = _REPO / "model" / "data_train.jsonl"
-DEMO_DATASET = _REPO / "model" / "demo_10.jsonl"
+from backend.app.services.datasets import BUNDLE_SPLIT
+
+REPORTS_DIR = REPO_ROOT / "reports" / "audit"
 
 
 def reports_dir() -> Path:
@@ -39,9 +40,11 @@ def list_reports(limit: int = 20) -> list[dict[str, Any]]:
                 {
                     "report_id": data.get("report_id", path.stem),
                     "generated_at": data.get("generated_at"),
+                    "dataset_id": data.get("dataset_id"),
                     "dataset_key": data.get("dataset_key"),
                     "source_label": data.get("source_label"),
                     "passed": data.get("passed"),
+                    "data_level_status": data.get("data_level_status"),
                     "summary": data.get("summary"),
                 }
             )
@@ -57,17 +60,41 @@ def load_report(report_id: str) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def run_audit_on_path(
-    dataset_path: Path,
+def audit_score_from_report(report: dict[str, Any]) -> float:
+    modules = report.get("modules") or {}
+    module_statuses = (modules.get("overall") or {}).get("module_statuses")
+    if module_statuses:
+        passed = sum(1 for status in module_statuses.values() if status == "pass")
+        return round(passed / len(module_statuses), 4)
+
+    benchmarks = report.get("benchmarks") or []
+    if not benchmarks:
+        return 0.0
+    passed = sum(1 for row in benchmarks if row.get("status") == "pass")
+    return round(passed / len(benchmarks), 4)
+
+
+def run_bundle_audit(
     *,
+    train_path: Path,
+    dev_path: Path,
+    test_path: Path | None = None,
+    dataset_id: str = "",
     dataset_key: str = "",
+    source_label: str = "",
 ) -> dict[str, Any]:
-    if not dataset_path.is_file():
-        raise FileNotFoundError(f"Dataset not found: {dataset_path}")
+    if not train_path.is_file():
+        raise FileNotFoundError(f"Train split not found: {train_path}")
+    if not dev_path.is_file():
+        raise FileNotFoundError(f"Dev split not found: {dev_path}")
+
     report = run_dataset_audit(
-        dataset_path,
-        dataset_key=dataset_key or str(dataset_path.relative_to(_REPO)),
-        source_label=str(dataset_path),
+        train_path,
+        dev_path,
+        test_source=test_path,
+        dataset_id=dataset_id,
+        dataset_key=dataset_key or f"datasets/local/{dataset_id or train_path.parent.name}",
+        source_label=source_label,
     )
     save_report(report)
     return report

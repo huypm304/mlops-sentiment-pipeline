@@ -59,3 +59,17 @@ output "all_dynamodb_table_arns" {
   description = "All registry table ARNs — useful for IAM policy attachment in runtime stack."
   value       = module.dynamodb_registry.all_table_arns
 }
+
+output "route53_zone_id" {
+  description = "Route53 hosted zone ID for custom domains."
+  value       = var.domain_name != "" ? module.route53[0].zone_id : ""
+}
+
+output "route53_name_servers" {
+  description = "Set as nameservers at your domain registrar."
+  value       = var.domain_name != "" ? module.route53[0].name_servers : []
+}
+
+output "domain_name" {
+  value = var.domain_name
+}

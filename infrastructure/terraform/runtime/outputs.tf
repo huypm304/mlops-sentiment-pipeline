@@ -43,10 +43,23 @@ output "sagemaker_endpoint_enabled" {
 }
 
 output "route53_name_servers" {
-  description = "Set these as custom nameservers in your domain registrar."
-  value       = local.custom_domain_enabled ? module.route53[0].name_servers : []
+  description = "Nameservers from core stack (set at registrar once)."
+  value       = local.use_remote_state ? try(data.terraform_remote_state.core[0].outputs.route53_name_servers, []) : []
 }
 
 output "route53_zone_id" {
-  value = local.custom_domain_enabled ? module.route53[0].zone_id : ""
+  value = local.route53_zone_id
+}
+
+output "frontend_url" {
+  description = "HTTPS URL for the static frontend."
+  value       = local.custom_domain_enabled ? module.frontend_cdn[0].frontend_url : ""
+}
+
+output "frontend_bucket_name" {
+  value = local.custom_domain_enabled ? module.frontend_cdn[0].bucket_name : ""
+}
+
+output "cloudfront_distribution_id" {
+  value = local.custom_domain_enabled ? module.frontend_cdn[0].distribution_id : ""
 }

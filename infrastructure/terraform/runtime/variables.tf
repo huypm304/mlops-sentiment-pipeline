@@ -166,9 +166,9 @@ variable "enable_custom_domain" {
 }
 
 variable "api_subdomain" {
-  description = "API hostname prefix (e.g. api.demo)."
+  description = "API hostname prefix (e.g. api → api.minhhuy.me)."
   type        = string
-  default     = "api.demo"
+  default     = "api"
 }
 
 variable "create_hosted_zone" {

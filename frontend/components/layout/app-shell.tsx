@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Sparkles } from "lucide-react"
+import { LayoutGrid } from "lucide-react"
 
 import { NavMain } from "@/components/layout/nav-main"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
@@ -45,22 +45,24 @@ export function AppShell({
       <SidebarProvider
         style={
           {
-            "--sidebar-width": "14rem",
+            "--sidebar-width": "13.5rem",
             "--sidebar-width-icon": "3rem",
           } as React.CSSProperties
         }
       >
-        <Sidebar className="border-r border-white/[0.06] bg-sidebar/90 backdrop-blur-xl">
-          <SidebarHeader className="border-b border-white/[0.06] p-2">
+        <Sidebar className="border-r border-border/60 bg-sidebar">
+          <SidebarHeader className="border-b border-border/60 p-2">
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton size="lg" asChild className="h-10">
+                <SidebarMenuButton size="lg" asChild className="h-9">
                   <Link href={brand.href}>
-                    <div className="flex size-7 items-center justify-center rounded-md bg-primary/15">
-                      <Sparkles className="size-3.5 text-primary" />
+                    <div className="flex size-6 items-center justify-center rounded border border-border/80 bg-background">
+                      <LayoutGrid className="size-3 text-muted-foreground" />
                     </div>
                     <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
-                      <span className="text-sm font-semibold">{brand.title}</span>
+                      <span className="text-[13px] font-semibold tracking-tight">
+                        {brand.title}
+                      </span>
                       <span className="text-[10px] text-muted-foreground">
                         {brand.subtitle}
                       </span>
@@ -74,16 +76,16 @@ export function AppShell({
             <NavMain groups={navGroups} />
           </SidebarContent>
           {footer ? (
-            <SidebarFooter className="border-t border-white/[0.06] p-2 text-[11px] text-muted-foreground group-data-[collapsible=icon]:hidden">
+            <SidebarFooter className="border-t border-border/60 p-2 group-data-[collapsible=icon]:hidden">
               {footer}
             </SidebarFooter>
           ) : null}
           <SidebarRail />
         </Sidebar>
         <SidebarInset>
-          <header className="flex h-11 shrink-0 items-center gap-2 border-b border-white/[0.06] bg-background/80 px-4 backdrop-blur-md">
+          <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-background px-3">
             <SidebarTrigger className="-ml-1 size-7" />
-            <Separator orientation="vertical" className="h-4" />
+            <Separator orientation="vertical" className="h-4 opacity-50" />
             {headerExtra}
             <div className="ml-auto flex items-center gap-2">
               {switchLink ? (
@@ -94,7 +96,7 @@ export function AppShell({
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex flex-1 flex-col gap-5 p-4 md:p-6">{children}</main>
+          <main className="flex flex-1 flex-col gap-4 p-4 md:p-5">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

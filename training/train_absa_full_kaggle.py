@@ -1,3 +1,11 @@
+"""
+Frozen training script for reproducibility.
+
+This file is the original long Kaggle/Colab training script.
+Do not modify model/evaluation/training logic unless starting a new experiment.
+Refactored modules are used for inference, evaluation, reports, and deployment.
+"""
+
 import argparse
 import csv
 import json
@@ -16,7 +24,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from sklearn.metrics import confusion_matrix, f1_score
+from sklearn.metrics import confusion_matrix, f1_score, precision_recall_fscore_support
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 from tqdm.auto import tqdm
@@ -27,6 +35,10 @@ warnings.filterwarnings("ignore", message=".*lr_scheduler.step.*before.*optimize
 
 os.environ.setdefault("TRITON_INTERPRET", "1")
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
 
 
 def install_deps():
@@ -47,9 +59,9 @@ if "__file__" in globals():
 else:
     REPO_ROOT = Path.cwd()
 
-DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/data-absav2/data_train.jsonl")
-DEFAULT_VAL_FILE   = Path("/kaggle/input/datasets/minhhuy304/data-absav2/val_data.jsonl")
-DEFAULT_OUTPUT_DIR = Path("/kaggle/working/v7_final_run5")
+DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/train_aug500.jsonl")
+DEFAULT_VAL_FILE   = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/dev_clean.jsonl")
+DEFAULT_OUTPUT_DIR = Path("/kaggle/working/run2b")
 
 ASPECTS = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
 N_SENT  = 3
@@ -64,7 +76,7 @@ def build_bio_labels():
 
 BIO_LABELS, BIO_L2I, BIO_I2L = build_bio_labels()
 N_BIO = len(BIO_LABELS)
-TOKENIZE_BATCH_SIZE = 256
+TOKENIZE_BATCH_SIZE = 512
 
 
 def nfc(text):
@@ -102,7 +114,7 @@ def extract_spans(seq):
 def compute_clause_aware_window(tmin, tmax, op_idx, span_token_lists, offsets, text, seq_len, max_context_window):
     low  = max(tmin - max_context_window, 1)
     high = min(tmax + max_context_window, seq_len - 1)
-    stop_tokens     = {",", ".", "!", "?", ";", ":"}
+    stop_tokens     = {",", ".", "!", "?", ";", ":", "-", "~", "/"}
     boundary_tokens = {"nhưng", "tuy", "dù", "mà", "song", "còn", "tuy_nhiên", "thế_mà", "thế_nhưng"}
 
     if op_idx > 0:
@@ -113,7 +125,7 @@ def compute_clause_aware_window(tmin, tmax, op_idx, span_token_lists, offsets, t
     for cursor in range(tmin - 1, low - 1, -1):
         if 0 < cursor < seq_len:
             cs, ce = int(offsets[cursor][0]), int(offsets[cursor][1])
-            if text[cs:ce].lower().strip() in stop_tokens:
+            if text[cs:ce].lower().strip() in stop_tokens | boundary_tokens:
                 low = cursor + 1
                 break
 
@@ -210,6 +222,33 @@ def build_predicted_span_inputs(decoded_seq, offsets_row, spec_mask_row, text, s
                 pred_span_mask[span_idx, token_id] = 1.0
 
     return set(predicted_spans), pred_span_mask, pred_span_aspect, pred_clause_pos
+
+
+def build_predicted_span_labels(pred_set, gold_set, gold_sents, max_ops, span_match_iou, device):
+    pred_sent = torch.full((max_ops,), -100, dtype=torch.long, device=device)
+    sorted_pred = sorted(pred_set)[:max_ops]
+    sorted_gold = sorted(gold_set)
+
+    gold_with_s = [
+        (s, e, a, gold_sents[i])
+        for i, (s, e, a) in enumerate(sorted_gold[:len(gold_sents)])
+    ]
+
+    for si, (ps, pe, pa) in enumerate(sorted_pred):
+        best_iou, best_sent = 0.0, None
+        for gs, ge, ga, gsent in gold_with_s:
+            if ga != pa:
+                continue
+            inter = max(0, min(pe, ge) - max(ps, gs) + 1)
+            union = (pe - ps + 1) + (ge - gs + 1) - inter
+            iou = inter / union if union > 0 else 0.0
+            if iou > best_iou:
+                best_iou, best_sent = iou, gsent
+
+        if best_iou >= span_match_iou and best_sent is not None:
+            pred_sent[si] = best_sent
+
+    return pred_sent
 
 
 def autocast_context(device):
@@ -349,27 +388,44 @@ class ABSAModel(nn.Module):
         self.backbone = AutoModel.from_pretrained(model_name)
         h             = self.backbone.config.hidden_size
         self.dropout      = nn.Dropout(0.3)
+        self.bio_lstm     = nn.LSTM(h, h // 2, num_layers=1, batch_first=True, bidirectional=True)
         self.bio_head     = nn.Linear(h, N_BIO)
         self.crf          = CRF(N_BIO, batch_first=True)
         self.fc_pool      = nn.Linear(h, 1)
+        self.span_proj    = nn.Linear(h * 4, h)
+        self.cross_attn   = nn.MultiheadAttention(h, num_heads=8, dropout=0.1, batch_first=True)
+        self.cross_attn_scale = nn.Parameter(torch.tensor(0.5))
+        self.cross_attn_norm  = nn.LayerNorm(h)
+        self.span_self_attn = nn.MultiheadAttention(h, num_heads=4, dropout=0.1, batch_first=True)
         self.aspect_embed = nn.Embedding(len(ASPECTS) + 1, h, padding_idx=len(ASPECTS))
         self.aspect_scale = nn.Parameter(torch.tensor(0.8))
         self.clause_pos_embed = nn.Embedding(3, h)
         self.clause_pos_scale = nn.Parameter(torch.tensor(0.5))
-        self.sent_head    = nn.Sequential(nn.Dropout(0.2), nn.Linear(h, N_SENT))
-        # global head nhận [CLS; span_avg] — kích thước h + N_SENT
-        self.global_head  = nn.Linear(h + N_SENT, N_SENT)
+        self.sent_head    = nn.Sequential(
+            nn.Linear(h, h),
+            nn.GELU(),
+            nn.Dropout(0.2),
+            nn.Linear(h, h // 2),
+            nn.GELU(),
+            nn.Dropout(0.15),
+            nn.Linear(h // 2, N_SENT),
+        )
+        # Polarity-aware global head: [cls, neg_pool, pos_pool, contra_vec] → h → N_SENT
+        self.global_polarity_fusion = nn.Linear(h * 4, h)
+        self.global_head  = nn.Sequential(nn.Dropout(0.2), nn.Linear(h, N_SENT))
 
     def forward(self, ids, mask, span_mask=None, bio=None, cached_seq=None,
                 span_aspect=None, span_clause_pos=None, offsets=None, texts=None):
         seq      = self.dropout(self.backbone(ids, attention_mask=mask).last_hidden_state) \
                    if cached_seq is None else cached_seq
         B        = seq.shape[0]
-        emiss    = self.bio_head(seq)
+        bio_feat, _ = self.bio_lstm(seq)
+        emiss    = self.bio_head(bio_feat)
         crf_loss = -self.crf(emiss.float(), bio, mask=mask.bool(), reduction="mean") \
                    if bio is not None else None
 
         sent_logits = None
+        span_features = None
         if span_mask is not None:
             B2, L, H = seq.shape
             M        = span_mask.shape[1]
@@ -409,64 +465,185 @@ class ABSAModel(nn.Module):
                         )
                 pooled = pooled + self.clause_pos_scale * self.clause_pos_embed(clause_pos_ids)
 
+            span_active = span_mask > 0
+            valid_span_slots = span_active.any(dim=-1, keepdim=True).float()
+            span_padding_mask = ~span_active.any(dim=-1)
+
+            pos_ids = torch.arange(L, device=seq.device).view(1, 1, L).expand(B2, M, L)
+            start_pos = pos_ids.masked_fill(~span_active, L).min(dim=-1).values
+            end_pos = pos_ids.masked_fill(~span_active, -1).max(dim=-1).values
+            empty_spans = span_padding_mask
+            start_pos = start_pos.masked_fill(empty_spans, 0).long()
+            end_pos = end_pos.masked_fill(empty_spans, 0).long()
+
+            batch_ids = torch.arange(B2, device=seq.device).view(B2, 1).expand(B2, M)
+            start_repr = seq[batch_ids, start_pos] * valid_span_slots
+            end_repr = seq[batch_ids, end_pos] * valid_span_slots
+            boundary_feat = torch.cat([pooled, start_repr, end_repr, start_repr * end_repr], dim=-1)
+            pooled = self.span_proj(boundary_feat)
+
+            cross_out, _ = self.cross_attn(
+                pooled,
+                seq,
+                seq,
+                key_padding_mask=~mask.bool(),
+                need_weights=False,
+            )
+            pooled = self.cross_attn_norm(pooled + self.cross_attn_scale * cross_out * valid_span_slots)
+
+            span_interact, _ = self.span_self_attn(
+                pooled,
+                pooled,
+                pooled,
+                key_padding_mask=span_padding_mask,
+                need_weights=False,
+            )
+            pooled = pooled + span_interact * valid_span_slots
+            span_features = pooled
+
             sent_logits = self.sent_head(pooled)            # (B, M, N_SENT)
 
-        # Global head
-        if sent_logits is not None:
-            valid_spans = (span_mask.sum(dim=-1) > 0).float()          # (B, M)
-            span_probs  = sent_logits.softmax(-1) * valid_spans.unsqueeze(-1)
-            span_avg    = span_probs.sum(1) / valid_spans.sum(1, keepdim=True).clamp(min=1)
+        # Global head — polarity-aware pooling over span_features
+        # For mixed reviews: neg_pool and pos_pool carry distinct signal;
+        # contra_vec = neg_pool − pos_pool is the contradiction-aware direction.
+        cls_repr = seq[:, 0]
+        h_dim = seq.shape[-1]
+        if sent_logits is not None and span_features is not None:
+            valid_spans = (span_mask.sum(dim=-1) > 0).float()      # (B, M)
+            # Prevent global loss from directly pulling sentiment logits.
+            span_probs  = sent_logits.detach().softmax(-1)          # (B, M, 3)
+            neg_w = span_probs[:, :, 0] * valid_spans              # (B, M)
+            pos_w = span_probs[:, :, 1] * valid_spans
+            neg_pool = (span_features * neg_w.unsqueeze(-1)).sum(1) / neg_w.sum(1, keepdim=True).clamp(min=1e-4)
+            pos_pool = (span_features * pos_w.unsqueeze(-1)).sum(1) / pos_w.sum(1, keepdim=True).clamp(min=1e-4)
+            contra_vec = neg_pool - pos_pool                        # explicit contradiction signal
         else:
-            span_avg = torch.zeros(B, N_SENT, device=seq.device)
+            neg_pool = pos_pool = contra_vec = seq.new_zeros(B, h_dim)
 
-        global_input  = torch.cat([seq[:, 0], span_avg], dim=-1)
-        global_logits = self.global_head(global_input)
+        fused = F.gelu(self.global_polarity_fusion(
+            torch.cat([cls_repr, neg_pool, pos_pool, contra_vec], dim=-1)
+        ))
+        global_logits = self.global_head(fused)
 
-        return crf_loss, emiss, sent_logits, global_logits, seq
+        return crf_loss, emiss, sent_logits, global_logits, seq, span_features
 
 
 # =============================================================================
 # CONTRAST LOSS
 # =============================================================================
-def contrast_loss_fn(sent_logits, span_sent, global_sent, margin, device):
+def contrast_loss_fn(span_features, span_sent, global_sent, margin, device):
     loss, n = torch.tensor(0.0, device=device), 0
-    for b in range(sent_logits.shape[0]):
+    for b in range(span_features.shape[0]):
         if not is_gold_contrast(span_sent[b]):
             continue
         v_idx = (span_sent[b] != -100).nonzero().flatten()
         if v_idx.numel() < 2:
             continue
-        logits = F.normalize(sent_logits[b][v_idx], dim=-1)
+        feats = F.normalize(span_features[b][v_idx], dim=-1)
         labels = span_sent[b][v_idx]
-        p_loss, p_cnt = torch.tensor(0.0, device=device), 0
+        neg_sims = []
+        pos_sims = []
         for i in range(v_idx.numel()):
             for j in range(i + 1, v_idx.numel()):
+                sim = F.cosine_similarity(feats[i].unsqueeze(0), feats[j].unsqueeze(0)).squeeze()
                 if labels[i] != labels[j]:
-                    sim    = F.cosine_similarity(logits[i].unsqueeze(0), logits[j].unsqueeze(0)).squeeze()
-                    p_loss += F.relu(sim - margin)
-                    p_cnt  += 1
-        if p_cnt > 0:
+                    neg_sims.append(sim)
+                else:
+                    pos_sims.append(sim)
+        if neg_sims:
+            hard_neg = torch.stack(neg_sims)
+            top_k = min(3, hard_neg.numel())
+            neg_loss = F.relu(hard_neg.topk(top_k).values - margin).mean()
+        else:
+            neg_loss = torch.tensor(0.0, device=device)
+        if pos_sims:
+            pos_loss = F.relu(0.55 - torch.stack(pos_sims)).mean()
+        else:
+            pos_loss = torch.tensor(0.0, device=device)
+        pair_loss = neg_loss + 0.5 * pos_loss
+        if pair_loss.detach().item() > 0:
             weight = 2.0 if global_sent[b].item() == 2 else 1.0
-            loss  += weight * (p_loss / p_cnt)
+            loss  += weight * pair_loss
             n     += 1
     return loss / max(n, 1)
 
 
-def focal_loss(logits, targets, weight=None, gamma=2.0, ignore_index=-100, label_smoothing=0.0):
-    ce = F.cross_entropy(
+def smooth_values_for_targets(targets, label_smoothing, n_classes):
+    if isinstance(label_smoothing, (list, tuple)):
+        smooth = torch.tensor(label_smoothing, dtype=torch.float32, device=targets.device)
+        if smooth.numel() != n_classes:
+            raise ValueError(f"label_smoothing must have {n_classes} values, got {smooth.numel()}")
+        return smooth[targets]
+    return torch.full(
+        (targets.shape[0],),
+        float(label_smoothing),
+        dtype=torch.float32,
+        device=targets.device,
+    )
+
+
+def smoothed_ce_per_sample(logits, targets, weight=None, ignore_index=-100, label_smoothing=0.0):
+    valid = (targets != ignore_index)
+    if not valid.any():
+        return logits.new_zeros((0,)), valid
+
+    logits_valid = logits[valid]
+    targets_valid = targets[valid]
+    n_classes = logits_valid.shape[-1]
+    smoothing = smooth_values_for_targets(targets_valid, label_smoothing, n_classes).to(logits_valid.dtype)
+    log_probs = F.log_softmax(logits_valid, dim=-1)
+    true_dist = torch.zeros_like(log_probs)
+    true_dist.scatter_(1, targets_valid.unsqueeze(1), 1.0)
+    if n_classes > 1:
+        true_dist = true_dist * (1.0 - smoothing.unsqueeze(1)) + \
+                    (1.0 - true_dist) * (smoothing.unsqueeze(1) / (n_classes - 1))
+    losses = -(true_dist * log_probs).sum(dim=-1)
+    if weight is not None:
+        losses = losses * weight[targets_valid]
+    return losses, valid
+
+
+def smoothed_cross_entropy(logits, targets, weight=None, ignore_index=-100, label_smoothing=0.0):
+    losses, valid = smoothed_ce_per_sample(
         logits,
         targets,
         weight=weight,
         ignore_index=ignore_index,
         label_smoothing=label_smoothing,
-        reduction="none",
     )
-    valid = (targets != ignore_index)
-    pt = torch.exp(-ce)
-    focal = ((1.0 - pt) ** gamma) * ce
     if valid.any():
-        return focal[valid].mean()
-    return focal.sum() * 0.0
+        return losses.mean()
+    return logits.sum() * 0.0
+
+
+def focal_loss(logits, targets, weight=None, gamma=2.0, ignore_index=-100, label_smoothing=0.0):
+    ce, valid = smoothed_ce_per_sample(
+        logits,
+        targets,
+        weight=weight,
+        ignore_index=ignore_index,
+        label_smoothing=label_smoothing,
+    )
+    if not valid.any():
+        return logits.sum() * 0.0
+    logits_valid = logits[valid]
+    targets_valid = targets[valid]
+    pt = F.softmax(logits_valid, dim=-1).gather(1, targets_valid.unsqueeze(1)).squeeze(1).clamp_min(1e-6)
+    focal = ((1.0 - pt) ** gamma) * ce
+    return focal.mean()
+
+
+def symmetric_kl_loss(logits_a, logits_b):
+    if logits_a.numel() == 0 or logits_b.numel() == 0:
+        return logits_a.sum() * 0.0
+    log_pa = F.log_softmax(logits_a, dim=-1)
+    log_pb = F.log_softmax(logits_b, dim=-1)
+    pa = log_pa.exp()
+    pb = log_pb.exp()
+    return 0.5 * (
+        F.kl_div(log_pa, pb, reduction="batchmean") +
+        F.kl_div(log_pb, pa, reduction="batchmean")
+    )
 
 
 class LBTWWeighter:
@@ -523,45 +700,206 @@ class LBTWWeighter:
         return total
 
 
+class ModelEMA:
+    def __init__(self, model, decay=0.999):
+        self.decay = decay
+        self.num_updates = 0
+        self.shadow = {}
+        self.backup = None
+        for name, param in model.named_parameters():
+            if param.requires_grad:
+                self.shadow[name] = param.detach().clone()
+
+    def update(self, model):
+        self.num_updates += 1
+        # Warmup decay to avoid EMA lagging too far behind at early epochs.
+        decay = min(self.decay, (1.0 + self.num_updates) / (10.0 + self.num_updates))
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                self.shadow[name].mul_(decay).add_(param.detach(), alpha=1.0 - decay)
+
+    def apply_to(self, model):
+        self.backup = {}
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                self.backup[name] = param.detach().clone()
+                param.copy_(self.shadow[name])
+
+    def restore(self, model):
+        if self.backup is None:
+            return
+        with torch.no_grad():
+            for name, param in model.named_parameters():
+                if not param.requires_grad:
+                    continue
+                param.copy_(self.backup[name])
+        self.backup = None
+
+
+def build_class_weights(train_items, device):
+    sent_counts = [0] * N_SENT
+    glob_counts = [0] * N_SENT
+
+    for item in train_items:
+        for sent in item["span_sent"].tolist():
+            if sent != -100:
+                sent_counts[sent] += 1
+        global_sent = item["global"].item()
+        if global_sent != -1:
+            glob_counts[global_sent] += 1
+
+    total_sent = sum(sent_counts)
+    total_glob = sum(glob_counts)
+
+    if total_sent > 0:
+        sent_class_weights = torch.tensor(
+            [total_sent / (N_SENT * max(count, 1)) for count in sent_counts],
+            dtype=torch.float32,
+            device=device,
+        )
+        sent_class_weights = torch.clamp(sent_class_weights, min=0.7, max=2.5)
+        sent_class_weights[2] = min(float(sent_class_weights[2].item()), 2.0)
+    else:
+        sent_class_weights = torch.ones(N_SENT, dtype=torch.float32, device=device)
+
+    if total_glob > 0:
+        glob_class_weights = torch.tensor(
+            [total_glob / (N_SENT * max(count, 1)) for count in glob_counts],
+            dtype=torch.float32,
+            device=device,
+        )
+        glob_class_weights = torch.clamp(glob_class_weights, min=0.7, max=2.0)
+    else:
+        glob_class_weights = torch.ones(N_SENT, dtype=torch.float32, device=device)
+
+    return sent_counts, glob_counts, sent_class_weights, glob_class_weights
+
+
+def build_sample_weights(train_items, contrast_sampler_weight):
+    aspect_counts = Counter()
+    for item in train_items:
+        for aspect_idx, sent in zip(item["span_aspect"].tolist(), item["span_sent"].tolist()):
+            if sent == -100 or aspect_idx >= len(ASPECTS):
+                continue
+            aspect_counts[aspect_idx] += 1
+
+    if aspect_counts:
+        max_aspect = max(aspect_counts.values())
+    else:
+        max_aspect = 1
+
+    sample_weights = []
+    for item in train_items:
+        weight = 1.0
+        valid_sentiments = [sent for sent in item["span_sent"].tolist() if sent != -100]
+        valid_aspects = [aspect for aspect, sent in zip(item["span_aspect"].tolist(), item["span_sent"].tolist())
+                         if sent != -100 and aspect < len(ASPECTS)]
+
+        if is_gold_contrast(item["span_sent"]):
+            weight *= contrast_sampler_weight
+
+        if 1 in valid_sentiments:
+            weight *= 1.20
+        if 2 in valid_sentiments:
+            weight *= 1.35
+
+        unique_aspects = sorted(set(valid_aspects))
+        if len(unique_aspects) >= 2:
+            weight *= 1.08
+
+        if unique_aspects:
+            rarity_boost = max(max_aspect / max(aspect_counts[aspect], 1) for aspect in unique_aspects)
+            rarity_boost = min(rarity_boost, 2.0)
+            weight *= 1.0 + 0.12 * (rarity_boost - 1.0)
+
+        sample_weights.append(min(weight, 3.0))
+
+    return sample_weights
+
+
 # =============================================================================
 # EVALUATE — Fix: dùng sorted(predicted_set) thay vì predicted_spans từ loop trên
 #            Fix: bỏ aspect_sent_single_f1 redundant
 # =============================================================================
 def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_iou):
     model.eval()
+
     pred_spans_all, gold_spans_all = [], []
-    sent_pred, sent_gold           = [], []
-    glob_pred, glob_gold           = [], []
-    bio_pred_all, bio_gold_all     = [], []
+    sent_pred, sent_gold = [], []
+    sent_goldspan_pred, sent_goldspan_gold = [], []
+    glob_pred, glob_gold = [], []
+    bio_pred_all, bio_gold_all = [], []
 
     asp_sent_pred = {a: [] for a in ASPECTS}
     asp_sent_gold = {a: [] for a in ASPECTS}
-    asp_span_tp   = {a: 0  for a in ASPECTS}
-    asp_span_fp   = {a: 0  for a in ASPECTS}
-    asp_span_fn   = {a: 0  for a in ASPECTS}
+    asp_span_tp = {a: 0 for a in ASPECTS}
+    asp_span_fp = {a: 0 for a in ASPECTS}
+    asp_span_fn = {a: 0 for a in ASPECTS}
+
+    tas_strict_tp = tas_strict_fp = tas_strict_fn = 0
+    tas_relaxed_tp = tas_relaxed_fp = tas_relaxed_fn = 0
+
+    def tas_relaxed_match_count(pred_tuples, gold_tuples, iou_thr):
+        used = [False] * len(gold_tuples)
+        matched = 0
+        for ps, pe, pa, psv in pred_tuples:
+            best_iou = -1.0
+            best_j = -1
+            for j, (gs, ge, ga, gsv) in enumerate(gold_tuples):
+                if used[j] or pa != ga or psv != gsv:
+                    continue
+                inter = max(0, min(pe, ge) - max(ps, gs) + 1)
+                union = (pe - ps + 1) + (ge - gs + 1) - inter
+                iou = inter / union if union > 0 else 0.0
+                if iou >= iou_thr and iou > best_iou:
+                    best_iou = iou
+                    best_j = j
+            if best_j != -1:
+                used[best_j] = True
+                matched += 1
+        return matched
 
     with torch.inference_mode():
         for batch in dataloader:
-            ids        = batch["ids"].to(device)
-            mask       = batch["mask"].to(device)
-            spec_mask  = batch["spec_mask"].to(device)
-            bio        = batch["bio"].to(device)
-            span_sent  = batch["span_sent"].to(device)
+            ids = batch["ids"].to(device)
+            mask = batch["mask"].to(device)
+            spec_mask = batch["spec_mask"].to(device)
+            bio = batch["bio"].to(device)
+
+            gold_span_mask = batch["span_mask"].to(device)
+            span_sent = batch["span_sent"].to(device)
             span_asp_g = batch["span_aspect"].to(device)
-            glob_sent  = batch["global"].to(device)
-            offsets    = batch["offsets"].to(device)
-            texts      = batch["text"]
+            gold_clause_pos = batch["span_clause_pos"].to(device)
 
+            glob_sent = batch["global"].to(device)
+            offsets = batch["offsets"].to(device)
+            texts = batch["text"]
+
+            # First forward: get BIO emissions + cached encoder states
             with autocast_context(device):
-                _, emiss, _, glob_logits, cached = model(ids, mask)
+                _, emiss, _, _, cached, _ = model(ids, mask)
 
-            bio_p       = model.crf.decode(emiss, mask=mask.bool())
-            pred_sm     = torch.zeros(ids.shape[0], max_ops, ids.shape[1], device=device)
-            pred_sp_asp = torch.full((ids.shape[0], max_ops), len(ASPECTS), dtype=torch.long, device=device)
-            pred_clause_pos = torch.zeros((ids.shape[0], max_ops), dtype=torch.long, device=device)
+            bio_p = model.crf.decode(emiss, mask=mask.bool())
+
+            pred_sm = torch.zeros(ids.shape[0], max_ops, ids.shape[1], device=device)
+            pred_sp_asp = torch.full(
+                (ids.shape[0], max_ops),
+                len(ASPECTS),
+                dtype=torch.long,
+                device=device,
+            )
+            pred_clause_pos = torch.zeros(
+                (ids.shape[0], max_ops),
+                dtype=torch.long,
+                device=device,
+            )
             pred_sets = []
 
-            # Build predicted span mask
+            # Build predicted spans from decoded BIO
             for ri, seq in enumerate(bio_p):
                 seq_len = int(mask[ri].sum())
                 pred_set, pred_mask_row, pred_aspect_row, pred_clause_row = build_predicted_span_inputs(
@@ -579,21 +917,42 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
                 pred_sp_asp[ri] = pred_aspect_row
                 pred_clause_pos[ri] = pred_clause_row
 
+            # Forward 1: predicted spans -> main evaluation metrics
             with autocast_context(device):
-                _, _, sent_logits, _, _ = model(
-                    ids, mask, span_mask=pred_sm, cached_seq=cached,
-                    span_aspect=pred_sp_asp, span_clause_pos=pred_clause_pos,
-                    offsets=offsets, texts=texts,
+                _, _, pred_sent_logits, pred_glob_logits, _, _ = model(
+                    ids,
+                    mask,
+                    span_mask=pred_sm,
+                    cached_seq=cached,
+                    span_aspect=pred_sp_asp,
+                    span_clause_pos=pred_clause_pos,
+                    offsets=offsets,
+                    texts=texts,
+                )
+
+            # Forward 2: gold spans -> diagnostic only: Sent@GoldSpan
+            with autocast_context(device):
+                _, _, gold_sent_logits, _, _, _ = model(
+                    ids,
+                    mask,
+                    span_mask=gold_span_mask,
+                    cached_seq=cached,
+                    span_aspect=span_asp_g,
+                    span_clause_pos=gold_clause_pos,
+                    offsets=offsets,
+                    texts=texts,
                 )
 
             for ri in range(ids.shape[0]):
-                vl       = int(mask[ri].sum())
+                vl = int(mask[ri].sum())
+
                 pred_set = pred_sets[ri]
                 gold_set = extract_spans(bio[ri].tolist()[:vl])
+
                 pred_spans_all.append(pred_set)
                 gold_spans_all.append(gold_set)
 
-                # Per-aspect span F1 counters
+                # Per-aspect span F1
                 for asp in ASPECTS:
                     p_asp = {(s, e) for s, e, a in pred_set if a == asp}
                     g_asp = {(s, e) for s, e, a in gold_set if a == asp}
@@ -601,103 +960,209 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
                     asp_span_fp[asp] += len(p_asp - g_asp)
                     asp_span_fn[asp] += len(g_asp - p_asp)
 
-                # BIO token-level
+                # BIO token-level confusion
                 vtm = (~spec_mask[ri][:vl]).cpu().tolist()
                 for keep, gl, pl in zip(vtm, bio[ri][:vl].cpu().tolist(), bio_p[ri][:vl]):
                     if keep:
                         bio_gold_all.append(gl)
                         bio_pred_all.append(pl)
 
-                # Gold spans với sentiment
+                # Gold spans + sentiment
                 gold_sents = [
                     span_sent[ri, slot].item()
-                    for slot in range(max_ops) if span_sent[ri, slot] != -100
+                    for slot in range(max_ops)
+                    if span_sent[ri, slot] != -100
                 ]
                 gold_asps = [
                     span_asp_g[ri, slot].item()
-                    for slot in range(max_ops) if span_sent[ri, slot] != -100
+                    for slot in range(max_ops)
+                    if span_sent[ri, slot] != -100
                 ]
+
                 sorted_gold = sorted(gold_set)
                 gold_with_s = [
                     (s, e, a, gold_sents[i], gold_asps[i])
                     for i, (s, e, a) in enumerate(sorted_gold[:len(gold_sents)])
                 ]
+                pred_with_s = []
 
-                # Fix [Critical]: dùng sorted(predicted_set) thay vì predicted_spans
-                # từ loop build-mask ở trên (đã bị overwrite sang row cuối batch)
+                # Diagnostic: Sent@GoldSpan
+                for slot in range(max_ops):
+                    if span_sent[ri, slot] != -100:
+                        pv_goldspan = gold_sent_logits[ri, slot].argmax().item()
+                        sent_goldspan_pred.append(pv_goldspan)
+                        sent_goldspan_gold.append(span_sent[ri, slot].item())
+
+                # Main sentiment eval: predicted span matched to gold by IoU + aspect
                 for si, (ps, pe, pa) in enumerate(sorted(pred_set)[:max_ops]):
+                    pv_span = pred_sent_logits[ri, si].argmax().item() if pred_sent_logits is not None else 2
+                    pred_with_s.append((ps, pe, pa, pv_span))
+
                     best_iou, best_sv, best_ai = 0.0, None, None
+
                     for gs, ge, ga, gsv, gai in gold_with_s:
                         if ga != pa:
                             continue
+
                         inter = max(0, min(pe, ge) - max(ps, gs) + 1)
                         union = (pe - ps + 1) + (ge - gs + 1) - inter
-                        iou   = inter / union if union > 0 else 0.0
+                        iou = inter / union if union > 0 else 0.0
+
                         if iou > best_iou:
                             best_iou, best_sv, best_ai = iou, gsv, gai
-                    if best_iou >= span_match_iou and sent_logits is not None and best_sv is not None:
-                        pv = sent_logits[ri, si].argmax().item()
+
+                    if best_iou >= span_match_iou and pred_sent_logits is not None and best_sv is not None:
+                        pv = pv_span
                         sent_pred.append(pv)
                         sent_gold.append(best_sv)
+
                         asp_name = ASPECTS[best_ai]
                         asp_sent_pred[asp_name].append(pv)
                         asp_sent_gold[asp_name].append(best_sv)
 
+                # TAS strict: exact (span, aspect, sentiment)
+                gold_strict = {(gs, ge, ga, gsv) for (gs, ge, ga, gsv, _) in gold_with_s}
+                pred_strict = {(ps, pe, pa, psv) for (ps, pe, pa, psv) in pred_with_s}
+                strict_tp = len(pred_strict & gold_strict)
+                tas_strict_tp += strict_tp
+                tas_strict_fp += max(0, len(pred_strict) - strict_tp)
+                tas_strict_fn += max(0, len(gold_strict) - strict_tp)
+
+                # TAS relaxed: IoU + aspect + sentiment
+                relaxed_tp = tas_relaxed_match_count(pred_with_s, list(gold_strict), span_match_iou)
+                tas_relaxed_tp += relaxed_tp
+                tas_relaxed_fp += max(0, len(pred_with_s) - relaxed_tp)
+                tas_relaxed_fn += max(0, len(gold_strict) - relaxed_tp)
+
+            # Global eval uses predicted spans, not gold spans
             if (glob_sent != -1).any():
-                glob_pred.extend(glob_logits.argmax(-1)[glob_sent != -1].cpu().tolist())
+                glob_pred.extend(pred_glob_logits.argmax(-1)[glob_sent != -1].cpu().tolist())
                 glob_gold.extend(glob_sent[glob_sent != -1].cpu().tolist())
 
     tp = sum(len(p & g) for p, g in zip(pred_spans_all, gold_spans_all))
     fp = sum(len(p - g) for p, g in zip(pred_spans_all, gold_spans_all))
     fn = sum(len(g - p) for p, g in zip(pred_spans_all, gold_spans_all))
 
-    span_f1  = 2 * tp / (2 * tp + fp + fn + 1e-9)
-    sent_f1  = f1_score(sent_gold, sent_pred, average="macro", zero_division=0) if sent_gold else 0.0
-    glob_f1  = f1_score(glob_gold, glob_pred, average="macro", zero_division=0) if glob_gold else 0.0
-    composite = 0.4 * span_f1 + 0.4 * sent_f1 + 0.2 * glob_f1
+    span_precision = tp / (tp + fp + 1e-9)
+    span_recall = tp / (tp + fn + 1e-9)
+    span_f1 = 2 * span_precision * span_recall / (span_precision + span_recall + 1e-9)
 
-    # Per-aspect metrics
+    if sent_gold:
+        sent_p, sent_r, sent_f1, _ = precision_recall_fscore_support(
+            sent_gold, sent_pred, labels=[0, 1, 2], average="macro", zero_division=0
+        )
+    else:
+        sent_p = sent_r = sent_f1 = 0.0
+
+    if sent_goldspan_gold:
+        sg_p, sg_r, sg_f1, _ = precision_recall_fscore_support(
+            sent_goldspan_gold, sent_goldspan_pred, labels=[0, 1, 2], average="macro", zero_division=0
+        )
+    else:
+        sg_p = sg_r = sg_f1 = 0.0
+
+    if glob_gold:
+        g_p, g_r, g_f1, _ = precision_recall_fscore_support(
+            glob_gold, glob_pred, labels=[0, 1, 2], average="macro", zero_division=0
+        )
+    else:
+        g_p = g_r = g_f1 = 0.0
+
+    tas_strict_p = tas_strict_tp / (tas_strict_tp + tas_strict_fp + 1e-9)
+    tas_strict_r = tas_strict_tp / (tas_strict_tp + tas_strict_fn + 1e-9)
+    tas_strict_f1 = 2 * tas_strict_p * tas_strict_r / (tas_strict_p + tas_strict_r + 1e-9)
+
+    tas_relaxed_p = tas_relaxed_tp / (tas_relaxed_tp + tas_relaxed_fp + 1e-9)
+    tas_relaxed_r = tas_relaxed_tp / (tas_relaxed_tp + tas_relaxed_fn + 1e-9)
+    tas_relaxed_f1 = 2 * tas_relaxed_p * tas_relaxed_r / (tas_relaxed_p + tas_relaxed_r + 1e-9)
+
     asp_sent_f1 = {}
     asp_span_f1 = {}
+    asp_support = {}
     asp_sent_pred_dist = {}
     asp_sent_gold_dist = {}
+
     for asp in ASPECTS:
-        asp_sent_f1[asp] = f1_score(asp_sent_gold[asp], asp_sent_pred[asp],
-                                     average="macro", zero_division=0) if asp_sent_gold[asp] else 0.0
-        t = asp_span_tp[asp]; fp_ = asp_span_fp[asp]; fn_ = asp_span_fn[asp]
+        asp_sent_f1[asp] = (
+            f1_score(asp_sent_gold[asp], asp_sent_pred[asp], average="macro", zero_division=0)
+            if asp_sent_gold[asp] else 0.0
+        )
+
+        t = asp_span_tp[asp]
+        fp_ = asp_span_fp[asp]
+        fn_ = asp_span_fn[asp]
         asp_span_f1[asp] = 2 * t / (2 * t + fp_ + fn_ + 1e-9)
-        # Distribution for debugging: how many NEG/POS/NEU per aspect (pred & gold)
+
         pc = Counter(asp_sent_pred[asp])
         gc = Counter(asp_sent_gold[asp])
+
         asp_sent_pred_dist[asp] = {
             "NEG": int(pc.get(0, 0)),
             "POS": int(pc.get(1, 0)),
             "NEU": int(pc.get(2, 0)),
             "TOTAL": int(len(asp_sent_pred[asp])),
         }
+
         asp_sent_gold_dist[asp] = {
             "NEG": int(gc.get(0, 0)),
             "POS": int(gc.get(1, 0)),
             "NEU": int(gc.get(2, 0)),
             "TOTAL": int(len(asp_sent_gold[asp])),
         }
+        asp_support[asp] = int(len(asp_sent_gold[asp]))
+
+    sent_cls_p, sent_cls_r, sent_cls_f1, sent_cls_support = precision_recall_fscore_support(
+        sent_gold,
+        sent_pred,
+        labels=[0, 1, 2],
+        average=None,
+        zero_division=0,
+    ) if sent_gold else ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 0, 0])
+
+    global_cls_p, global_cls_r, global_cls_f1, global_cls_support = precision_recall_fscore_support(
+        glob_gold,
+        glob_pred,
+        labels=[0, 1, 2],
+        average=None,
+        zero_division=0,
+    ) if glob_gold else ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 0, 0])
 
     return {
-        "composite":     composite,
-        "span_f1":       span_f1,
-        "sent_f1":       sent_f1,
-        "global_f1":     glob_f1,
-        "asp_sent_f1":   asp_sent_f1,   # macro F1 sentiment per aspect
-        "asp_span_f1":   asp_span_f1,   # span detection F1 per aspect
+        "tas_strict": {"precision": tas_strict_p, "recall": tas_strict_r, "f1": tas_strict_f1},
+        "tas_relaxed": {"precision": tas_relaxed_p, "recall": tas_relaxed_r, "f1": tas_relaxed_f1},
+        "span": {"precision": span_precision, "recall": span_recall, "f1": span_f1},
+        "sent_matched": {"precision": sent_p, "recall": sent_r, "f1": sent_f1},
+        "sent_goldspan": {"precision": sg_p, "recall": sg_r, "f1": sg_f1},
+        "global": {"precision": g_p, "recall": g_r, "f1": g_f1},
+        "asp_sent_f1": asp_sent_f1,
+        "asp_span_f1": asp_span_f1,
+        "asp_support": asp_support,
         "asp_sent_pred_dist": asp_sent_pred_dist,
         "asp_sent_gold_dist": asp_sent_gold_dist,
+        "class_metrics": {
+            "sentiment": {
+                "NEG": {"precision": float(sent_cls_p[0]), "recall": float(sent_cls_r[0]), "f1": float(sent_cls_f1[0]), "support": int(sent_cls_support[0])},
+                "POS": {"precision": float(sent_cls_p[1]), "recall": float(sent_cls_r[1]), "f1": float(sent_cls_f1[1]), "support": int(sent_cls_support[1])},
+                "NEU": {"precision": float(sent_cls_p[2]), "recall": float(sent_cls_r[2]), "f1": float(sent_cls_f1[2]), "support": int(sent_cls_support[2])},
+            },
+            "global": {
+                "NEG": {"precision": float(global_cls_p[0]), "recall": float(global_cls_r[0]), "f1": float(global_cls_f1[0]), "support": int(global_cls_support[0])},
+                "POS": {"precision": float(global_cls_p[1]), "recall": float(global_cls_r[1]), "f1": float(global_cls_f1[1]), "support": int(global_cls_support[1])},
+                "NEU": {"precision": float(global_cls_p[2]), "recall": float(global_cls_r[2]), "f1": float(global_cls_f1[2]), "support": int(global_cls_support[2])},
+            },
+        },
         "confusion_matrices": {
-            "bio":       confusion_payload(bio_gold_all, bio_pred_all, list(range(N_BIO)), BIO_LABELS),
+            "bio": confusion_payload(bio_gold_all, bio_pred_all, list(range(N_BIO)), BIO_LABELS),
             "sentiment": confusion_payload(sent_gold, sent_pred, [0, 1, 2], label_names_for_sentiment()),
-            "global":    confusion_payload(glob_gold, glob_pred,  [0, 1, 2], label_names_for_sentiment()),
+            "sentiment_goldspan": confusion_payload(
+                sent_goldspan_gold,
+                sent_goldspan_pred,
+                [0, 1, 2],
+                label_names_for_sentiment(),
+            ),
+            "global": confusion_payload(glob_gold, glob_pred, [0, 1, 2], label_names_for_sentiment()),
         },
     }
-
 
 # =============================================================================
 # SAVE METRICS
@@ -707,7 +1172,13 @@ def save_metrics(csv_path, epoch, phase, train_m, eval_m, is_best):
         "epoch", "phase", "train_loss", "bio_loss", "sent_loss",
         "glob_loss", "cons_loss", "ctr_loss",
         "w_bio", "w_sent", "w_global", "w_cons", "w_contrast",
-        "span_f1", "sent_f1", "glob_f1", "composite", "is_best",
+        "tas_strict_p", "tas_strict_r", "tas_strict_f1",
+        "tas_relaxed_p", "tas_relaxed_r", "tas_relaxed_f1",
+        "span_p", "span_r", "span_f1",
+        "sent_matched_p", "sent_matched_r", "sent_matched_f1",
+        "sent_goldspan_p", "sent_goldspan_r", "sent_goldspan_f1",
+        "global_p", "global_r", "global_f1",
+        "is_best",
     ]
     # Per-aspect F1
     asp_headers = []
@@ -763,8 +1234,24 @@ def save_metrics(csv_path, epoch, phase, train_m, eval_m, is_best):
             f"{train_m['w_bio']:.4f}", f"{train_m['w_sent']:.4f}",
             f"{train_m['w_global']:.4f}", f"{train_m['w_cons']:.4f}",
             f"{train_m['w_contrast']:.4f}",
-            f"{eval_m['span_f1']:.4f}", f"{eval_m['sent_f1']:.4f}",
-            f"{eval_m['global_f1']:.4f}", f"{eval_m['composite']:.4f}",
+            f"{eval_m['tas_strict']['precision']:.4f}",
+            f"{eval_m['tas_strict']['recall']:.4f}",
+            f"{eval_m['tas_strict']['f1']:.4f}",
+            f"{eval_m['tas_relaxed']['precision']:.4f}",
+            f"{eval_m['tas_relaxed']['recall']:.4f}",
+            f"{eval_m['tas_relaxed']['f1']:.4f}",
+            f"{eval_m['span']['precision']:.4f}",
+            f"{eval_m['span']['recall']:.4f}",
+            f"{eval_m['span']['f1']:.4f}",
+            f"{eval_m['sent_matched']['precision']:.4f}",
+            f"{eval_m['sent_matched']['recall']:.4f}",
+            f"{eval_m['sent_matched']['f1']:.4f}",
+            f"{eval_m['sent_goldspan']['precision']:.4f}",
+            f"{eval_m['sent_goldspan']['recall']:.4f}",
+            f"{eval_m['sent_goldspan']['f1']:.4f}",
+            f"{eval_m['global']['precision']:.4f}",
+            f"{eval_m['global']['recall']:.4f}",
+            f"{eval_m['global']['f1']:.4f}",
             "best" if is_best else "",
         ]
 
@@ -797,29 +1284,42 @@ def parse_args():
     p.add_argument("--output-dir",             type=Path,  default=DEFAULT_OUTPUT_DIR)
     p.add_argument("--model-name",             default="Fsoft-AIC/videberta-base")
     p.add_argument("--seed",                   type=int,   default=42)
-    p.add_argument("--max-len",                type=int,   default=224)
+    p.add_argument("--max-len",                type=int,   default=192,
+                   help="p50 text ~82 chars; 192 covers p95 without 224 cost")
     p.add_argument("--epochs",                 type=int,   default=50)
-    p.add_argument("--patience",               type=int,   default=12)
-    p.add_argument("--phase1-epochs",          type=int,   default=3)
-    p.add_argument("--max-ops",                type=int,   default=8)
-    p.add_argument("--batch-size",             type=int,   default=16)
-    p.add_argument("--eval-batch-size",        type=int,   default=32)
-    p.add_argument("--grad-accum-steps",       type=int,   default=2)
+    p.add_argument("--patience",               type=int,   default=8)
+    p.add_argument("--phase1-epochs",          type=int,   default=2)
+    p.add_argument("--max-ops",                type=int,   default=6,
+                   help="train max 6 opinions/sample; only 2 rows need >6")
+    p.add_argument("--batch-size",             type=int,   default=24)
+    p.add_argument("--eval-batch-size",        type=int,   default=64)
+    p.add_argument("--grad-accum-steps",       type=int,   default=1)
     p.add_argument("--num-workers",            type=int,   default=2)
+    p.add_argument("--eval-every",             type=int,   default=1,
+                   help="validate every N epochs (phase2); phase1 always evals")
+    p.add_argument("--save-all-confusion",     action="store_true",
+                   help="write confusion_matrices.jsonl every epoch (slower I/O)")
     p.add_argument("--lr-backbone",            type=float, default=8e-6)
     p.add_argument("--lr-heads",               type=float, default=3e-5)
     p.add_argument("--max-context-window",     type=int,   default=25)
     p.add_argument("--span-match-iou",         type=float, default=0.5)
     p.add_argument("--contrast-margin",        type=float, default=0.25)
-    p.add_argument("--lambda-bio",             type=float, default=1.0)
-    p.add_argument("--lambda-sent",            type=float, default=1.2)
-    p.add_argument("--lambda-global",          type=float, default=0.8)
-    p.add_argument("--lambda-cons",            type=float, default=0.1)
-    p.add_argument("--lambda-contrast",        type=float, default=0.4)
-    p.add_argument("--contrast-sampler-weight",type=float, default=1.5)
+    p.add_argument("--lambda-bio",             type=float, default=1.1)
+    p.add_argument("--lambda-sent",            type=float, default=1.4)
+    p.add_argument("--lambda-global",          type=float, default=0.2)
+    p.add_argument("--lambda-cons",            type=float, default=0)
+    p.add_argument("--lambda-contrast",        type=float, default=0)
+    p.add_argument("--contrast-sampler-weight",type=float, default=1.2)
     p.add_argument("--lbtw-ema-decay",         type=float, default=0.99)
     p.add_argument("--lbtw-min-factor",        type=float, default=0.3)
     p.add_argument("--lbtw-max-factor",        type=float, default=3.0)
+    p.add_argument("--ema-decay",              type=float, default=0.999)
+    p.add_argument("--ema-start-epoch",        type=int,   default=3)
+    p.add_argument("--disable-ema",            action="store_true")
+    p.add_argument("--disable-tf32",           action="store_true")
+    p.add_argument("--rdrop-alpha",            type=float, default=0.0)
+    p.add_argument("--pred-span-ratio",        type=float, default=0.1,
+                   help="Phase2 ratio of samples using predicted spans (rest uses gold spans)")
     args, unknown = p.parse_known_args()
     if unknown:
         print(f"Ignoring unknown args: {unknown}")
@@ -832,6 +1332,10 @@ def parse_args():
 def main():
     args   = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if device.type == "cuda" and args.disable_tf32:
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
 
     for path in [args.train_file, args.val_file]:
         if not path.exists():
@@ -855,30 +1359,16 @@ def main():
     train_ds  = ABSADataset(args.train_file, tokenizer, args.max_len, args.max_ops, args.max_context_window)
     val_ds    = ABSADataset(args.val_file,   tokenizer, args.max_len, args.max_ops, args.max_context_window)
 
-    # Class weights
-    sent_counts = [0] * N_SENT
-    glob_counts = [0] * N_SENT
-    for item in train_ds.items:
-        for s in item["span_sent"].tolist():
-            if s != -100: sent_counts[s] += 1
-        g = item["global"].item()
-        if g != -1: glob_counts[g] += 1
-
+    sent_counts, glob_counts, sent_class_weights, glob_class_weights = build_class_weights(train_ds.items, device)
     total_sent = sum(sent_counts)
     total_glob = sum(glob_counts)
-    sent_class_weights = torch.tensor([1.0, 1.0, 1.5], dtype=torch.float32, device=device)
-    glob_class_weights = torch.clamp(
-        torch.tensor([total_glob / (N_SENT * max(c, 1)) for c in glob_counts],
-                     dtype=torch.float32, device=device),
-        min=0.7, max=1.5,
-    )
     print(f"Sent weights [NEG/POS/NEU]: {[round(w, 3) for w in sent_class_weights.tolist()]}")
     print(f"Glob weights [NEG/POS/NEU]: {[round(w, 3) for w in glob_class_weights.tolist()]}")
+    print(f"Sent dist    [NEG/POS/NEU]: {[round(c/max(total_sent,1), 3) for c in sent_counts]}")
     print(f"Glob dist    [NEG/POS/NEU]: {[round(c/max(total_glob,1), 3) for c in glob_counts]}")
 
     # Sampler
-    sample_w = [args.contrast_sampler_weight if is_gold_contrast(it["span_sent"]) else 1.0
-                for it in train_ds.items]
+    sample_w = build_sample_weights(train_ds.items, args.contrast_sampler_weight)
     loader_kwargs = {
         "num_workers": args.num_workers,
         "pin_memory": device.type == "cuda",
@@ -894,6 +1384,7 @@ def main():
                           **loader_kwargs)
 
     model = ABSAModel(args.model_name, args.max_ops).to(device).float()
+    model_ema = None if args.disable_ema else ModelEMA(model, decay=args.ema_decay)
     optimizer = AdamW([
         {"params": model.backbone.parameters(),
          "lr": args.lr_backbone, "weight_decay": 0.01},
@@ -915,6 +1406,11 @@ def main():
 
     steps_per_ep       = max(1, (len(train_dl) + args.grad_accum_steps - 1) // args.grad_accum_steps)
     total_steps_all    = steps_per_ep * args.epochs
+    est_min_per_ep     = steps_per_ep * 0.22  # ~0.22s/step T4 rough
+    print(
+        f"Steps/epoch≈{steps_per_ep} | est ~{est_min_per_ep:.1f} min/ep train "
+        f"| cap {args.epochs} ep + patience {args.patience} → ~{est_min_per_ep * min(args.epochs, args.patience + args.phase1_epochs + 5):.0f} min train"
+    )
     phase1_steps       = steps_per_ep * args.phase1_epochs
     phase2_steps       = max(1, total_steps_all - phase1_steps)
     warmup_heads_steps = max(1, int(0.05 * total_steps_all))
@@ -942,6 +1438,12 @@ def main():
     scaler = torch.amp.GradScaler(enabled=device.type == "cuda")
 
     best_score, patience_cnt, start_ep = 0.0, 0, 1
+    if checkpoint_path.exists():
+        print(f"Checkpoint present but ignored for fresh training: {checkpoint_path}")
+    if model_ema is not None:
+        print(f"EMA enabled with decay={args.ema_decay} (starts at epoch {args.ema_start_epoch})")
+    if device.type == "cuda":
+        print(f"TF32 matmul={'on' if torch.backends.cuda.matmul.allow_tf32 else 'off'}")
 
     for epoch in range(start_ep, args.epochs + 1):
         in_phase1 = epoch <= args.phase1_epochs
@@ -966,6 +1468,7 @@ def main():
         for step, batch in enumerate(pbar, start=1):
             ids        = batch["ids"].to(device)
             mask       = batch["mask"].to(device)
+            spec_mask  = batch["spec_mask"].to(device)
             bio        = batch["bio"].to(device)
             span_mask  = batch["span_mask"].to(device)
             span_sent  = batch["span_sent"].to(device)
@@ -976,38 +1479,124 @@ def main():
             texts      = batch["text"]
 
             with autocast_context(device):
-                crf_loss, _, sent_logits, glob_logits, _ = model(
-                    ids, mask,
-                    span_mask=None if in_phase1 else span_mask,
-                    bio=bio,
-                    span_aspect=None if in_phase1 else span_asp,
-                    span_clause_pos=None if in_phase1 else span_clause,
-                    offsets=offsets if not in_phase1 else None,
-                    texts=texts if not in_phase1 else None,
+                crf_loss, emiss, _, glob_logits, cached_seq, span_features = model(
+                    ids, mask, span_mask=None, bio=bio,
                 )
 
+                sent_logits = None
+                mixed_span_sent = span_sent
+                if not in_phase1:
+                    phase2_epoch = epoch - args.phase1_epochs
+                    if phase2_epoch <= 3:
+                        mix_ratio = 0.0
+                    elif phase2_epoch <= 8:
+                        mix_ratio = min(max(float(args.pred_span_ratio), 0.0), 0.15)
+                    else:
+                        mix_ratio = min(max(float(args.pred_span_ratio), 0.0), 1.0)
+
+                    mixed_span_mask = span_mask
+                    mixed_span_asp = span_asp
+                    mixed_span_clause = span_clause
+                    pred_span_sent = span_sent
+
+                    if mix_ratio > 0.0:
+                        bio_p = model.crf.decode(emiss, mask=mask.bool())
+                        pred_sm = torch.zeros(ids.shape[0], args.max_ops, ids.shape[1], device=device)
+                        pred_sp_asp = torch.full(
+                            (ids.shape[0], args.max_ops), len(ASPECTS), dtype=torch.long, device=device
+                        )
+                        pred_clause_pos = torch.zeros((ids.shape[0], args.max_ops), dtype=torch.long, device=device)
+                        pred_sets = []
+                        pred_span_sent = torch.full_like(span_sent, -100)
+
+                        for ri, seq in enumerate(bio_p):
+                            seq_len = int(mask[ri].sum())
+                            pred_set, pred_mask_row, pred_aspect_row, pred_clause_row = build_predicted_span_inputs(
+                                seq,
+                                offsets[ri],
+                                spec_mask[ri],
+                                texts[ri],
+                                seq_len,
+                                args.max_ops,
+                                args.max_context_window,
+                                device,
+                            )
+                            pred_sets.append(pred_set)
+                            pred_sm[ri] = pred_mask_row
+                            pred_sp_asp[ri] = pred_aspect_row
+                            pred_clause_pos[ri] = pred_clause_row
+
+                            gold_set = extract_spans(bio[ri].tolist()[:seq_len])
+                            gold_sents = [
+                                span_sent[ri, slot].item()
+                                for slot in range(args.max_ops)
+                                if span_sent[ri, slot] != -100
+                            ]
+                            pred_span_sent[ri] = build_predicted_span_labels(
+                                pred_sets[ri],
+                                gold_set,
+                                gold_sents,
+                                args.max_ops,
+                                args.span_match_iou,
+                                device,
+                            )
+
+                        use_pred = (torch.rand(ids.shape[0], device=device) < mix_ratio)
+                        use_pred_3d = use_pred.view(-1, 1, 1)
+                        use_pred_2d = use_pred.view(-1, 1)
+                        mixed_span_mask = torch.where(use_pred_3d, pred_sm, span_mask)
+                        mixed_span_asp = torch.where(use_pred_2d, pred_sp_asp, span_asp)
+                        mixed_span_clause = torch.where(use_pred_2d, pred_clause_pos, span_clause)
+                        mixed_span_sent = torch.where(use_pred_2d, pred_span_sent, span_sent)
+
+                    _, _, sent_logits, glob_logits, _, span_features = model(
+                        ids,
+                        mask,
+                        span_mask=mixed_span_mask,
+                        cached_seq=cached_seq,
+                        span_aspect=mixed_span_asp,
+                        span_clause_pos=mixed_span_clause,
+                        offsets=offsets,
+                        texts=texts,
+                    )
+
+                sent_logits_r = None
+                glob_logits_r = None
+                if not in_phase1 and args.rdrop_alpha > 0:
+                    _, _, sent_logits_r, glob_logits_r, _, _ = model(
+                        ids, mask,
+                        span_mask=mixed_span_mask,
+                        bio=bio,
+                        span_aspect=mixed_span_asp,
+                        span_clause_pos=mixed_span_clause,
+                        offsets=offsets,
+                        texts=texts,
+                    )
+
                 sent_loss = (
-                    focal_loss(sent_logits.view(-1, N_SENT), span_sent.view(-1),
-                               weight=sent_class_weights, gamma=2.0,
-                               ignore_index=-100, label_smoothing=0.1)
+                    focal_loss(sent_logits.view(-1, N_SENT), mixed_span_sent.view(-1),
+                               weight=sent_class_weights, gamma=1.5, # Đẩy gamma lên 1.5
+                               ignore_index=-100, label_smoothing=[0.005, 0.005, 0.015])
                     if not in_phase1 else torch.tensor(0.0, device=device)
                 )
 
                 v_g = (glob_sent != -1)
                 glob_loss = (
-                    F.cross_entropy(glob_logits[v_g], glob_sent[v_g],
-                                    weight=glob_class_weights, label_smoothing=0.02)
-                    if v_g.any() else torch.tensor(0.0, device=device)
+                    smoothed_cross_entropy(glob_logits, glob_sent,
+                                           weight=glob_class_weights,
+                                           ignore_index=-1,
+                                           label_smoothing=[0.01, 0.01, 0.05])
+                    if (not in_phase1 and v_g.any()) else torch.tensor(0.0, device=device)
                 )
 
                 ctr_loss = (
-                    contrast_loss_fn(sent_logits, span_sent, glob_sent, args.contrast_margin, device)
+                    contrast_loss_fn(span_features, mixed_span_sent, glob_sent, args.contrast_margin, device)
                     if not in_phase1 else torch.tensor(0.0, device=device)
                 )
 
                 cons_loss = torch.tensor(0.0, device=device)
                 if not in_phase1:
-                    vm = (span_sent != -100).float()
+                    vm = (mixed_span_sent != -100).float()
                     if vm.sum() > 0 and v_g.any():
                         span_avg = (sent_logits * vm.unsqueeze(-1)).sum(1) / \
                                    vm.sum(1, keepdim=True).clamp(min=1)
@@ -1020,21 +1609,34 @@ def main():
                             gold_dist[v_g], reduction="batchmean",
                         )
 
+                    if sent_logits_r is not None and glob_logits_r is not None:
+                        valid_span_mask = (mixed_span_sent != -100)
+                        sent_rdrop = symmetric_kl_loss(sent_logits[valid_span_mask], sent_logits_r[valid_span_mask])
+                        glob_rdrop = symmetric_kl_loss(glob_logits[v_g], glob_logits_r[v_g]) if v_g.any() else torch.tensor(0.0, device=device)
+                        cons_loss = cons_loss + args.rdrop_alpha * (sent_rdrop + 0.5 * glob_rdrop)
+
                 if in_phase1:
-                    task_weights = task_weighter.base_snapshot(active_names=["bio", "global"])
+                    task_weights = task_weighter.base_snapshot(active_names=["bio"])
                     total_loss = (
                         task_weights["bio"] * crf_loss
-                        + task_weights["global"] * glob_loss
                     )
                 else:
                     phase2_losses = {
                         "bio": crf_loss,
                         "sent": sent_loss,
-                        "global": glob_loss,
-                        "cons": cons_loss,
-                        "contrast": contrast_scale * ctr_loss,
                     }
+                    if args.lambda_global > 0:
+                        phase2_losses["global"] = glob_loss
+                    if args.lambda_cons > 0:
+                        phase2_losses["cons"] = cons_loss
+                    if args.lambda_contrast > 0 and contrast_scale > 0:
+                        phase2_losses["contrast"] = contrast_scale * ctr_loss
+                        
                     task_weights = task_weighter.compute_weights(phase2_losses)
+                    task_weights.setdefault("global", 0.0)
+                    task_weights.setdefault("cons", 0.0)
+                    task_weights.setdefault("contrast", 0.0)
+                    
                     total_loss = task_weighter.combine(phase2_losses, task_weights)
 
                 loss = total_loss.float() / args.grad_accum_steps
@@ -1056,6 +1658,8 @@ def main():
                 torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
                 scaler.step(optimizer)
                 scaler.update()
+                if model_ema is not None:
+                    model_ema.update(model)
                 scheduler.step()
                 optimizer.zero_grad(set_to_none=True)
 
@@ -1075,25 +1679,57 @@ def main():
             pbar.set_postfix({"loss": f"{raw:.3f}"})
 
         train_m = {k: v / max(n_steps, 1) for k, v in sums.items()}
-        eval_m  = evaluate(model, val_dl, device, args.max_ops, args.max_context_window, args.span_match_iou)
+
+        run_eval = (
+            in_phase1
+            or epoch % max(1, args.eval_every) == 0
+            or epoch == args.epochs
+        )
+        if not run_eval:
+            print(
+                f"Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
+                f"(skip dev eval, eval_every={args.eval_every})"
+            )
+            continue
+
+        use_ema_eval = (
+            model_ema is not None and
+            epoch >= args.ema_start_epoch and
+            model_ema.num_updates > 0
+        )
+        if use_ema_eval:
+            model_ema.apply_to(model)
+        try:
+            eval_m = evaluate(model, val_dl, device, args.max_ops, args.max_context_window, args.span_match_iou)
+        finally:
+            if use_ema_eval:
+                model_ema.restore(model)
 
         print(
             f"Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
-            f"Comp={eval_m['composite']:.4f} | "
-            f"Span={eval_m['span_f1']:.4f} | "
-            f"Sent={eval_m['sent_f1']:.4f} | "
-            f"Glob={eval_m['global_f1']:.4f}"
+            f"TAS-Strict={eval_m['tas_strict']['f1']:.4f} | "
+            f"TAS-Relaxed={eval_m['tas_relaxed']['f1']:.4f} | "
+            f"Span={eval_m['span']['f1']:.4f} | "
+            f"Sent@Matched={eval_m['sent_matched']['f1']:.4f} | "
+            f"Sent@GoldSpan={eval_m['sent_goldspan']['f1']:.4f} | "
+            f"Global={eval_m['global']['f1']:.4f}"
         )
         print("  Aspect sent F1:", {a: f"{v:.3f}" for a, v in eval_m["asp_sent_f1"].items()})
         print("  Aspect span F1:", {a: f"{v:.3f}" for a, v in eval_m["asp_span_f1"].items()})
 
-        is_best = eval_m["composite"] > best_score
+        is_best = eval_m["tas_relaxed"]["f1"] > best_score
         if is_best:
-            best_score, patience_cnt = eval_m["composite"], 0
-            torch.save(model.state_dict(), best_model_path)
+            best_score, patience_cnt = eval_m["tas_relaxed"]["f1"], 0
+            if use_ema_eval:
+                model_ema.apply_to(model)
+            try:
+                torch.save(model.state_dict(), best_model_path)
+            finally:
+                if use_ema_eval:
+                    model_ema.restore(model)
             print(f"  ⭐ New best: {best_score:.4f} → {best_model_path}")
             with open(best_confusion, "w", encoding="utf-8") as f:
-                json.dump({"epoch": epoch, "composite": best_score,
+                json.dump({"epoch": epoch, "best_metric": "tas_relaxed_f1", "tas_relaxed_f1": best_score,
                            "matrices": eval_m["confusion_matrices"]}, f,
                           ensure_ascii=False, indent=2)
         else:
@@ -1105,8 +1741,9 @@ def main():
 
         save_metrics(metrics_csv_path, epoch, "phase1" if in_phase1 else "phase2",
                      train_m, eval_m, is_best)
-        save_confusion_matrices(confusion_jsonl, epoch, "phase1" if in_phase1 else "phase2",
-                                eval_m["confusion_matrices"], is_best)
+        if args.save_all_confusion or is_best:
+            save_confusion_matrices(confusion_jsonl, epoch, "phase1" if in_phase1 else "phase2",
+                                    eval_m["confusion_matrices"], is_best)
 
         if not in_phase1 and patience_cnt >= args.patience:
             print("Early stopping.")

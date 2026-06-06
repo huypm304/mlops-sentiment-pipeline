@@ -6,6 +6,8 @@ export type PredictOpinion = {
   aspect: string
   sentiment: string
   confidence: number
+  raw_confidence?: number
+  calibrated_confidence?: number
   start?: number | null
   end?: number | null
 }
@@ -14,6 +16,8 @@ export type PredictApiResponse = {
   opinions: PredictOpinion[]
   global_sentiment: string
   global_confidence: number
+  global_raw_confidence?: number
+  model_version?: string
   latency_ms: number
 }
 
@@ -34,7 +38,9 @@ export function mapPredictToInference(
     aspect: o.aspect,
     target: o.target,
     sentiment: toSentiment(o.sentiment),
-    confidence: o.confidence,
+    confidence: o.calibrated_confidence ?? o.confidence,
+    rawConfidence: o.raw_confidence ?? o.confidence,
+    calibratedConfidence: o.calibrated_confidence ?? o.confidence,
   }))
 
   const spans = data.opinions
@@ -53,7 +59,7 @@ export function mapPredictToInference(
         aspect: o.aspect,
         target: o.target,
         sentiment: toSentiment(o.sentiment),
-        confidence: o.confidence,
+        confidence: o.calibrated_confidence ?? o.confidence,
         start,
         end,
       }
@@ -63,6 +69,8 @@ export function mapPredictToInference(
   return {
     globalSentiment: toSentiment(data.global_sentiment),
     globalConfidence: data.global_confidence,
+    globalRawConfidence: data.global_raw_confidence ?? data.global_confidence,
+    modelVersion: data.model_version,
     aspects,
     spans,
     latencyMs: data.latency_ms,

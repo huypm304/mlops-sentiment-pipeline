@@ -1,6 +1,8 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import Link from "next/link"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { Loader2, PlayCircle, RefreshCw } from "lucide-react"
 import {
   Bar,
@@ -16,8 +18,22 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
-import { fetchLatestAuditReport, runDatasetAudit } from "@/lib/api/audit"
+import {
+  defaultAuditTarget,
+  fetchLatestAuditReport,
+  formatAuditTargetLabel,
+  runDatasetAudit,
+  type AuditTarget,
+} from "@/lib/api/audit"
+import { fetchDatasets } from "@/lib/api/datasets"
 import type { AuditBenchmark, AuditReport } from "@/types/audit"
+import type { DatasetListItem } from "@/types/dataset"
+
+function benchmarkBadgeVariant(status: AuditBenchmark["status"]): "default" | "secondary" | "destructive" | "outline" {
+  if (status === "pass") return "default"
+  if (status === "warn") return "secondary"
+  return "destructive"
+}
 
 function BenchmarkRow({ row }: { row: AuditBenchmark }) {
   return (
@@ -27,13 +43,12 @@ function BenchmarkRow({ row }: { row: AuditBenchmark }) {
       <td className="py-3 pr-4 font-mono text-sm">{row.display_value}</td>
       <td className="py-3 pr-4 text-muted-foreground">{row.display_threshold}</td>
       <td className="py-3">
-        <Badge variant={row.status === "pass" ? "default" : "destructive"}>{row.status}</Badge>
+        <Badge variant={benchmarkBadgeVariant(row.status)}>{row.status}</Badge>
       </td>
     </tr>
   )
 }
 
-/** Fixed order — matches training schema (all 7 aspects always shown). */
 const ASPECT_ORDER = [
   "Fashion",
   "Electronics",
@@ -52,36 +67,94 @@ function aspectDistToChart(data: Record<string, number>) {
   return ASPECT_ORDER.map((name) => ({ name, value: data[name] ?? 0 }))
 }
 
-function DatasetSelect({
-  value,
+function AuditTargetSelect({
+  datasets,
+  target,
   onChange,
 }: {
-  value: "train" | "demo"
-  onChange: (v: "train" | "demo") => void
+  datasets: DatasetListItem[]
+  target: AuditTarget | null
+  onChange: (target: AuditTarget) => void
 }) {
+  if (datasets.length === 0) {
+    return (
+      <span className="text-[12px] text-muted-foreground">
+        No uploaded datasets —{" "}
+        <Link href="/admin/datasets" className="text-primary underline-offset-4 hover:underline">
+          upload train/dev
+        </Link>
+      </span>
+    )
+  }
+
   return (
     <select
-      className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-      value={value}
-      onChange={(e) => onChange(e.target.value as "train" | "demo")}
+      className="max-w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+      value={target?.datasetId ?? ""}
+      onChange={(e) => onChange({ datasetId: e.target.value })}
     >
-      <option value="train">data_train.jsonl</option>
-      <option value="demo">demo_10.jsonl</option>
+      {datasets.map((dataset) => (
+        <option key={dataset.dataset_id} value={dataset.dataset_id}>
+          {dataset.name} · train+dev
+        </option>
+      ))}
     </select>
   )
 }
 
+function statusLabel(report: AuditReport): string {
+  if (report.data_level_status === "pass-with-warnings") return "Passed with warnings"
+  if (report.passed) return "Passed"
+  return "Failed"
+}
+
 export function AuditDashboard() {
+  const searchParams = useSearchParams()
+  const initialDatasetId = searchParams.get("dataset")
+
   const [report, setReport] = useState<AuditReport | null>(null)
+  const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
-  const [dataset, setDataset] = useState<"train" | "demo">("train")
+  const [target, setTarget] = useState<AuditTarget | null>(null)
+
+  useEffect(() => {
+    if (datasets.length === 0) {
+      setTarget(null)
+      return
+    }
+
+    if (initialDatasetId) {
+      const dataset = datasets.find((d) => d.dataset_id === initialDatasetId)
+      if (dataset) {
+        setTarget({ datasetId: dataset.dataset_id })
+        return
+      }
+    }
+
+    setTarget((current) => {
+      if (current && datasets.some((d) => d.dataset_id === current.datasetId)) {
+        return current
+      }
+      return defaultAuditTarget(datasets)
+    })
+  }, [initialDatasetId, datasets])
+
+  const targetLabel = useMemo(
+    () => (target ? formatAuditTargetLabel(target, datasets) : "—"),
+    [target, datasets],
+  )
 
   const load = useCallback(async () => {
     setError(null)
     try {
-      setReport(await fetchLatestAuditReport())
+      const [latest, uploaded] = await Promise.all([
+        fetchLatestAuditReport().catch(() => null),
+        fetchDatasets(),
+      ])
+      setDatasets(uploaded)
+      setReport(latest)
     } catch (err) {
       setReport(null)
       setError(err instanceof Error ? err.message : "Failed to load audit report")
@@ -95,10 +168,11 @@ export function AuditDashboard() {
   }, [load])
 
   const handleRun = async () => {
+    if (!target) return
     setRunning(true)
     setError(null)
     try {
-      await runDatasetAudit(dataset)
+      await runDatasetAudit(target)
       await load()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Audit failed")
@@ -122,11 +196,11 @@ export function AuditDashboard() {
         {error && <p className="text-sm text-destructive">{error}</p>}
         <EmptyState
           title="No audit report yet"
-          description="Run a VLSP-style quality audit on your training JSONL before retraining."
+          description="Upload train+dev on the Datasets page, then run the data benchmark suite here."
         />
         <div className="flex flex-wrap items-center gap-2">
-          <DatasetSelect value={dataset} onChange={setDataset} />
-          <Button onClick={handleRun} disabled={running}>
+          <AuditTargetSelect datasets={datasets} target={target} onChange={setTarget} />
+          <Button onClick={handleRun} disabled={running || !target}>
             {running ? <Loader2 className="mr-2 size-4 animate-spin" /> : <PlayCircle className="mr-2 size-4" />}
             Run audit
           </Button>
@@ -143,9 +217,7 @@ export function AuditDashboard() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={report.passed ? "default" : "destructive"}>
-              {report.passed ? "Passed" : "Failed"}
-            </Badge>
+            <Badge variant={report.passed ? "default" : "destructive"}>{statusLabel(report)}</Badge>
             <span className="font-mono text-xs text-muted-foreground">{report.report_id}</span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -153,26 +225,28 @@ export function AuditDashboard() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <DatasetSelect value={dataset} onChange={setDataset} />
+          <AuditTargetSelect datasets={datasets} target={target} onChange={setTarget} />
           <Button variant="outline" size="sm" onClick={load} disabled={running}>
             <RefreshCw className="mr-2 size-4" />
             Refresh
           </Button>
-          <Button size="sm" onClick={handleRun} disabled={running}>
+          <Button size="sm" onClick={handleRun} disabled={running || !target}>
             {running ? <Loader2 className="mr-2 size-4 animate-spin" /> : <PlayCircle className="mr-2 size-4" />}
             Re-run audit
           </Button>
         </div>
       </div>
 
+      <p className="text-[11px] text-muted-foreground">Selected target: {targetLabel}</p>
+
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
-          { label: "Records", value: report.summary.parsed_records },
+          { label: "Train rows", value: report.summary.train_rows ?? report.summary.parsed_records },
+          { label: "Dev rows", value: report.summary.dev_rows ?? "—" },
           { label: "Opinions", value: report.summary.total_opinions },
-          { label: "Errors", value: report.summary.error_count },
-          { label: "Warnings", value: report.summary.warning_count },
+          { label: "Modules failed", value: report.summary.error_count },
         ].map((s) => (
           <Card key={s.label} size="sm">
             <CardHeader>
@@ -185,16 +259,16 @@ export function AuditDashboard() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Quality benchmarks</CardTitle>
+          <CardTitle>Data benchmark modules</CardTitle>
           <CardDescription>
-            VLSP / ABSA schema gates — training should pass before admin approval
+            Schema, spans, labels, distribution, global sentiment, train/dev leakage
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead>
               <tr className="border-b text-muted-foreground">
-                <th className="pb-2 font-medium">Benchmark</th>
+                <th className="pb-2 font-medium">Module</th>
                 <th className="hidden pb-2 font-medium md:table-cell">Description</th>
                 <th className="pb-2 font-medium">Result</th>
                 <th className="pb-2 font-medium">Threshold</th>
@@ -213,7 +287,7 @@ export function AuditDashboard() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Aspect distribution</CardTitle>
+            <CardTitle>Aspect distribution (train)</CardTitle>
           </CardHeader>
           <CardContent className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -236,7 +310,7 @@ export function AuditDashboard() {
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Opinion sentiment distribution</CardTitle>
+            <CardTitle>Opinion sentiment distribution (train)</CardTitle>
           </CardHeader>
           <CardContent className="h-64">
             <ResponsiveContainer width="100%" height="100%">

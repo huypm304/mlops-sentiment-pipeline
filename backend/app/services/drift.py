@@ -9,7 +9,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from backend.app.config.guardrails import DEFAULT_GUARDRAIL_CONFIG
 from backend.app.config.settings import REPO_ROOT
+from backend.app.services import registry_db
 
 ASPECT_ORDER = [
     "Fashion",
@@ -125,24 +127,42 @@ def get_train_baseline(*, refresh: bool = False) -> dict[str, Any]:
     return baseline
 
 
+def get_inference_entries() -> list[dict[str, Any]]:
+    _hydrate_log_from_disk()
+    return list(_inference_log)
+
+
 def record_inference(
     *,
+    text: str = "",
     global_sentiment: str,
     global_confidence: float,
     opinions: list[dict[str, Any]],
     latency_ms: int,
+    model_version: str = "absa-v1",
 ) -> None:
     aspects = [str(o.get("aspect", "")) for o in opinions if o.get("aspect")]
     op_sents = [_normalize_sentiment(str(o.get("sentiment", "neutral"))) for o in opinions]
     confs = [float(o.get("confidence", 0)) for o in opinions if o.get("confidence") is not None]
+    aspect_confidences = {
+        str(o.get("aspect", "")): float(o.get("confidence", 0))
+        for o in opinions
+        if o.get("aspect")
+    }
+    preview = text.strip()
+    if len(preview) > 200:
+        preview = preview[:197] + "..."
     entry = {
         "ts": datetime.now(timezone.utc).isoformat(),
+        "text_preview": preview,
         "global_sentiment": _normalize_sentiment(global_sentiment),
         "global_confidence": round(global_confidence, 4),
         "aspects": aspects,
+        "aspect_confidences": aspect_confidences,
         "opinion_sentiments": op_sents,
         "avg_opinion_confidence": round(sum(confs) / len(confs), 4) if confs else 0.0,
         "latency_ms": latency_ms,
+        "model_version": model_version,
     }
     _inference_log.append(entry)
     try:
@@ -151,6 +171,43 @@ def record_inference(
             f.write(json.dumps(entry, ensure_ascii=False) + "\n")
     except OSError:
         pass
+
+    store = registry_db.get_store()
+    if store is not None and store.config.predictions_table:
+        guardrail_status = "OK"
+        need_review = False
+        if global_confidence < DEFAULT_GUARDRAIL_CONFIG.warn_global:
+            guardrail_status = "WARN"
+            need_review = True
+        if not opinions:
+            guardrail_status = "WARN"
+            need_review = True
+
+        prediction = store.put_prediction(
+            {
+                "model_id": model_version,
+                "model_version": model_version,
+                "text_preview": preview,
+                "global_sentiment": entry["global_sentiment"],
+                "confidence": entry["global_confidence"],
+                "guardrail_status": guardrail_status,
+                "need_review": need_review,
+                "latency_ms": latency_ms,
+                "aspects": aspects,
+            }
+        )
+        if need_review and store.config.review_queue_table:
+            store.put_review_item(
+                {
+                    "prediction_id": prediction["prediction_id"],
+                    "model_id": model_version,
+                    "text_preview": preview,
+                    "global_sentiment": entry["global_sentiment"],
+                    "confidence": entry["global_confidence"],
+                    "guardrail_status": guardrail_status,
+                    "priority": "urgent" if global_confidence < DEFAULT_GUARDRAIL_CONFIG.reject_global else "normal",
+                }
+            )
 
 
 def _production_window(entries: list[dict[str, Any]]) -> dict[str, Any]:
@@ -233,7 +290,7 @@ def get_drift_report() -> dict[str, Any]:
         signals.append("Aspect distribution shifted vs training data")
     if sentiment_drift >= DRIFT_THRESHOLD:
         signals.append("Global sentiment mix shifted vs training data")
-    if avg_conf and avg_conf < 0.55:
+    if avg_conf and avg_conf < DEFAULT_GUARDRAIL_CONFIG.warn_global:
         signals.append("Low average prediction confidence")
     if drift_score >= DRIFT_THRESHOLD:
         signals.append("Overall drift exceeds threshold — consider audit & retrain")

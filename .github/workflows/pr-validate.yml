@@ -11,6 +11,8 @@ on:
     paths:
       - "infrastructure/**"
       - "lambda/**"
+      - "data_benchmark/**"
+      - "backend/**"
       - ".github/**"
       - "frontend/**"
 

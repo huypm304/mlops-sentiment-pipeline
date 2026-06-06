@@ -43,11 +43,11 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+      AWS_REGION: ap-southeast-1
+      TF_STATE_BUCKET: absa-mlops-demo-tf-state
+      TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
       TF_STATE_KEY: runtime/terraform.tfstate
-      TF_VAR_core_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_core_state_bucket: absa-mlops-demo-tf-state
     steps:
       - uses: actions/checkout@v4
 
@@ -70,3 +70,6 @@ jobs:
           enable_sagemaker_training: ${{ inputs.enable_sagemaker_training }}
           enable_eventbridge_monitoring: ${{ inputs.enable_eventbridge_monitoring }}
           sagemaker_instance_type: ${{ inputs.sagemaker_instance_type }}
+          domain_name: minhhuy.me
+          enable_custom_domain: true
+          api_subdomain: api

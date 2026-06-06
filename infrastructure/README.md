@@ -240,6 +240,7 @@ Deploy order on GitHub:
 | `deploy-core.yml` | S3 artifacts + DynamoDB registry |
 | `plan-runtime.yml` | Preview runtime plan + cost flags (no changes) |
 | `deploy-runtime.yml` | Lambda, API, Step Functions — **SageMaker OFF by default** |
+| `deploy-frontend.yml` | Build Next static export → S3 + CloudFront invalidation |
 | `destroy-runtime.yml` | Remove runtime only (keeps core data) |
 | `destroy-all-danger.yml` | Destroy runtime + core (artifact bucket blocked by default) |
 | `pr-validate.yml` | fmt + validate on pull requests |
@@ -262,3 +263,14 @@ If either SageMaker flag is `true`, you must type **`I-ACCEPT-SAGEMAKER-COST`** 
 Composite action: `.github/actions/terraform-stack/`.
 
 Local scripts: `scripts/bootstrap_apply.sh`, `core_apply.sh`, `runtime_apply.sh`, `runtime_destroy.sh`.
+
+### Seed DynamoDB registry (after core deploy)
+
+```bash
+export AWS_REGION=ap-southeast-1
+export ARTIFACTS_BUCKET=absa-mlops-demo-artifacts
+export MODELS_TABLE=absa-mlops-demo-models
+python scripts/seed_registry.py   # registers absa-v1 as PRODUCTION
+```
+
+Shared registry code lives in `registry/` and is bundled into Lambdas via `scripts/prepare_lambda_bundles.sh` (called from `scripts/build_audit_lambda.sh` before Terraform apply).

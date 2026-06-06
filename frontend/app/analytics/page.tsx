@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation"
 
-/** Legacy route — business analytics moved to /insights */
+/** Legacy route — analytics moved to admin control plane */
 export default function AnalyticsRedirectPage() {
-  redirect("/insights")
+  redirect("/admin/analytics")
 }

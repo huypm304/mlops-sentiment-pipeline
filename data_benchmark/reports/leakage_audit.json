@@ -1,0 +1,32 @@
+{
+  "train": {
+    "rows": 7234
+  },
+  "dev": {
+    "rows": 765
+  },
+  "metrics": {
+    "exact_duplicate_train_dev_pairs": 0,
+    "exact_duplicate_train_dev_ratio_over_dev_pct": 0.0,
+    "normalized_duplicate_train_dev_pairs": 0,
+    "normalized_duplicate_train_dev_ratio_over_dev_pct": 0.0,
+    "near_duplicate_dev_rows_count": 0,
+    "near_duplicate_dev_rows_ratio_pct": 0.0,
+    "same_text_different_labels_pairs": 0,
+    "same_text_different_labels_ratio_over_exact_pairs_pct": 0.0
+  },
+  "thresholds": {
+    "exact_leakage_best_pct": 0.0,
+    "exact_leakage_warning_over_pct": 1.0,
+    "near_duplicate_target_lt_pct": 2.0,
+    "pass_exact_leakage": true,
+    "warn_exact_leakage": false,
+    "pass_near_duplicate": true,
+    "near_threshold": 0.9
+  },
+  "samples": {
+    "exact_duplicates": [],
+    "same_text_different_labels": [],
+    "near_duplicates": []
+  }
+}

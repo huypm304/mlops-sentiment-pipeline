@@ -1,0 +1,65 @@
+{
+  "dataset_summary": {
+    "train_file": "data_stratified/train_aug500_boundary200.jsonl",
+    "train_rows": 7234,
+    "train_opinions": 12434,
+    "avg_opinions_per_sentence": 1.7188,
+    "mams_pct": 34.6696,
+    "neu_opinion_pct": 12.6267,
+    "global_neu_pct": 38.3743
+  },
+  "schema_audit": {
+    "critical_error_pct_combined": 0.0,
+    "train_all_100pct": true,
+    "dev_all_100pct": true,
+    "status": "pass"
+  },
+  "span_offset_audit": {
+    "train_exact_pct": 100.0,
+    "train_trimmed_pct": 100.0,
+    "train_empty_pct": 0.0,
+    "train_oob_pct": 0.0,
+    "train_duplicate_exact_pct": 0.0,
+    "train_duplicate_same_aspect_rows_pct": 11.2662,
+    "status": "pass"
+  },
+  "label_consistency_audit": {
+    "aspect_suspicious_pct": 1.1903,
+    "sentiment_suspicious_pct": 17.8704,
+    "general_overuse_pct": 0.4423,
+    "service_ship_confusion_pct": 0.0563,
+    "aspect_band": "good",
+    "sentiment_band": "high-risk",
+    "status": "warn"
+  },
+  "distribution_audit": {
+    "train_per_aspect_ge_300": true,
+    "dev_per_aspect_ge_50": true,
+    "cell_train_ge_30": true,
+    "cell_train_ge_50": true,
+    "cell_train_ge_100": true,
+    "status": "pass"
+  },
+  "global_sentiment_audit": {
+    "train_consistency_pct": 99.9357,
+    "dev_consistency_pct": 100.0,
+    "status": "pass"
+  },
+  "leakage_audit": {
+    "exact_leakage_pct": 0.0,
+    "near_duplicate_pct": 0.0,
+    "same_text_diff_label_pairs": 0,
+    "status": "pass"
+  },
+  "overall": {
+    "data_level_status": "pass-with-warnings",
+    "module_statuses": {
+      "schema_audit": "pass",
+      "span_offset_audit": "pass",
+      "label_consistency_audit": "warn",
+      "distribution_audit": "pass",
+      "global_sentiment_audit": "pass",
+      "leakage_audit": "pass"
+    }
+  }
+}

@@ -1,0 +1,346 @@
+{
+  "train": {
+    "file": "data_stratified/train_aug500_boundary200.jsonl",
+    "rows": 7234,
+    "opinions": 12434,
+    "aspect_distribution": [
+      {
+        "aspect": "Fashion",
+        "opinions": 1427,
+        "ratio_pct": 11.4766,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "Electronics",
+        "opinions": 2502,
+        "ratio_pct": 20.1222,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "General",
+        "opinions": 1595,
+        "ratio_pct": 12.8277,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "Service",
+        "opinions": 2081,
+        "ratio_pct": 16.7364,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "Ship",
+        "opinions": 1487,
+        "ratio_pct": 11.9591,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "Price",
+        "opinions": 1963,
+        "ratio_pct": 15.7874,
+        "low_resource_train_lt_300": false
+      },
+      {
+        "aspect": "App",
+        "opinions": 1379,
+        "ratio_pct": 11.0906,
+        "low_resource_train_lt_300": false
+      }
+    ],
+    "aspect_sentiment_matrix": [
+      {
+        "aspect": "Fashion",
+        "NEG": 670,
+        "POS": 593,
+        "NEU": 164,
+        "Total": 1427,
+        "NEU_pct": 11.4926,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "Electronics",
+        "NEG": 1049,
+        "POS": 1198,
+        "NEU": 255,
+        "Total": 2502,
+        "NEU_pct": 10.1918,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "General",
+        "NEG": 583,
+        "POS": 781,
+        "NEU": 231,
+        "Total": 1595,
+        "NEU_pct": 14.4828,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "Service",
+        "NEG": 789,
+        "POS": 974,
+        "NEU": 318,
+        "Total": 2081,
+        "NEU_pct": 15.2811,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "Ship",
+        "NEG": 624,
+        "POS": 672,
+        "NEU": 191,
+        "Total": 1487,
+        "NEU_pct": 12.8447,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "Price",
+        "NEG": 539,
+        "POS": 1148,
+        "NEU": 276,
+        "Total": 1963,
+        "NEU_pct": 14.0601,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      },
+      {
+        "aspect": "App",
+        "NEG": 674,
+        "POS": 570,
+        "NEU": 135,
+        "Total": 1379,
+        "NEU_pct": 9.7897,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": false,
+          "min_cell_lt_100": false
+        }
+      }
+    ]
+  },
+  "dev": {
+    "file": "data_stratified/dev_clean.jsonl",
+    "rows": 765,
+    "opinions": 1280,
+    "aspect_distribution": [
+      {
+        "aspect": "Fashion",
+        "opinions": 157,
+        "ratio_pct": 12.2656,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "Electronics",
+        "opinions": 272,
+        "ratio_pct": 21.25,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "General",
+        "opinions": 159,
+        "ratio_pct": 12.4219,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "Service",
+        "opinions": 225,
+        "ratio_pct": 17.5781,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "Ship",
+        "opinions": 139,
+        "ratio_pct": 10.8594,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "Price",
+        "opinions": 187,
+        "ratio_pct": 14.6094,
+        "low_resource_train_lt_300": true
+      },
+      {
+        "aspect": "App",
+        "opinions": 141,
+        "ratio_pct": 11.0156,
+        "low_resource_train_lt_300": true
+      }
+    ],
+    "aspect_sentiment_matrix": [
+      {
+        "aspect": "Fashion",
+        "NEG": 76,
+        "POS": 66,
+        "NEU": 15,
+        "Total": 157,
+        "NEU_pct": 9.5541,
+        "cell_flags": {
+          "min_cell_lt_30": true,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "Electronics",
+        "NEG": 109,
+        "POS": 136,
+        "NEU": 27,
+        "Total": 272,
+        "NEU_pct": 9.9265,
+        "cell_flags": {
+          "min_cell_lt_30": true,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "General",
+        "NEG": 57,
+        "POS": 80,
+        "NEU": 22,
+        "Total": 159,
+        "NEU_pct": 13.8365,
+        "cell_flags": {
+          "min_cell_lt_30": true,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "Service",
+        "NEG": 83,
+        "POS": 112,
+        "NEU": 30,
+        "Total": 225,
+        "NEU_pct": 13.3333,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "Ship",
+        "NEG": 57,
+        "POS": 63,
+        "NEU": 19,
+        "Total": 139,
+        "NEU_pct": 13.6691,
+        "cell_flags": {
+          "min_cell_lt_30": true,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "Price",
+        "NEG": 54,
+        "POS": 103,
+        "NEU": 30,
+        "Total": 187,
+        "NEU_pct": 16.0428,
+        "cell_flags": {
+          "min_cell_lt_30": false,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      },
+      {
+        "aspect": "App",
+        "NEG": 66,
+        "POS": 63,
+        "NEU": 12,
+        "Total": 141,
+        "NEU_pct": 8.5106,
+        "cell_flags": {
+          "min_cell_lt_30": true,
+          "min_cell_lt_50": true,
+          "min_cell_lt_100": true
+        }
+      }
+    ]
+  },
+  "comparison": {
+    "aspect_distribution_table": [
+      {
+        "aspect": "Fashion",
+        "train_opinions": 1427,
+        "dev_opinions": 157,
+        "train_ratio_pct": 11.4766,
+        "dev_ratio_pct": 12.2656
+      },
+      {
+        "aspect": "Electronics",
+        "train_opinions": 2502,
+        "dev_opinions": 272,
+        "train_ratio_pct": 20.1222,
+        "dev_ratio_pct": 21.25
+      },
+      {
+        "aspect": "General",
+        "train_opinions": 1595,
+        "dev_opinions": 159,
+        "train_ratio_pct": 12.8277,
+        "dev_ratio_pct": 12.4219
+      },
+      {
+        "aspect": "Service",
+        "train_opinions": 2081,
+        "dev_opinions": 225,
+        "train_ratio_pct": 16.7364,
+        "dev_ratio_pct": 17.5781
+      },
+      {
+        "aspect": "Ship",
+        "train_opinions": 1487,
+        "dev_opinions": 139,
+        "train_ratio_pct": 11.9591,
+        "dev_ratio_pct": 10.8594
+      },
+      {
+        "aspect": "Price",
+        "train_opinions": 1963,
+        "dev_opinions": 187,
+        "train_ratio_pct": 15.7874,
+        "dev_ratio_pct": 14.6094
+      },
+      {
+        "aspect": "App",
+        "train_opinions": 1379,
+        "dev_opinions": 141,
+        "train_ratio_pct": 11.0906,
+        "dev_ratio_pct": 11.0156
+      }
+    ],
+    "thresholds": {
+      "train_per_aspect_ge_300": true,
+      "dev_per_aspect_ge_50": true,
+      "cell_train_ge_30": true,
+      "cell_train_ge_50": true,
+      "cell_train_ge_100": true
+    }
+  }
+}

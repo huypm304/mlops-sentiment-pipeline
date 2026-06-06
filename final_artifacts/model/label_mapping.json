@@ -1,0 +1,42 @@
+{
+  "aspects": [
+    "Fashion",
+    "Electronics",
+    "General",
+    "Service",
+    "Ship",
+    "Price",
+    "App"
+  ],
+  "n_aspects": 7,
+  "aspect_padding_idx": 7,
+  "sentiment_id2label": {
+    "0": "NEG",
+    "1": "POS",
+    "2": "NEU"
+  },
+  "sentiment_label2id": {
+    "NEG": 0,
+    "POS": 1,
+    "NEU": 2
+  },
+  "n_sentiment": 3,
+  "bio_labels": [
+    "O",
+    "B-Fashion",
+    "I-Fashion",
+    "B-Electronics",
+    "I-Electronics",
+    "B-General",
+    "I-General",
+    "B-Service",
+    "I-Service",
+    "B-Ship",
+    "I-Ship",
+    "B-Price",
+    "I-Price",
+    "B-App",
+    "I-App"
+  ],
+  "n_bio": 15
+}

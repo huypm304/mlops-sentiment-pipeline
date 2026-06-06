@@ -1,0 +1,422 @@
+{
+  "timestamp": "/media/mhuy/Data1/study/data1",
+  "checks": {
+    "style_metrics": {
+      "train": {
+        "num_samples": 7234,
+        "text_length": {
+          "mean": 22.24467790987006,
+          "std": 15.817650941166633,
+          "min": 3,
+          "max": 173,
+          "median": 18.0
+        },
+        "opinion_count": {
+          "mean": 1.7188277578103401,
+          "std": 0.7355741617544275,
+          "min": 1,
+          "max": 6
+        },
+        "vocab_size": 4588,
+        "vocab_diversity": 0.0285114157521222,
+        "opinion_density": 1.7188277578103401
+      },
+      "dev": {
+        "num_samples": 765,
+        "text_length": {
+          "mean": 22.611764705882354,
+          "std": 16.907502844635832,
+          "min": 4,
+          "max": 122,
+          "median": 18.0
+        },
+        "opinion_count": {
+          "mean": 1.673202614379085,
+          "std": 0.7142807100878635,
+          "min": 1,
+          "max": 5
+        },
+        "vocab_size": 1819,
+        "vocab_diversity": 0.10515666551046364,
+        "opinion_density": 1.673202614379085
+      },
+      "test": {
+        "num_samples": 770,
+        "text_length": {
+          "mean": 23.698701298701298,
+          "std": 16.4001939607353,
+          "min": 5,
+          "max": 121,
+          "median": 19.0
+        },
+        "opinion_count": {
+          "mean": 1.7662337662337662,
+          "std": 0.7558620071975947,
+          "min": 1,
+          "max": 5
+        },
+        "vocab_size": 1964,
+        "vocab_diversity": 0.10762823323103901,
+        "opinion_density": 1.7662337662337662
+      }
+    },
+    "template_analysis": {
+      "train": {
+        "split": "train",
+        "num_samples": 7234,
+        "top_opening_trigrams": {
+          "chất lượng sản": 48,
+          "giao hàng nhanh": 48,
+          "nhận hàng xong": 41,
+          "bao bì mẫu": 39,
+          "so với mấy": 37,
+          "mua cho nhu": 36,
+          "đợt này đặt": 36,
+          "dùng được thích": 36,
+          "mua dùng hằng": 35,
+          "chốt đơn vì": 35,
+          "nhận hàng thích": 35,
+          "trải nghiệm gần": 34,
+          "đặt lần này": 32,
+          "chốt đơn xong": 31,
+          "mình mới mua": 30,
+          "xét trong tầm": 29,
+          "sản phẩm tốt": 29,
+          "xài qua vài": 26,
+          "xài vài hôm": 24,
+          "shop tư vấn": 22
+        },
+        "top_opening_trigrams_coverage": {
+          "coverage_ratio": 0.018938346696157037,
+          "num_samples_covered": 137
+        },
+        "top_keywords": {
+          "không": 2979,
+          "hàng": 2381,
+          "giá": 1945,
+          "được": 1799,
+          "mua": 1659,
+          "thì": 1645,
+          "giao": 1569,
+          "dùng": 1364,
+          "shop": 1342,
+          "máy": 1340,
+          "nên": 1329,
+          "mình": 1317,
+          "rất": 1298,
+          "mà": 1278,
+          "có": 1239,
+          "nhanh": 1200,
+          "là": 1102,
+          "bị": 995,
+          "ổn": 991,
+          "này": 991,
+          "khá": 957,
+          "tốt": 917,
+          "nhận": 891,
+          "quá": 889,
+          "hình": 866,
+          "với": 859,
+          "và": 848,
+          "chất": 836,
+          "đẹp": 827,
+          "lại": 807
+        },
+        "unique_opening_patterns": 3820
+      },
+      "dev": {
+        "split": "dev",
+        "num_samples": 765,
+        "top_opening_trigrams": {
+          "khăn đẹp áo": 6,
+          "độ tuổi sử": 6,
+          "mua dùng hằng": 6,
+          "trải nghiệm gần": 5,
+          "thời gian giao": 5,
+          "đợt này đặt": 5,
+          "nhận hàng xong": 5,
+          "giao hàng nhanh": 5,
+          "kinh nghiệm sử": 4,
+          "sản phẩm tốt": 4,
+          "không ngờ giá": 4,
+          "dùng được chưa": 3,
+          "sản phẩm rất": 3,
+          "dùng được giá": 3,
+          "ban đầu thấy": 3,
+          "mục tìm kiếm": 3,
+          "đặt về dùng": 3,
+          "đợt này chốt": 3,
+          "sản phẩm chất": 3,
+          "khâu giao đi": 3
+        },
+        "top_opening_trigrams_coverage": {
+          "coverage_ratio": 0.023529411764705882,
+          "num_samples_covered": 18
+        },
+        "top_keywords": {
+          "không": 344,
+          "hàng": 236,
+          "giá": 202,
+          "thì": 190,
+          "được": 187,
+          "mua": 182,
+          "rất": 162,
+          "giao": 155,
+          "máy": 154,
+          "có": 150,
+          "mà": 143,
+          "dùng": 142,
+          "là": 140,
+          "shop": 138,
+          "nên": 136,
+          "mình": 132,
+          "này": 116,
+          "nhanh": 113,
+          "tốt": 110,
+          "ổn": 109,
+          "nhận": 105,
+          "đẹp": 103,
+          "pin": 102,
+          "bị": 102,
+          "khá": 102,
+          "và": 99,
+          "hình": 95,
+          "quá": 94,
+          "nhưng": 94,
+          "cho": 89
+        },
+        "unique_opening_patterns": 638
+      },
+      "test": {
+        "split": "test",
+        "num_samples": 770,
+        "top_opening_trigrams": {
+          "giao hàng nhanh": 9,
+          "dùng được thích": 7,
+          "kinh nghiệm sử": 6,
+          "chốt đơn xong": 6,
+          "sản phẩm tốt": 5,
+          "chốt đơn vì": 5,
+          "mua cho nhu": 5,
+          "so với mấy": 5,
+          "trải nghiệm gần": 5,
+          "ban đầu thấy": 4,
+          "chất lượng sản": 4,
+          "độ tuổi sử": 4,
+          "túi may xộc": 3,
+          "mình mới mua": 3,
+          "khăn đẹp áo": 3,
+          "bao bì mẫu": 3,
+          "tại sao đang": 3,
+          "nghe cũng ổn": 3,
+          "máy tốt mượt": 3,
+          "sao dạo này": 3
+        },
+        "top_opening_trigrams_coverage": {
+          "coverage_ratio": 0.02857142857142857,
+          "num_samples_covered": 22
+        },
+        "top_keywords": {
+          "không": 292,
+          "hàng": 244,
+          "giá": 217,
+          "mua": 214,
+          "máy": 202,
+          "thì": 189,
+          "được": 183,
+          "nên": 153,
+          "rất": 153,
+          "mà": 150,
+          "giao": 149,
+          "dùng": 142,
+          "có": 141,
+          "shop": 140,
+          "mình": 137,
+          "tốt": 131,
+          "nhanh": 124,
+          "bị": 121,
+          "pin": 121,
+          "ổn": 119,
+          "quá": 115,
+          "khá": 111,
+          "và": 108,
+          "là": 105,
+          "đẹp": 104,
+          "hình": 101,
+          "1": 99,
+          "cho": 97,
+          "phẩm": 93,
+          "này": 93
+        },
+        "unique_opening_patterns": 639
+      }
+    },
+    "split_divergence": {
+      "text_length_mean": {
+        "values": {
+          "train": 22.24467790987006,
+          "dev": 22.611764705882354,
+          "test": 23.698701298701298
+        },
+        "range": 1.4540233888312386,
+        "interpretation": "Range=1.45 (good variation)",
+        "warning": "LOW"
+      },
+      "vocab_diversity": {
+        "values": {
+          "train": 0.0285114157521222,
+          "dev": 0.10515666551046364,
+          "test": 0.10762823323103901
+        },
+        "range": 0.07911681747891681,
+        "interpretation": "Train=0.0285, Dev/Test higher is GOOD (not leak), lower may be concerning",
+        "warning": "LOW"
+      },
+      "opinion_density": {
+        "values": {
+          "train": 1.7188277578103401,
+          "dev": 1.673202614379085,
+          "test": 1.7662337662337662
+        },
+        "range": 0.09303115185468114,
+        "interpretation": "Range=0.0930 (good variation)",
+        "warning": "LOW"
+      }
+    },
+    "sentiment_distribution": {
+      "train": {
+        "Price": {
+          "NEG": 0.27457972491085075,
+          "POS": 0.5848191543555782,
+          "NEU": 0.14060112073357106
+        },
+        "Ship": {
+          "NEG": 0.41963685272360457,
+          "POS": 0.4519166106254203,
+          "NEU": 0.1284465366509751
+        },
+        "Fashion": {
+          "NEG": 0.4695164681149264,
+          "POS": 0.4155571128241065,
+          "NEU": 0.11492641906096707
+        },
+        "Electronics": {
+          "NEG": 0.41926458832933655,
+          "POS": 0.4788169464428457,
+          "NEU": 0.10191846522781775
+        },
+        "Service": {
+          "NEG": 0.3791446419990389,
+          "POS": 0.4680442095146564,
+          "NEU": 0.15281114848630467
+        },
+        "App": {
+          "NEG": 0.4887599709934735,
+          "POS": 0.41334300217548947,
+          "NEU": 0.09789702683103699
+        },
+        "General": {
+          "NEG": 0.36551724137931035,
+          "POS": 0.4896551724137931,
+          "NEU": 0.14482758620689656
+        }
+      },
+      "dev": {
+        "Electronics": {
+          "NEG": 0.4007352941176471,
+          "POS": 0.5,
+          "NEU": 0.09926470588235294
+        },
+        "Fashion": {
+          "NEG": 0.4840764331210191,
+          "POS": 0.42038216560509556,
+          "NEU": 0.09554140127388536
+        },
+        "Price": {
+          "NEG": 0.2887700534759358,
+          "POS": 0.5508021390374331,
+          "NEU": 0.16042780748663102
+        },
+        "Ship": {
+          "NEG": 0.41007194244604317,
+          "POS": 0.45323741007194246,
+          "NEU": 0.1366906474820144
+        },
+        "App": {
+          "NEG": 0.46808510638297873,
+          "POS": 0.44680851063829785,
+          "NEU": 0.0851063829787234
+        },
+        "Service": {
+          "NEG": 0.3688888888888889,
+          "POS": 0.49777777777777776,
+          "NEU": 0.13333333333333333
+        },
+        "General": {
+          "NEG": 0.3584905660377358,
+          "POS": 0.5031446540880503,
+          "NEU": 0.13836477987421383
+        }
+      },
+      "test": {
+        "Electronics": {
+          "NEG": 0.3952702702702703,
+          "POS": 0.5067567567567568,
+          "NEU": 0.09797297297297297
+        },
+        "Service": {
+          "NEG": 0.3835616438356164,
+          "POS": 0.4703196347031963,
+          "NEU": 0.1461187214611872
+        },
+        "Price": {
+          "NEG": 0.28502415458937197,
+          "POS": 0.5458937198067633,
+          "NEU": 0.16908212560386474
+        },
+        "App": {
+          "NEG": 0.4864864864864865,
+          "POS": 0.43243243243243246,
+          "NEU": 0.08108108108108109
+        },
+        "Ship": {
+          "NEG": 0.4233128834355828,
+          "POS": 0.4539877300613497,
+          "NEU": 0.12269938650306748
+        },
+        "Fashion": {
+          "NEG": 0.4507042253521127,
+          "POS": 0.4295774647887324,
+          "NEU": 0.11971830985915492
+        },
+        "General": {
+          "NEG": 0.372972972972973,
+          "POS": 0.4648648648648649,
+          "NEU": 0.16216216216216217
+        }
+      }
+    },
+    "lexical_leakage": {
+      "dev": {
+        "num_samples": 765,
+        "exact_text_match": 0,
+        "exact_match_percent": 0.0,
+        "suspicious_phrase_overlap": 461,
+        "suspicious_phrase_percent": 60.26143790849673,
+        "note": "High token overlap (>80%) is normal for same domain. Only exact/phrase matches are concerning."
+      },
+      "test": {
+        "num_samples": 770,
+        "exact_text_match": 0,
+        "exact_match_percent": 0.0,
+        "suspicious_phrase_overlap": 462,
+        "suspicious_phrase_percent": 60.0,
+        "note": "High token overlap (>80%) is normal for same domain. Only exact/phrase matches are concerning."
+      }
+    }
+  },
+  "summary": {
+    "style_divergence_risk": "LOW",
+    "lexical_leakage_risk": "HIGH"
+  }
+}

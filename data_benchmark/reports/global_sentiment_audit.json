@@ -1,0 +1,155 @@
+{
+  "train": {
+    "file": "data_stratified/train_aug500_boundary200.jsonl",
+    "rows": 7234,
+    "decidable_rows": 4668,
+    "global_rule_consistency_pct": 99.9357,
+    "thresholds": {
+      "good_ge_pct": 95.0,
+      "acceptable_90_95_pct": [
+        90.0,
+        95.0
+      ],
+      "quality_band": "good"
+    },
+    "case_type_table": {
+      "all_pos": {
+        "count": 2163,
+        "ratio_pct": 29.9005,
+        "consistent_count": 924,
+        "consistent_pct_within_case": 42.7184
+      },
+      "all_neg": {
+        "count": 1656,
+        "ratio_pct": 22.8919,
+        "consistent_count": 636,
+        "consistent_pct_within_case": 38.4058
+      },
+      "all_neu": {
+        "count": 907,
+        "ratio_pct": 12.538,
+        "consistent_count": 907,
+        "consistent_pct_within_case": 100.0
+      },
+      "pos_neu": {
+        "count": 172,
+        "ratio_pct": 2.3777,
+        "consistent_count": 58,
+        "consistent_pct_within_case": 33.7209
+      },
+      "pos_neg": {
+        "count": 2109,
+        "ratio_pct": 29.154,
+        "consistent_count": 2105,
+        "consistent_pct_within_case": 99.8103
+      },
+      "neg_neu": {
+        "count": 227,
+        "ratio_pct": 3.138,
+        "consistent_count": 35,
+        "consistent_pct_within_case": 15.4185
+      }
+    },
+    "rule_violations": {
+      "expected_0_got_1": 1,
+      "expected_2_got_0": 2
+    },
+    "samples": {
+      "mismatch": [
+        {
+          "line": 917,
+          "case_type": "all_pos",
+          "pos": 4,
+          "neg": 0,
+          "neu": 0,
+          "severe_neg": true,
+          "expected_global": 0,
+          "actual_global": 1,
+          "text": "Mùi hương:th Dành cho da:da dau Công dụng:chong nang  Giao hàng nhanh, săn được giá khá hời. Sản phẩm chất lượng. Rất ok sẽ ủng hộ in"
+        },
+        {
+          "line": 1744,
+          "case_type": "pos_neg",
+          "pos": 1,
+          "neg": 1,
+          "neu": 0,
+          "severe_neg": false,
+          "expected_global": 2,
+          "actual_global": 0,
+          "text": "tôi sài app này hơn 3 năm rồi mà lúc đầu cũng ổn nhưng rồi từ từ mới thấy không bảo vệ người tiêu dùg mua thì có hàg giả nhiều đồ hư hại méo mó đổi trả không hoàn tiền trên app chuyển qua mã mà cũng k"
+        },
+        {
+          "line": 4382,
+          "case_type": "pos_neg",
+          "pos": 1,
+          "neg": 1,
+          "neu": 0,
+          "severe_neg": false,
+          "expected_global": 2,
+          "actual_global": 0,
+          "text": "Cá nhân mình thì mình thấy ứng dụng này khá tiện lợi và rất đa dạng vật dụng; còn kể từ hôm nay tôi xóa lazada vì tôi bị cửa hàng sinh thái và shipper lừa gạt bán và giao không đúng máy hút bụi tôi đặ"
+        }
+      ]
+    }
+  },
+  "dev": {
+    "file": "data_stratified/dev_clean.jsonl",
+    "rows": 765,
+    "decidable_rows": 483,
+    "global_rule_consistency_pct": 100.0,
+    "thresholds": {
+      "good_ge_pct": 95.0,
+      "acceptable_90_95_pct": [
+        90.0,
+        95.0
+      ],
+      "quality_band": "good"
+    },
+    "case_type_table": {
+      "pos_neg": {
+        "count": 215,
+        "ratio_pct": 28.1046,
+        "consistent_count": 215,
+        "consistent_pct_within_case": 100.0
+      },
+      "all_neu": {
+        "count": 95,
+        "ratio_pct": 12.4183,
+        "consistent_count": 95,
+        "consistent_pct_within_case": 100.0
+      },
+      "all_pos": {
+        "count": 233,
+        "ratio_pct": 30.4575,
+        "consistent_count": 109,
+        "consistent_pct_within_case": 46.7811
+      },
+      "all_neg": {
+        "count": 186,
+        "ratio_pct": 24.3137,
+        "consistent_count": 52,
+        "consistent_pct_within_case": 27.957
+      },
+      "pos_neu": {
+        "count": 17,
+        "ratio_pct": 2.2222,
+        "consistent_count": 5,
+        "consistent_pct_within_case": 29.4118
+      },
+      "neg_neu": {
+        "count": 19,
+        "ratio_pct": 2.4837,
+        "consistent_count": 7,
+        "consistent_pct_within_case": 36.8421
+      }
+    },
+    "rule_violations": {},
+    "samples": {
+      "mismatch": []
+    }
+  },
+  "combined": {
+    "rows": 7999,
+    "decidable_rows": 5151
+  }
+}

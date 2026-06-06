@@ -81,6 +81,17 @@ data "aws_iam_policy_document" "lambda_execution" {
   }
 
   statement {
+    sid    = "SageMakerTrainingOptional"
+    effect = "Allow"
+    actions = [
+      "sagemaker:CreateTrainingJob",
+      "sagemaker:DescribeTrainingJob",
+      "sagemaker:StopTrainingJob",
+    ]
+    resources = ["*"]
+  }
+
+  statement {
     sid    = "XRayTracing"
     effect = "Allow"
     actions = [

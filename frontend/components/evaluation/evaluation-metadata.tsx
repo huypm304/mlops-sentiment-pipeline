@@ -1,4 +1,5 @@
 import type { ModelEvaluation } from "@/types/evaluation"
+import { metricLabel } from "@/lib/constants/metrics"
 
 type EvaluationMetadataProps = {
   evaluation: ModelEvaluation
@@ -19,9 +20,9 @@ export function EvaluationMetadata({ evaluation }: EvaluationMetadataProps) {
         : "—",
     },
     {
-      label: "Composite score",
+      label: metricLabel("tas_relaxed_f1"),
       value: evaluation.scores
-        ? `${(evaluation.scores.composite * 100).toFixed(1)}%`
+        ? `${(evaluation.scores.tas_relaxed_f1 * 100).toFixed(1)}%`
         : "—",
     },
     {

@@ -1,118 +1,21 @@
 {
-  "Comment": "ABSA MLOps training pipeline: Validate → Cost estimate → Approval → Train → Evaluate → Calibrate → Compare → Gate → Register → Smoke test → Promote/Reject → Notify",
-  "StartAt": "ValidateDataset",
+  "Comment": "ABSA retrain pipeline — dataset pre-audited manually: Train → Evaluate → Register → Notify",
+  "StartAt": "StartTraining",
   "States": {
-    "ValidateDataset": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Run dataset quality audit — BIO tags, spans, polarity, duplicate rate, row count.",
-      "Parameters": {
-        "FunctionName": "${audit_lambda_arn}",
-        "Payload": {
-          "action": "validate",
-          "run_id.$": "$.run_id",
-          "dataset_id.$": "$.dataset_id",
-          "dataset_s3_uri.$": "$.dataset_s3_uri",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.validation",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
-          "IntervalSeconds": 5,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Catch": [
-        {
-          "ErrorEquals": ["States.ALL"],
-          "ResultPath": "$.error",
-          "Next": "DatasetRejected"
-        }
-      ],
-      "Next": "CheckValidationResult"
-    },
-    "CheckValidationResult": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.validation.Payload.passed",
-          "BooleanEquals": true,
-          "Next": "EstimateCost"
-        }
-      ],
-      "Default": "DatasetRejected"
-    },
-    "EstimateCost": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Estimate training cost in USD based on dataset size and instance type.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "estimate_cost",
-          "run_id.$": "$.run_id",
-          "dataset_id.$": "$.dataset_id",
-          "dataset_s3_uri.$": "$.dataset_s3_uri",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.cost_estimate",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
-          "IntervalSeconds": 5,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Next": "CheckApproval"
-    },
-    "CheckApproval": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke.waitForTaskToken",
-      "Comment": "Pause and wait for admin to approve or reject the training run via the dashboard. The Lambda stores the task token in DynamoDB for the approval callback.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "request_approval",
-          "run_id.$": "$.run_id",
-          "dataset_id.$": "$.dataset_id",
-          "cost_estimate.$": "$.cost_estimate.Payload",
-          "approval_id.$": "$.approval_id",
-          "requested_by.$": "$.requested_by",
-          "task_token.$": "$$.Task.Token"
-        }
-      },
-      "ResultPath": "$.approval",
-      "HeartbeatSeconds": 86400,
-      "Catch": [
-        {
-          "ErrorEquals": ["ApprovalRejected"],
-          "ResultPath": "$.error",
-          "Next": "TrainingRejected"
-        },
-        {
-          "ErrorEquals": ["States.HeartbeatTimeout"],
-          "ResultPath": "$.error",
-          "Next": "TrainingRejected"
-        }
-      ],
-      "Next": "StartTraining"
-    },
     "StartTraining": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Launch training — uses mock Lambda when enable_sagemaker_training = false, real SageMaker CreateTrainingJob when enabled.",
+      "Comment": "Launch training (mock Lambda or SageMaker job).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
           "action": "start_training",
           "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
           "dataset_id.$": "$.dataset_id",
+          "dataset_key.$": "$.dataset_key",
           "dataset_s3_uri.$": "$.dataset_s3_uri",
+          "training_config.$": "$.training_config",
           "base_model_id.$": "$.base_model_id",
           "candidate_model_id.$": "$.candidate_model_id",
           "artifacts_bucket": "${artifacts_bucket}"
@@ -132,7 +35,7 @@
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
-          "Next": "NotifyResult"
+          "Next": "NotifyFailure"
         }
       ],
       "Next": "EvaluateCandidate"
@@ -140,7 +43,7 @@
     "EvaluateCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Run evaluation: TAS-F1, span-F1, sentiment-F1, global-F1, per-aspect breakdown.",
+      "Comment": "Evaluate candidate model on dev split (real metrics when SageMaker training is enabled).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -164,99 +67,22 @@
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
-          "Next": "NotifyResult"
+          "Next": "NotifyFailure"
         }
       ],
-      "Next": "CalibrateCandidate"
-    },
-    "CalibrateCandidate": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Calibrate confidence scores; compute ECE and reliability diagram.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "calibrate",
-          "run_id.$": "$.run_id",
-          "candidate_model_id.$": "$.candidate_model_id",
-          "evaluation.$": "$.evaluation.Payload",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.calibration",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
-          "IntervalSeconds": 10,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Next": "CompareWithProduction"
-    },
-    "CompareWithProduction": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Load production model (absa-v1) metrics from registry and compute delta.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "compare_models",
-          "run_id.$": "$.run_id",
-          "base_model_id.$": "$.base_model_id",
-          "candidate_model_id.$": "$.candidate_model_id",
-          "evaluation.$": "$.evaluation.Payload",
-          "calibration.$": "$.calibration.Payload",
-          "cost_estimate.$": "$.cost_estimate.Payload",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.comparison",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
-          "IntervalSeconds": 5,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
-      "Next": "MetricGate"
-    },
-    "MetricGate": {
-      "Type": "Choice",
-      "Comment": "Require candidate to match or exceed production on global-F1 and TAS-F1.",
-      "Choices": [
-        {
-          "Variable": "$.comparison.Payload.metric_gate_passed",
-          "BooleanEquals": true,
-          "Next": "CostGate"
-        }
-      ],
-      "Default": "RegisterCandidate"
-    },
-    "CostGate": {
-      "Type": "Choice",
-      "Comment": "Reject promotion if expected serving cost exceeds budget threshold.",
-      "Choices": [
-        {
-          "Variable": "$.comparison.Payload.cost_gate_passed",
-          "BooleanEquals": true,
-          "Next": "RegisterCandidate"
-        }
-      ],
-      "Default": "RegisterCandidate"
+      "Next": "RegisterCandidate"
     },
     "RegisterCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Write candidate model record to DynamoDB models table with APPROVED or REJECTED status.",
+      "Comment": "Register candidate in model registry.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
           "action": "register_model",
           "run_id.$": "$.run_id",
           "candidate_model_id.$": "$.candidate_model_id",
-          "comparison.$": "$.comparison.Payload",
+          "evaluation.$": "$.evaluation.Payload",
           "artifacts_bucket": "${artifacts_bucket}"
         }
       },
@@ -269,134 +95,47 @@
           "BackoffRate": 2
         }
       ],
-      "Next": "CheckGateResult"
-    },
-    "CheckGateResult": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.comparison.Payload.promote",
-          "BooleanEquals": true,
-          "Next": "SmokeTest"
-        }
-      ],
-      "Default": "NotifyResult"
-    },
-    "SmokeTest": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Send known inputs to the candidate model and assert expected output shape and polarity.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "smoke_test",
-          "run_id.$": "$.run_id",
-          "candidate_model_id.$": "$.candidate_model_id",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.smoke_test",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
-          "IntervalSeconds": 5,
-          "MaxAttempts": 2,
-          "BackoffRate": 2
-        }
-      ],
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
           "ResultPath": "$.error",
-          "Next": "NotifyResult"
-        }
-      ],
-      "Next": "PromoteOrReject"
-    },
-    "PromoteOrReject": {
-      "Type": "Choice",
-      "Choices": [
-        {
-          "Variable": "$.smoke_test.Payload.passed",
-          "BooleanEquals": true,
-          "Next": "PromoteModel"
-        }
-      ],
-      "Default": "NotifyResult"
-    },
-    "PromoteModel": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Set candidate to PRODUCTION in the registry; set previous production to PREVIOUS_PRODUCTION.",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "promote_model",
-          "run_id.$": "$.run_id",
-          "candidate_model_id.$": "$.candidate_model_id",
-          "base_model_id.$": "$.base_model_id",
-          "artifacts_bucket": "${artifacts_bucket}"
-        }
-      },
-      "ResultPath": "$.promotion",
-      "Retry": [
-        {
-          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
-          "IntervalSeconds": 5,
-          "MaxAttempts": 3,
-          "BackoffRate": 2
+          "Next": "NotifyFailure"
         }
       ],
       "Next": "NotifyResult"
     },
-    "DatasetRejected": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "notify",
-          "run_id.$": "$.run_id",
-          "outcome": "DATASET_REJECTED",
-          "reason.$": "$.error"
-        }
-      },
-      "ResultPath": "$.notify",
-      "Next": "PipelineFailed"
-    },
-    "TrainingRejected": {
-      "Type": "Task",
-      "Resource": "arn:aws:states:::lambda:invoke",
-      "Parameters": {
-        "FunctionName": "${pipeline_lambda_arn}",
-        "Payload": {
-          "action": "notify",
-          "run_id.$": "$.run_id",
-          "outcome": "TRAINING_REJECTED",
-          "reason.$": "$.error"
-        }
-      },
-      "ResultPath": "$.notify",
-      "Next": "PipelineFailed"
-    },
     "NotifyResult": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Write final run status to DynamoDB and optionally trigger downstream notifications.",
+      "Comment": "Persist final run status.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
           "action": "notify",
           "run_id.$": "$.run_id",
           "candidate_model_id.$": "$.candidate_model_id",
-          "comparison.$": "$.comparison.Payload",
-          "smoke_test.$": "$.smoke_test",
-          "promotion.$": "$.promotion",
+          "evaluation.$": "$.evaluation.Payload",
+          "registry.$": "$.registry.Payload",
           "outcome": "COMPLETED"
         }
       },
       "ResultPath": "$.notify",
       "Next": "PipelineSucceeded"
+    },
+    "NotifyFailure": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "notify",
+          "run_id.$": "$.run_id",
+          "outcome": "FAILED",
+          "reason.$": "$.error"
+        }
+      },
+      "ResultPath": "$.notify",
+      "Next": "PipelineFailed"
     },
     "PipelineSucceeded": {
       "Type": "Succeed"
@@ -404,7 +143,7 @@
     "PipelineFailed": {
       "Type": "Fail",
       "Error": "PipelineFailed",
-      "Cause": "Pipeline did not reach promotion. Check run record in DynamoDB for details."
+      "Cause": "Training pipeline failed. Check CloudWatch logs and training run record."
     }
   }
 }
