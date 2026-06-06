@@ -1,3 +1,4 @@
+# Run from branch: refactor/terraform-bootstrap-core-runtime
 # One-time per AWS account: creates tf state bucket, lock table, GitHub OIDC provider, deploy role.
 # Requires AWS_ROLE_TO_ASSUME with permissions to create S3, DynamoDB, and IAM OIDC.
 # After first apply, switch AWS_ROLE_TO_ASSUME to the github_deploy_role_arn output.
@@ -29,6 +30,7 @@ jobs:
       TF_VAR_github_org: ${{ github.repository_owner }}
       TF_VAR_github_repo: ${{ github.event.repository.name }}
       TF_VAR_budget_alert_email: ${{ vars.BUDGET_ALERT_EMAIL || '' }}
+      TF_VAR_deploy_branches: '["refactor/terraform-bootstrap-core-runtime"]'
     steps:
       - uses: actions/checkout@v4
 

@@ -31,7 +31,7 @@ variable "github_repo" {
 variable "deploy_branches" {
   description = "Branches that may assume the GitHub deploy role."
   type        = list(string)
-  default     = ["main"]
+  default     = ["refactor/terraform-bootstrap-core-runtime"]
 }
 
 variable "monthly_budget_usd" {

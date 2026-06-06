@@ -1,8 +1,13 @@
 name: PR Validate
 
 on:
+  push:
+    branches:
+      - refactor/terraform-bootstrap-core-runtime
   pull_request:
-    branches: [main]
+    branches:
+      - refactor/terraform-bootstrap-core-runtime
+      - develop
     paths:
       - "infrastructure/**"
       - "lambda/**"

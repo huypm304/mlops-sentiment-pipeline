@@ -10,7 +10,7 @@ owner       = "minh-huy"
 github_org  = "your-github-username"
 github_repo = "mlops-sentiment-pipeline"
 
-deploy_branches = ["main"]
+deploy_branches = ["refactor/terraform-bootstrap-core-runtime"]
 
 # Budget alert — set to 0 to disable
 monthly_budget_usd = 20

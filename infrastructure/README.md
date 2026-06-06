@@ -218,6 +218,11 @@ temp/                     Scratch space — expired after 3 days
 
 ## CI/CD (GitHub Actions)
 
+**Active branch:** `refactor/terraform-bootstrap-core-runtime` (not `develop`).
+
+Workflow files live on this branch. In GitHub → **Actions**, use the branch dropdown to select
+`refactor/terraform-bootstrap-core-runtime` if the default branch has not been switched yet.
+
 Configure repository **Variables** and **Secrets** first:
 
 | Name | Type | Example |
@@ -254,6 +259,8 @@ Expensive services are **disabled by default**. When running **Deploy Runtime** 
 If either SageMaker flag is `true`, you must type **`I-ACCEPT-SAGEMAKER-COST`** in `cost_acknowledgement`.
 
 **Demo-safe defaults:** leave both SageMaker flags at `false`. Use **Plan Runtime** first to preview changes without applying.
+
+OIDC deploy role trusts branch **`refactor/terraform-bootstrap-core-runtime`** only. Re-run **Deploy Bootstrap** if you change `deploy_branches`.
 
 Composite action: `.github/actions/terraform-stack/`.
 
