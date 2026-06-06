@@ -68,7 +68,7 @@ runs:
       run: |
         set -euo pipefail
         if [[ "${{ inputs.stack }}" == "bootstrap" ]]; then
-          terraform init -input=false -backend=false
+          terraform init -input=false
         else
           if [[ -z "${TF_STATE_BUCKET:-}" ]]; then
             echo "::error::Variable TF_STATE_BUCKET is not set. Run deploy-bootstrap first."

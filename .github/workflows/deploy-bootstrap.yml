@@ -38,6 +38,7 @@ jobs:
         working-directory: infrastructure/terraform/bootstrap
         shell: bash
         run: |
+          terraform init -input=false
           echo "## Bootstrap outputs" >> "$GITHUB_STEP_SUMMARY"
           terraform output -json | python3 -c "
           import json, sys
