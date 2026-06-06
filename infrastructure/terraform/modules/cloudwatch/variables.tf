@@ -6,6 +6,11 @@ variable "environment" {
   type = string
 }
 
+variable "aws_region" {
+  description = "AWS region for CloudWatch dashboard metric widgets."
+  type        = string
+}
+
 variable "lambda_function_names" {
   description = "Lambda function names to attach error alarms and dashboard widgets."
   type        = list(string)

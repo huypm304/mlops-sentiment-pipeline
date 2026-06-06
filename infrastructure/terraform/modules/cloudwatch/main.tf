@@ -109,6 +109,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Lambda Errors"
+          region = var.aws_region
           period = 300
           stat   = "Sum"
           view   = "timeSeries"
@@ -126,6 +127,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Lambda Duration (avg ms)"
+          region = var.aws_region
           period = 300
           stat   = "Average"
           view   = "timeSeries"
@@ -143,6 +145,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Lambda Invocations"
+          region = var.aws_region
           period = 300
           stat   = "Sum"
           view   = "timeSeries"
@@ -160,6 +163,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "API 4xx / 5xx"
+          region = var.aws_region
           period = 300
           stat   = "Sum"
           view   = "timeSeries"
@@ -177,6 +181,7 @@ resource "aws_cloudwatch_dashboard" "main" {
         height = 6
         properties = {
           title  = "Step Functions Executions"
+          region = var.aws_region
           period = 300
           stat   = "Sum"
           view   = "timeSeries"

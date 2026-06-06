@@ -250,6 +250,7 @@ module "cloudwatch" {
 
   project_name = var.project
   environment  = var.environment
+  aws_region   = var.aws_region
 
   lambda_function_names = [
     module.lambda_predict.function_name,
