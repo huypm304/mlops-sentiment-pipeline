@@ -30,6 +30,18 @@ variable "state_machine_arn" {
   default     = ""
 }
 
+variable "enable_api_5xx_alarm" {
+  description = "Create API Gateway 5xx CloudWatch alarm."
+  type        = bool
+  default     = false
+}
+
+variable "enable_sfn_failed_alarm" {
+  description = "Create Step Functions failed-executions CloudWatch alarm."
+  type        = bool
+  default     = false
+}
+
 variable "lambda_error_threshold" {
   description = "Number of Lambda errors per 5 min period before alarm fires."
   type        = number

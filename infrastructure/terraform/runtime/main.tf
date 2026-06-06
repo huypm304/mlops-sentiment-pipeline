@@ -259,7 +259,10 @@ module "cloudwatch" {
   ]
 
   api_gateway_id    = module.api_gateway.api_id
-  state_machine_arn = module.step_functions.state_machine_arn
+  state_machine_arn = local.state_machine_arn
+
+  enable_api_5xx_alarm  = true
+  enable_sfn_failed_alarm = true
 }
 
 # ---------------------------------------------------------------------------

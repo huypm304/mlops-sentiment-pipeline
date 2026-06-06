@@ -40,7 +40,7 @@ resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "api_5xx" {
-  count = var.api_gateway_id != "" ? 1 : 0
+  count = var.enable_api_5xx_alarm ? 1 : 0
 
   alarm_name          = "${local.name_prefix}-api-5xx"
   comparison_operator = "GreaterThanThreshold"
@@ -65,7 +65,7 @@ resource "aws_cloudwatch_metric_alarm" "api_5xx" {
 # ---------------------------------------------------------------------------
 
 resource "aws_cloudwatch_metric_alarm" "sfn_failed" {
-  count = var.state_machine_arn != "" ? 1 : 0
+  count = var.enable_sfn_failed_alarm ? 1 : 0
 
   alarm_name          = "${local.name_prefix}-sfn-failed"
   comparison_operator = "GreaterThanThreshold"
@@ -163,7 +163,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
           stat   = "Sum"
           view   = "timeSeries"
-          metrics = var.api_gateway_id != "" ? [
+          metrics = var.enable_api_5xx_alarm ? [
             ["AWS/ApiGateway", "4XXError", "ApiId", var.api_gateway_id, "Stage", "$default"],
             ["AWS/ApiGateway", "5XXError", "ApiId", var.api_gateway_id, "Stage", "$default"],
           ] : []
@@ -180,7 +180,7 @@ resource "aws_cloudwatch_dashboard" "main" {
           period = 300
           stat   = "Sum"
           view   = "timeSeries"
-          metrics = var.state_machine_arn != "" ? [
+          metrics = var.enable_sfn_failed_alarm ? [
             ["AWS/States", "ExecutionsStarted", "StateMachineArn", var.state_machine_arn],
             ["AWS/States", "ExecutionsSucceeded", "StateMachineArn", var.state_machine_arn],
             ["AWS/States", "ExecutionsFailed", "StateMachineArn", var.state_machine_arn],
