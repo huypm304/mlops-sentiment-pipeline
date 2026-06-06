@@ -113,13 +113,15 @@ module "lambda_predict" {
   source_path        = "${local.lambda_root}/.build/predict"
   runtime            = var.lambda_runtime
   memory_size        = var.lambda_memory_mb
-  timeout            = var.lambda_timeout_seconds
+  timeout            = 60
   log_retention_days = var.log_retention_days
   common_tags        = local.common_tags
 
   environment_variables = merge(local.lambda_env, {
     SAGEMAKER_ENDPOINT_NAME   = module.sagemaker_optional.endpoint_name
     ENABLE_SAGEMAKER_ENDPOINT = tostring(var.enable_sagemaker_endpoint)
+    PRODUCTION_MODEL_ID       = "absa-v1"
+    AWS_REGION                = var.aws_region
   })
 }
 

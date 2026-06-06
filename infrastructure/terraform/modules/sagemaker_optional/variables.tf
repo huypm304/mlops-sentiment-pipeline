@@ -30,10 +30,10 @@ variable "instance_type" {
   default     = "ml.m5.large"
 }
 
-variable "model_s3_prefix" {
-  description = "S3 prefix (without bucket) where the production model artifact lives."
+variable "model_s3_key" {
+  description = "S3 object key for the SageMaker model.tar.gz artifact."
   type        = string
-  default     = "models/production/"
+  default     = "models/production/model.tar.gz"
 }
 
 variable "inference_image" {

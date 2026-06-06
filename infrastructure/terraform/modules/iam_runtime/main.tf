@@ -92,6 +92,17 @@ data "aws_iam_policy_document" "lambda_execution" {
   }
 
   statement {
+    sid    = "SageMakerInvokeEndpoint"
+    effect = "Allow"
+    actions = [
+      "sagemaker:InvokeEndpoint",
+    ]
+    resources = [
+      "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:endpoint/${local.name_prefix}-endpoint",
+    ]
+  }
+
+  statement {
     sid    = "XRayTracing"
     effect = "Allow"
     actions = [

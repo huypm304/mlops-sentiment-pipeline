@@ -2,7 +2,7 @@ locals {
   name_prefix   = "${var.project}-${var.environment}"
   endpoint_name = "${local.name_prefix}-endpoint"
   model_name    = "${local.name_prefix}-absa"
-  model_s3_uri  = "s3://${var.artifact_bucket_name}/${var.model_s3_prefix}"
+  model_s3_uri  = "s3://${var.artifact_bucket_name}/${var.model_s3_key}"
 
   # Default to public PyTorch inference image if no custom image is provided
   inference_image = var.inference_image != "" ? var.inference_image : "763104351884.dkr.ecr.${var.aws_region}.amazonaws.com/pytorch-inference:2.1.0-cpu-py311"
