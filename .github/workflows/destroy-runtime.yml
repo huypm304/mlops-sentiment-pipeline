@@ -13,7 +13,6 @@ on:
         default: true
 
 permissions:
-  id-token: write
   contents: read
 
 concurrency:
@@ -26,8 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: demo
     env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_STATE_KEY: runtime/terraform.tfstate

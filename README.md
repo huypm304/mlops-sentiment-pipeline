@@ -116,7 +116,7 @@ mlops-sentiment-pipeline/
 │
 ├── infrastructure/
 │   ├── terraform/
-│   │   ├── bootstrap/        # State bucket, OIDC, deploy role
+│   │   ├── bootstrap/        # State bucket, lock table, budget
 │   │   ├── core/             # S3 artifacts, DynamoDB registry
 │   │   ├── runtime/          # Lambda, API, Step Functions, CloudWatch
 │   │   └── modules/
@@ -226,7 +226,7 @@ Kiến trúc mới tách thành 3 stack độc lập (một môi trường `demo
 
 | Stack | Thư mục | Nội dung |
 |---|---|---|
-| Bootstrap | `infrastructure/terraform/bootstrap/` | S3 state, DynamoDB lock, GitHub OIDC |
+| Bootstrap | `infrastructure/terraform/bootstrap/` | S3 state, DynamoDB lock |
 | Core | `infrastructure/terraform/core/` | S3 artifacts, DynamoDB registry |
 | Runtime | `infrastructure/terraform/runtime/` | Lambda, API Gateway, Step Functions, CloudWatch |
 
@@ -264,7 +264,8 @@ Scripts:
 - Bật SageMaker → phải gõ `I-ACCEPT-SAGEMAKER-COST` vào `cost_acknowledgement`
 - Dùng **Plan Runtime** trước khi apply để xem thay đổi
 
-Cần cấu hình GitHub Variables/Secrets: `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`, `AWS_ROLE_TO_ASSUME`.
+Cần cấu hình GitHub Secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
+Variables: `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`
 
 ---
 
@@ -305,12 +306,13 @@ print(run_dataset_audit(Path('model/demo_10.jsonl'))['passed'])
 
 ## Triển khai AWS (tóm tắt)
 
-1. Cấu hình GitHub Variables/Secrets (`AWS_ROLE_TO_ASSUME`, `TF_STATE_BUCKET`, …)
-2. Chạy workflow **Deploy Bootstrap** (hoặc `./scripts/bootstrap_apply.sh` local)
-3. Chạy **Deploy Core**
-4. Chạy **Deploy Runtime**
-5. Upload model baseline: `./scripts/upload_model.sh model models/v1`
-6. Trỏ frontend `NEXT_PUBLIC_API_URL` tới `api_url` output
+1. Tạo IAM user + access key trên AWS
+2. Cấu hình GitHub Secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) và Variables
+3. Chạy workflow **Deploy Bootstrap**
+4. Chạy **Deploy Core**
+5. Chạy **Deploy Runtime**
+6. Upload model baseline: `./scripts/upload_model.sh model models/v1`
+7. Trỏ frontend `NEXT_PUBLIC_API_URL` tới `api_url` output
 
 ---
 

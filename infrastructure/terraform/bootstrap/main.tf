@@ -74,21 +74,6 @@ resource "aws_dynamodb_table" "tf_locks" {
 }
 
 # ---------------------------------------------------------------------------
-# GitHub Actions OIDC provider + deploy role
-# ---------------------------------------------------------------------------
-
-module "iam_github_oidc" {
-  source = "../modules/iam_github_oidc"
-
-  project         = var.project
-  environment     = var.environment
-  github_org      = var.github_org
-  github_repo     = var.github_repo
-  deploy_branches = var.deploy_branches
-  common_tags     = local.common_tags
-}
-
-# ---------------------------------------------------------------------------
 # Optional AWS Budget + SNS alarm
 # ---------------------------------------------------------------------------
 

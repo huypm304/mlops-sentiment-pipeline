@@ -13,7 +13,6 @@ on:
         default: true
 
 permissions:
-  id-token: write
   contents: read
 
 concurrency:
@@ -26,8 +25,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: demo
     env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
-      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
       TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
       TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
       TF_VAR_core_state_bucket: ${{ vars.TF_STATE_BUCKET }}
@@ -56,5 +56,5 @@ jobs:
         shell: bash
         run: |
           echo "## Destroy-all completed (or blocked)" >> "$GITHUB_STEP_SUMMARY"
-          echo "Bootstrap (state bucket, OIDC) was NOT destroyed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Bootstrap (state bucket) was NOT destroyed." >> "$GITHUB_STEP_SUMMARY"
           echo "If core destroy failed, the artifact bucket likely has prevent_destroy." >> "$GITHUB_STEP_SUMMARY"

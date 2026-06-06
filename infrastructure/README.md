@@ -11,8 +11,7 @@ bootstrap  →  core  →  runtime
 ```
 
 ```
-bootstrap/      Terraform state bucket, state lock table, GitHub OIDC provider,
-                GitHub Actions deploy role, optional AWS budget.
+bootstrap/      Terraform state bucket, state lock table, optional AWS budget.
                 Uses local backend. Applied once per AWS account. Rarely destroyed.
 
 core/           Artifact S3 bucket (datasets, models, reports, prediction logs).
@@ -29,7 +28,6 @@ runtime/        Lambda functions, HTTP API Gateway, Step Functions pipeline,
 modules/
   s3_artifacts/           Versioned, encrypted, lifecycle-managed artifact bucket.
   dynamodb_registry/      Seven DynamoDB tables for the MLOps data model.
-  iam_github_oidc/        GitHub Actions OIDC provider and deploy role.
   iam_runtime/            Lambda, Step Functions, and SageMaker IAM roles.
   lambda_function/        Lambda function with zip or image packaging.
   api_gateway_http/       HTTP API Gateway with all platform routes.
@@ -46,7 +44,7 @@ modules/
 ## Prerequisites
 
 - Terraform >= 1.5
-- AWS credentials configured (or GitHub OIDC for CI/CD)
+- AWS credentials configured locally, or GitHub Secrets for CI/CD
 - The bootstrap stack applied at least once
 
 ---
@@ -66,9 +64,8 @@ terraform apply
 ```
 
 After apply, note the outputs:
-- `tf_state_bucket`     → backend bucket for core and runtime
-- `tf_lock_table`       → DynamoDB lock table name
-- `github_deploy_role_arn` → set as `AWS_ROLE_ARN` in GitHub secrets
+- `tf_state_bucket`     → set GitHub Variable `TF_STATE_BUCKET`
+- `tf_lock_table`       → set GitHub Variable `TF_STATE_LOCK_TABLE`
 
 > Bootstrap state is stored locally (`terraform.tfstate`). Keep this file safe or store it manually in the state bucket.
 
@@ -140,7 +137,7 @@ terraform destroy
 
 **Destroyed:** Lambda functions, API Gateway, Step Functions, EventBridge rules, CloudWatch dashboard and alarms, IAM runtime roles, optional SageMaker endpoint.
 
-**Preserved:** All S3 artifacts (models, datasets, reports), all DynamoDB registry records, the Terraform state bucket, the GitHub OIDC provider and role.
+**Preserved:** All S3 artifacts (models, datasets, reports), all DynamoDB registry records, the Terraform state bucket and lock table.
 
 ### Preserve by default — `core`
 
@@ -157,8 +154,7 @@ terraform destroy   # will FAIL at the artifact bucket unless prevent_destroy is
 ### Almost never — `bootstrap`
 
 ```bash
-# DANGER — Destroys the Terraform state bucket (all other stacks must be destroyed first)
-# and the GitHub OIDC provider (CI/CD will stop working).
+# DANGER — Destroys the Terraform state bucket (all other stacks must be destroyed first).
 
 cd infrastructure/terraform/bootstrap
 terraform destroy
@@ -227,17 +223,20 @@ Configure repository **Variables** and **Secrets** first:
 
 | Name | Type | Example |
 |---|---|---|
+| `AWS_ACCESS_KEY_ID` | Secret | `AKIA...` (IAM user with deploy permissions) |
+| `AWS_SECRET_ACCESS_KEY` | Secret | from IAM console |
 | `AWS_REGION` | Variable | `ap-southeast-1` |
 | `TF_STATE_BUCKET` | Variable | `absa-mlops-demo-tf-state` |
 | `TF_STATE_LOCK_TABLE` | Variable | `absa-mlops-demo-tf-locks` |
 | `BUDGET_ALERT_EMAIL` | Variable | your email (optional) |
-| `AWS_ROLE_TO_ASSUME` | Secret | ARN from bootstrap output (or admin role for first bootstrap) |
+
+Set secrets on **repository** or **environment `demo`** (workflows use `environment: demo`).
 
 Deploy order on GitHub:
 
 | Workflow | Purpose |
 |---|---|
-| `deploy-bootstrap.yml` | Once per account — state bucket, OIDC, deploy role |
+| `deploy-bootstrap.yml` | Once per account — state bucket + lock table |
 | `deploy-core.yml` | S3 artifacts + DynamoDB registry |
 | `plan-runtime.yml` | Preview runtime plan + cost flags (no changes) |
 | `deploy-runtime.yml` | Lambda, API, Step Functions — **SageMaker OFF by default** |
@@ -259,8 +258,6 @@ Expensive services are **disabled by default**. When running **Deploy Runtime** 
 If either SageMaker flag is `true`, you must type **`I-ACCEPT-SAGEMAKER-COST`** in `cost_acknowledgement`.
 
 **Demo-safe defaults:** leave both SageMaker flags at `false`. Use **Plan Runtime** first to preview changes without applying.
-
-OIDC deploy role trusts branch **`refactor/terraform-bootstrap-core-runtime`** only. Re-run **Deploy Bootstrap** if you change `deploy_branches`.
 
 Composite action: `.github/actions/terraform-stack/`.
 

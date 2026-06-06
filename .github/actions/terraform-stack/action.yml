@@ -38,11 +38,21 @@ runs:
         terraform_version: 1.9.8
         terraform_wrapper: false
 
-    - name: Configure AWS credentials (OIDC)
+    - name: Verify AWS credentials secrets
+      if: inputs.command != 'fmt-check' && inputs.command != 'validate'
+      shell: bash
+      run: |
+        if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+          echo "::error::Set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY in GitHub Secrets (repository or environment demo)."
+          exit 1
+        fi
+
+    - name: Configure AWS credentials
       if: inputs.command != 'fmt-check' && inputs.command != 'validate'
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+        aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ env.AWS_REGION }}
 
     - name: Terraform fmt (check)

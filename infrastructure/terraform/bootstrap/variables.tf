@@ -18,22 +18,6 @@ variable "owner" {
   default = "minh-huy"
 }
 
-variable "github_org" {
-  description = "GitHub organisation or username."
-  type        = string
-}
-
-variable "github_repo" {
-  description = "GitHub repository name (without org prefix)."
-  type        = string
-}
-
-variable "deploy_branches" {
-  description = "Branches that may assume the GitHub deploy role."
-  type        = list(string)
-  default     = ["refactor/terraform-bootstrap-core-runtime"]
-}
-
 variable "monthly_budget_usd" {
   description = "Monthly AWS spend limit in USD. Set 0 to disable."
   type        = number
