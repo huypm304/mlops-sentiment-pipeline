@@ -1,0 +1,4 @@
+# Generated locally — do not commit artifact contents.
+#
+#   python scripts/export_model_artifacts.py --copy-checkpoint --output-dir final_artifacts/model
+#   ./scripts/package_sagemaker_model.sh --upload --bucket <artifacts-bucket>

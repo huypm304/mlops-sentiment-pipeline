@@ -1,3 +1,0 @@
-{"text": "Giá mềm, chất vải mát, nhưng giao hàng làm mình chờ hơi lâu.", "opinions": [{"target": "Giá", "aspect": "Price", "sentiment": "POS"}, {"target": "chất vải", "aspect": "Fashion", "sentiment": "POS"}, {"target": "giao hàng", "aspect": "Ship", "sentiment": "NEG"}], "global_sentiment": "NEU", "source": "demo"}
-{"text": "App load chậm, dịch vụ hỗ trợ nhiệt tình.", "opinions": [{"target": "App", "aspect": "App", "sentiment": "NEG"}, {"target": "dịch vụ hỗ trợ", "aspect": "Service", "sentiment": "POS"}], "global_sentiment": "NEU", "source": "demo"}
-{"text": "Sản phẩm y hình, đúng mô tả, hàng chắc chắn.", "opinions": [{"target": "Sản phẩm", "aspect": "General", "sentiment": "POS"}], "global_sentiment": "POS", "source": "demo"}

@@ -1,7 +1,0 @@
-e972510572f48368de4dce6a9b2fd1a6  label_mapping.json
-4d2619798c4365f7b00b93a55c86621a  model_card.json
-0841b3f4f89678f720885b7d86ae5425  pointer.txt
-9e8615106d0805fd2abca53f02f1fa0e  postprocess_config.json
-f81fda241181fbf4dc2fc940e47719eb  requirements.txt
-e1deb0fc1c3e7d60692c6b31f95933ee  run_config.json
-2e66d9a8f51f0efaad6654cf61610f25  tokenizer_info.json

@@ -1,9 +1,0 @@
-{
-  "model_name": "Fsoft-AIC/videberta-base",
-  "max_len": 192,
-  "return_offsets_mapping": true,
-  "return_special_tokens_mask": true,
-  "padding": "max_length",
-  "truncation": true,
-  "notes": "Uses AutoTokenizer.from_pretrained(model_name)"
-}

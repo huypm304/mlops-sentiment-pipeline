@@ -1,3 +1,0 @@
-# Checkpoint pointer
-path=/media/mhuy/Data1/study/mlops-sentiment-pipeline/model/best_model.pt
-md5=a98655f2504b4b6d53c6fd17071931e7
