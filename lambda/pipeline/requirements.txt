@@ -1,0 +1,1 @@
+# Pipeline Lambda dependencies (add boto3 stubs as needed)

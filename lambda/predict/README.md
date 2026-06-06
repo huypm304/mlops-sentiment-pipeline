@@ -20,4 +20,4 @@ HTTP API handler for Vietnamese ABSA inference.
 python -c "from handler import lambda_handler; print(lambda_handler({'body':'{\"text\":\"san pham dep\"}','rawPath':'/predict'}, None))"
 ```
 
-Deploy with `scripts/deploy_lambda.sh predict`.
+Deploy via Terraform runtime stack (`./scripts/runtime_apply.sh`) or GitHub workflow **Deploy Runtime**.

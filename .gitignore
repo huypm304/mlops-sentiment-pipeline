@@ -95,6 +95,7 @@ terraform.tfvars
 !**/terraform.tfvars.example
 # Lambda zip artifacts from terraform archive / deploy
 infrastructure/terraform/modules/lambda/build/
+infrastructure/terraform/modules/lambda_function/build/
 *.zip
 
 # --- Deploy / CI build output ---
@@ -128,10 +129,17 @@ skills-lock.json
 
 # Agent instruction files (Cursor, Claude Code, Copilot, etc.)
 AGENTS.md
+AGENT.md
 CLAUDE.md
 **/AGENTS.md
 **/CLAUDE.md
 **/SKILL.md
+
+# Agent guides, prompts, and skill docs (local AI workflow)
+docs/agent/
+absa_mlops_agent_docs/
+06_COPY_PASTE_AGENT_PROMPTS.md
+**/06_COPY_PASTE_AGENT_PROMPTS.md
 
 # Optional tool-specific agent dirs
 .codex/

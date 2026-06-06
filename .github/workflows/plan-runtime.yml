@@ -1,0 +1,72 @@
+# Preview runtime changes and cost flags before apply. Does NOT modify AWS.
+name: Plan Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      enable_sagemaker_endpoint:
+        description: "COSTLY (~$50+/mo): SageMaker inference endpoint"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      enable_sagemaker_training:
+        description: "COSTLY (~$1–10+/run): Real SageMaker training jobs"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      sagemaker_instance_type:
+        description: SageMaker endpoint instance type
+        type: choice
+        options:
+          - ml.m5.large
+          - ml.m5.xlarge
+          - ml.c5.large
+          - ml.t3.medium
+        default: ml.m5.large
+      enable_eventbridge_monitoring:
+        description: EventBridge monitoring schedules
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: absa-mlops-runtime-plan
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      AWS_ROLE_TO_ASSUME: ${{ secrets.AWS_ROLE_TO_ASSUME }}
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_LOCK_TABLE: ${{ vars.TF_STATE_LOCK_TABLE }}
+      TF_STATE_KEY: runtime/terraform.tfstate
+      TF_VAR_core_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cost preview
+        shell: bash
+        run: |
+          echo "## Plan Runtime — cost flags" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Flag | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| enable_sagemaker_endpoint | ${{ inputs.enable_sagemaker_endpoint }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| enable_sagemaker_training | ${{ inputs.enable_sagemaker_training }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| sagemaker_instance_type | ${{ inputs.sagemaker_instance_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| enable_eventbridge_monitoring | ${{ inputs.enable_eventbridge_monitoring }} |" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: runtime
+          command: plan
+          enable_sagemaker_endpoint: ${{ inputs.enable_sagemaker_endpoint }}
+          enable_sagemaker_training: ${{ inputs.enable_sagemaker_training }}
+          enable_eventbridge_monitoring: ${{ inputs.enable_eventbridge_monitoring }}
+          sagemaker_instance_type: ${{ inputs.sagemaker_instance_type }}

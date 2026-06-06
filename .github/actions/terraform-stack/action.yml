@@ -1,0 +1,132 @@
+name: Terraform Stack
+description: Init, validate, plan, apply, or destroy a bootstrap/core/runtime stack
+
+inputs:
+  stack:
+    description: bootstrap | core | runtime
+    required: true
+  command:
+    description: fmt-check | validate | plan | apply | destroy
+    required: true
+  auto_approve:
+    description: Skip interactive approval for apply/destroy
+    required: false
+    default: "true"
+  enable_sagemaker_endpoint:
+    description: Runtime only — create SageMaker inference endpoint (~$50+/month if always on)
+    required: false
+    default: "false"
+  enable_sagemaker_training:
+    description: Runtime only — wire real SageMaker training jobs (~$1–10+ per run)
+    required: false
+    default: "false"
+  enable_eventbridge_monitoring:
+    description: Runtime only — hourly EventBridge monitoring schedules (low cost)
+    required: false
+    default: "true"
+  sagemaker_instance_type:
+    description: Runtime only — SageMaker endpoint instance type when endpoint is enabled
+    required: false
+    default: "ml.m5.large"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.9.8
+        terraform_wrapper: false
+
+    - name: Configure AWS credentials (OIDC)
+      if: inputs.command != 'fmt-check' && inputs.command != 'validate'
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ env.AWS_ROLE_TO_ASSUME }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Terraform fmt (check)
+      if: inputs.command == 'fmt-check'
+      shell: bash
+      run: terraform fmt -check -recursive
+      working-directory: infrastructure/terraform
+
+    - name: Terraform init
+      if: inputs.command != 'fmt-check'
+      shell: bash
+      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      run: |
+        set -euo pipefail
+        if [[ "${{ inputs.stack }}" == "bootstrap" ]]; then
+          terraform init -input=false -backend=false
+        else
+          if [[ -z "${TF_STATE_BUCKET:-}" ]]; then
+            echo "::error::Variable TF_STATE_BUCKET is not set. Run deploy-bootstrap first."
+            exit 1
+          fi
+          terraform init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}"
+        fi
+
+    - name: Terraform validate
+      if: inputs.command == 'validate' || inputs.command == 'plan' || inputs.command == 'apply' || inputs.command == 'destroy'
+      shell: bash
+      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      run: terraform validate
+
+    - name: Terraform plan
+      if: inputs.command == 'plan'
+      shell: bash
+      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      run: |
+        EXTRA_ARGS=()
+        if [[ "${{ inputs.stack }}" == "runtime" ]]; then
+          EXTRA_ARGS+=(
+            -var="enable_sagemaker_endpoint=${{ inputs.enable_sagemaker_endpoint }}"
+            -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
+            -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
+            -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+          )
+          if [[ -n "${TF_STATE_BUCKET:-}" ]]; then
+            EXTRA_ARGS+=(-var="core_state_bucket=${TF_STATE_BUCKET}")
+          fi
+        fi
+        terraform plan -input=false -no-color "${EXTRA_ARGS[@]}"
+
+    - name: Terraform apply
+      if: inputs.command == 'apply'
+      shell: bash
+      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      run: |
+        EXTRA_ARGS=()
+        if [[ "${{ inputs.stack }}" == "runtime" ]]; then
+          EXTRA_ARGS+=(
+            -var="enable_sagemaker_endpoint=${{ inputs.enable_sagemaker_endpoint }}"
+            -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
+            -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
+            -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+          )
+          if [[ -n "${TF_STATE_BUCKET:-}" ]]; then
+            EXTRA_ARGS+=(-var="core_state_bucket=${TF_STATE_BUCKET}")
+          fi
+        fi
+        if [[ "${{ inputs.auto_approve }}" == "true" ]]; then
+          terraform apply -input=false -auto-approve "${EXTRA_ARGS[@]}"
+        else
+          terraform apply -input=false "${EXTRA_ARGS[@]}"
+        fi
+
+    - name: Terraform destroy
+      if: inputs.command == 'destroy'
+      shell: bash
+      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      run: |
+        if [[ "${{ inputs.auto_approve }}" == "true" ]]; then
+          terraform destroy -input=false -auto-approve
+        else
+          terraform destroy -input=false
+        fi

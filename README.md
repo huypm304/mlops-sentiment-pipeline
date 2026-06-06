@@ -108,23 +108,24 @@ mlops-sentiment-pipeline/
 ├── train/                    # Notebook/script huấn luyện phiên bản Kaggle (legacy)
 │
 ├── lambda/                   # Handlers triển khai AWS
-│   ├── predict/              # Proxy inference → SageMaker (scaffold)
-│   ├── audit/                # Audit dataset từ S3 / Step Functions
+│   ├── predict/              # Inference API
+│   ├── audit/                # Dataset audit + presign upload
 │   │   └── dataset_audit/    # Engine: validators, benchmarks, engine
-│   ├── analytics/            # Analytics serverless (scaffold)
-│   └── retrain_trigger/      # Khởi chạy Step Functions retrain
+│   ├── pipeline/             # Training pipeline trigger + Step Functions tasks
+│   └── metrics/              # Monitoring, drift, review queue
 │
 ├── infrastructure/
-│   ├── terraform/            # IaC root + environments (dev, prod)
-│   │   ├── modules/          # lambda, api_gateway, s3, iam, sagemaker, …
-│   │   └── environments/
-│   └── step-functions/
-│       └── retrain-pipeline.asl.json   # Định nghĩa workflow tái huấn luyện
+│   ├── terraform/
+│   │   ├── bootstrap/        # State bucket, OIDC, deploy role
+│   │   ├── core/             # S3 artifacts, DynamoDB registry
+│   │   ├── runtime/          # Lambda, API, Step Functions, CloudWatch
+│   │   └── modules/
+│   └── README.md
 │
-├── scripts/                  # Shell: terraform, deploy lambda, upload S3, DNS
+├── scripts/                  # bootstrap/core/runtime apply, upload S3, DNS
 ├── reports/                  # Audit JSON & inference log (local, gitignored một phần)
 ├── docs/                     # Tài liệu kiến trúc
-└── .github/workflows/        # Terraform apply/destroy/PR
+└── .github/workflows/        # deploy-bootstrap/core/runtime, destroy, pr-validate
 ```
 
 ---
@@ -211,9 +212,9 @@ Raw JSONL → Normalize → Audit → Clean → Split → Train → Evaluate
 
 **Audit kiểm tra:** parse JSONL, span offset, schema aspect, polarity, duplicate opinions, global consistency (xem `lambda/audit/README.md`).
 
-**Step Functions** (`infrastructure/step-functions/retrain-pipeline.asl.json`):
+**Step Functions** (`infrastructure/terraform/modules/step_functions/training_pipeline.asl.json`):
 
-`Upload → Audit → Clean → Train → Evaluate → Register → Deploy`
+`ValidateDataset → EstimateCost → CheckApproval → StartTraining → Evaluate → Calibrate → Compare → Gate → Register → SmokeTest → Promote/Reject → Notify`
 
 Báo cáo audit local lưu tại `reports/audit/`; inference log tại `reports/monitoring/inference_log.jsonl`.
 
@@ -221,10 +222,26 @@ Báo cáo audit local lưu tại `reports/audit/`; inference log tại `reports/
 
 ## Hạ tầng Terraform
 
-- **Root:** `infrastructure/terraform/` — wiring S3, IAM, 4 Lambda, SageMaker, Step Functions, API Gateway, CloudWatch, Route53/ACM (tùy domain).
-- **Môi trường:** `environments/dev`, `environments/prod` — `terraform.tfvars`, backend S3 state.
+Kiến trúc mới tách thành 3 stack độc lập (một môi trường `demo`):
 
-Scripts tiện ích: `scripts/terraform_apply.sh`, `deploy_lambda.sh`, `upload_dataset.sh`, `upload_model.sh`, `bootstrap_tf_state.sh`.
+| Stack | Thư mục | Nội dung |
+|---|---|---|
+| Bootstrap | `infrastructure/terraform/bootstrap/` | S3 state, DynamoDB lock, GitHub OIDC |
+| Core | `infrastructure/terraform/core/` | S3 artifacts, DynamoDB registry |
+| Runtime | `infrastructure/terraform/runtime/` | Lambda, API Gateway, Step Functions, CloudWatch |
+
+Chi tiết: [`infrastructure/README.md`](infrastructure/README.md)
+
+Scripts:
+
+```bash
+./scripts/bootstrap_apply.sh   # once per account
+./scripts/core_apply.sh
+./scripts/runtime_apply.sh
+./scripts/runtime_destroy.sh     # safe — keeps core data
+./scripts/upload_model.sh
+./scripts/upload_dataset.sh
+```
 
 ---
 
@@ -232,11 +249,22 @@ Scripts tiện ích: `scripts/terraform_apply.sh`, `deploy_lambda.sh`, `upload_d
 
 | Workflow | Mục đích |
 |----------|----------|
-| `terraform-pr.yml` | Validate/plan trên PR |
-| `terraform-apply.yml` | `workflow_dispatch` apply (dev/prod) |
-| `terraform-destroy.yml` | Hủy infra (cẩn trọng) |
+| `pr-validate.yml` | Validate Terraform + frontend trên PR |
+| `deploy-bootstrap.yml` | Bootstrap (1 lần/account) |
+| `deploy-core.yml` | Deploy core/stateful |
+| `plan-runtime.yml` | Xem plan + cost flags (không apply) |
+| `deploy-runtime.yml` | Deploy runtime — SageMaker **tắt mặc định** |
+| `destroy-runtime.yml` | Hủy runtime (giữ artifacts + registry) |
+| `destroy-all-danger.yml` | Hủy runtime + core (nguy hiểm) |
 
-Composite action: `.github/actions/terraform/`.
+**Kiểm soát chi phí khi Deploy Runtime:**
+
+- `enable_sagemaker_endpoint` = `false` (mặc định) — tránh ~$50+/tháng
+- `enable_sagemaker_training` = `false` (mặc định) — tránh ~$1–10+/job
+- Bật SageMaker → phải gõ `I-ACCEPT-SAGEMAKER-COST` vào `cost_acknowledgement`
+- Dùng **Plan Runtime** trước khi apply để xem thay đổi
+
+Cần cấu hình GitHub Variables/Secrets: `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`, `AWS_ROLE_TO_ASSUME`.
 
 ---
 
@@ -277,11 +305,12 @@ print(run_dataset_audit(Path('model/demo_10.jsonl'))['passed'])
 
 ## Triển khai AWS (tóm tắt)
 
-1. Bootstrap state: `scripts/bootstrap_tf_state.sh`
-2. Cấu hình secrets GitHub: `AWS_*`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`
-3. Apply Terraform: `scripts/terraform_apply.sh` hoặc workflow **Terraform Apply**
-4. Upload dataset/model lên S3 bucket artifact
-5. Trỏ frontend `NEXT_PUBLIC_API_URL` tới API Gateway custom domain
+1. Cấu hình GitHub Variables/Secrets (`AWS_ROLE_TO_ASSUME`, `TF_STATE_BUCKET`, …)
+2. Chạy workflow **Deploy Bootstrap** (hoặc `./scripts/bootstrap_apply.sh` local)
+3. Chạy **Deploy Core**
+4. Chạy **Deploy Runtime**
+5. Upload model baseline: `./scripts/upload_model.sh model models/v1`
+6. Trỏ frontend `NEXT_PUBLIC_API_URL` tới `api_url` output
 
 ---
 

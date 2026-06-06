@@ -1,0 +1,60 @@
+name: PR Validate
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "infrastructure/**"
+      - "lambda/**"
+      - ".github/**"
+      - "frontend/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-validate-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform-fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: bootstrap
+          command: fmt-check
+
+  terraform-validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        stack: [bootstrap, core, runtime]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - name: Init and validate ${{ matrix.stack }}
+        working-directory: infrastructure/terraform/${{ matrix.stack }}
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm run typecheck --if-present
