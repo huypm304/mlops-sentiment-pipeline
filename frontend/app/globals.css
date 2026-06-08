@@ -133,49 +133,7 @@
 }
 
 @layer utilities {
-  .glass-panel {
-    @apply rounded-xl border border-white/[0.08] bg-white/[0.03] shadow-sm backdrop-blur-xl;
-  }
-
-  .dark .glass-panel {
-    @apply border-white/[0.08] bg-white/[0.03];
-  }
-
-  .glass-panel-strong {
-    @apply rounded-xl border border-white/[0.1] bg-white/[0.05] shadow-lg shadow-black/20 backdrop-blur-2xl;
-  }
-
-  .text-gradient {
-    @apply bg-gradient-to-r from-foreground via-foreground to-muted-foreground bg-clip-text text-transparent;
-  }
-
-  .accent-gradient {
-    background: linear-gradient(
-      135deg,
-      oklch(0.72 0.14 220 / 0.15) 0%,
-      oklch(0.65 0.12 260 / 0.05) 100%
-    );
-  }
-
-  .dashboard-mesh {
-    background-image:
-      radial-gradient(
-        ellipse 80% 50% at 50% -20%,
-        oklch(0.55 0.14 220 / 0.12),
-        transparent
-      ),
-      radial-gradient(
-        ellipse 60% 40% at 100% 0%,
-        oklch(0.5 0.1 260 / 0.08),
-        transparent
-      );
-  }
-
-  .grid-fade {
-    background-image:
-      linear-gradient(oklch(1 0 0 / 3%) 1px, transparent 1px),
-      linear-gradient(90deg, oklch(1 0 0 / 3%) 1px, transparent 1px);
-    background-size: 48px 48px;
-    mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black, transparent);
+  .surface {
+    @apply rounded-md border border-border bg-card;
   }
 }

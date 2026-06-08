@@ -45,12 +45,12 @@ export function AppShell({
       <SidebarProvider
         style={
           {
-            "--sidebar-width": "13.5rem",
+            "--sidebar-width": "14.5rem",
             "--sidebar-width-icon": "3rem",
           } as React.CSSProperties
         }
       >
-        <Sidebar className="border-r border-border/60 bg-sidebar">
+        <Sidebar className="border-r border-border bg-sidebar">
           <SidebarHeader className="border-b border-border/60 p-2">
             <SidebarMenu>
               <SidebarMenuItem>
@@ -83,7 +83,7 @@ export function AppShell({
           <SidebarRail />
         </Sidebar>
         <SidebarInset>
-          <header className="flex h-10 shrink-0 items-center gap-2 border-b border-border/60 bg-background px-3">
+          <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border bg-background px-4">
             <SidebarTrigger className="-ml-1 size-7" />
             <Separator orientation="vertical" className="h-4 opacity-50" />
             {headerExtra}
@@ -96,7 +96,7 @@ export function AppShell({
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex flex-1 flex-col gap-4 p-4 md:p-5">{children}</main>
+          <main className="flex flex-1 flex-col gap-6 p-6">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
