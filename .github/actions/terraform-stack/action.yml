@@ -40,6 +40,10 @@ inputs:
     description: Runtime only — SageMaker endpoint instance type when endpoint is enabled
     required: false
     default: "ml.m5.large"
+  model_package_version:
+    description: Runtime — bump when models/production/model.tar.gz changes (forces SageMaker redeploy)
+    required: false
+    default: "v3"
 
 runs:
   using: composite
@@ -117,6 +121,7 @@ runs:
             -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
             -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
             -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+            -var="model_package_version=${{ inputs.model_package_version }}"
             -var="domain_name=${{ inputs.domain_name }}"
             -var="enable_custom_domain=${{ inputs.enable_custom_domain }}"
             -var="api_subdomain=${{ inputs.api_subdomain }}"
@@ -142,6 +147,7 @@ runs:
             -var="enable_sagemaker_training=${{ inputs.enable_sagemaker_training }}"
             -var="enable_eventbridge_monitoring=${{ inputs.enable_eventbridge_monitoring }}"
             -var="sagemaker_instance_type=${{ inputs.sagemaker_instance_type }}"
+            -var="model_package_version=${{ inputs.model_package_version }}"
             -var="domain_name=${{ inputs.domain_name }}"
             -var="enable_custom_domain=${{ inputs.enable_custom_domain }}"
             -var="api_subdomain=${{ inputs.api_subdomain }}"

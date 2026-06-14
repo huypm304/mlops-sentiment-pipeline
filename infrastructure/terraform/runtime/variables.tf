@@ -141,6 +141,12 @@ variable "sagemaker_instance_type" {
   default = "ml.m5.large"
 }
 
+variable "model_package_version" {
+  description = "Bump when models/production/model.tar.gz changes to force a new SageMaker model + endpoint."
+  type        = string
+  default     = "v3"
+}
+
 # ---------------------------------------------------------------------------
 # API / CORS
 # ---------------------------------------------------------------------------

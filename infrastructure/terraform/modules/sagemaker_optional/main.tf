@@ -45,7 +45,7 @@ variable "inference_image" {
 variable "model_package_version" {
   description = "Bump when model.tar.gz changes to force a new SageMaker model + endpoint config."
   type        = string
-  default     = "v2"
+  default     = "v3"
 }
 
 variable "aws_region" {
@@ -79,6 +79,10 @@ resource "aws_sagemaker_model" "absa" {
   name               = local.model_name
   execution_role_arn = var.sagemaker_execution_role_arn
 
+  lifecycle {
+    create_before_destroy = true
+  }
+
   primary_container {
     image          = local.inference_image
     model_data_url = local.model_s3_uri
@@ -94,6 +98,10 @@ resource "aws_sagemaker_endpoint_configuration" "absa" {
   count = var.enable_endpoint ? 1 : 0
 
   name = "${local.model_name}-config"
+
+  lifecycle {
+    create_before_destroy = true
+  }
 
   production_variants {
     variant_name           = "primary"
