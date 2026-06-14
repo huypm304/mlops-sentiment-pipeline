@@ -218,10 +218,9 @@ function UploadSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
         dev: devFile,
         test: testFile,
       })
-      try {
-        await auditDataset(manifest.dataset_id)
-      } catch {
-        /* non-fatal */
+      const audit = await auditDataset(manifest.dataset_id)
+      if (!audit.passed) {
+        setUploadError("Upload finished but audit failed — open the dataset to review the report.")
       }
       onSuccess()
     } catch (err) {

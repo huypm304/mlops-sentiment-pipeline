@@ -58,15 +58,20 @@ class RegistryStore:
         return from_dynamo(items[0]) if items else None
 
     def update_dataset(self, dataset_id: str, created_at: str, updates: dict[str, Any]) -> None:
+        reserved = {"dataset_id", "created_at", "updated_at"}
         expr_names: dict[str, str] = {"#updated_at": "updated_at"}
         expr_values: dict[str, Any] = {":updated_at": now_iso()}
         parts = ["#updated_at = :updated_at"]
-        for idx, (key, value) in enumerate(updates.items()):
+        idx = 0
+        for key, value in updates.items():
+            if key in reserved:
+                continue
             name_key = f"#k{idx}"
             value_key = f":v{idx}"
             expr_names[name_key] = key
             expr_values[value_key] = value
             parts.append(f"{name_key} = {value_key}")
+            idx += 1
         self._table(self.config.datasets_table).update_item(
             Key={"dataset_id": dataset_id, "created_at": created_at},
             UpdateExpression="SET " + ", ".join(parts),
@@ -111,15 +116,20 @@ class RegistryStore:
         return from_dynamo(items[0]) if items else None
 
     def update_training_run(self, run_id: str, created_at: str, updates: dict[str, Any]) -> None:
+        reserved = {"run_id", "created_at", "updated_at"}
         expr_names: dict[str, str] = {"#updated_at": "updated_at"}
         expr_values: dict[str, Any] = {":updated_at": now_iso()}
         parts = ["#updated_at = :updated_at"]
-        for idx, (key, value) in enumerate(updates.items()):
+        idx = 0
+        for key, value in updates.items():
+            if key in reserved:
+                continue
             name_key = f"#k{idx}"
             value_key = f":v{idx}"
             expr_names[name_key] = key
             expr_values[value_key] = value
             parts.append(f"{name_key} = {value_key}")
+            idx += 1
         self._table(self.config.training_runs_table).update_item(
             Key={"run_id": run_id, "created_at": created_at},
             UpdateExpression="SET " + ", ".join(parts),
