@@ -83,7 +83,8 @@ def test_predict_invokes_sagemaker_when_enabled():
     assert response["statusCode"] == 200
     body = json.loads(response["body"])
     assert len(body["opinions"]) == 1
-    assert body["global_sentiment"] == "POS"
+    assert body["global_sentiment"] == "positive"
+    assert body["opinions"][0]["sentiment"] == "positive"
     assert body["model_version"] == "absa-v2b"
     assert "note" not in body
 

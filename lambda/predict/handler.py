@@ -28,8 +28,16 @@ def _get_sagemaker_client() -> Any:
     global _sagemaker_client
     if _sagemaker_client is None:
         import boto3
+        from botocore.config import Config
 
-        _sagemaker_client = boto3.client("sagemaker-runtime")
+        _sagemaker_client = boto3.client(
+            "sagemaker-runtime",
+            config=Config(
+                connect_timeout=5,
+                read_timeout=28,
+                retries={"max_attempts": 1},
+            ),
+        )
     return _sagemaker_client
 
 
@@ -76,7 +84,7 @@ def _normalize_api_result(raw: dict[str, Any]) -> dict[str, Any]:
             {
                 "target": opinion.get("target", ""),
                 "aspect": opinion.get("aspect", ""),
-                "sentiment": opinion.get("sentiment", "NEU"),
+                "sentiment": _sentiment_label(opinion.get("sentiment", "NEU")),
                 "confidence": float(opinion.get("calibrated_confidence", opinion.get("confidence", 0.0))),
                 "raw_confidence": float(opinion.get("raw_confidence", opinion.get("confidence", 0.0))),
                 "calibrated_confidence": float(
@@ -89,7 +97,7 @@ def _normalize_api_result(raw: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "opinions": opinions,
-        "global_sentiment": raw.get("global_sentiment", "NEU"),
+        "global_sentiment": _sentiment_label(raw.get("global_sentiment", "NEU")),
         "global_confidence": float(raw.get("global_confidence", 0.0)),
         "global_raw_confidence": float(raw.get("global_raw_confidence", raw.get("global_confidence", 0.0))),
         "model_version": raw.get("model_version") or _DEFAULT_MODEL_VERSION,
@@ -105,13 +113,36 @@ def _invoke_sagemaker(text: str) -> dict[str, Any]:
 
     client = _get_sagemaker_client()
     started = time.time()
-    response = client.invoke_endpoint(
-        EndpointName=_ENDPOINT,
-        ContentType="application/json",
-        Accept="application/json",
-        Body=json.dumps({"text": text}, ensure_ascii=False).encode("utf-8"),
-    )
-    payload = json.loads(response["Body"].read().decode("utf-8"))
+    try:
+        response = client.invoke_endpoint(
+            EndpointName=_ENDPOINT,
+            ContentType="application/json",
+            Accept="application/json",
+            Body=json.dumps({"text": text}, ensure_ascii=False).encode("utf-8"),
+        )
+    except Exception as exc:
+        name = exc.__class__.__name__
+        message = str(exc)
+        if "Read timeout" in message or name in {"ReadTimeoutError", "ConnectTimeoutError"}:
+            raise RuntimeError(
+                "SageMaker endpoint timed out (>28s). The model may still be loading — "
+                "run scripts/warmup_sagemaker_endpoint.sh, wait 2–3 minutes, then retry."
+            ) from exc
+        if name == "ClientError":
+            raise RuntimeError(
+                f"SageMaker invoke failed: {message}. "
+                "Check endpoint CloudWatch logs (/aws/sagemaker/Endpoints/) and model.tar.gz."
+            ) from exc
+        raise RuntimeError(f"SageMaker invoke failed: {message}") from exc
+
+    raw_body = response["Body"].read().decode("utf-8")
+    try:
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"SageMaker returned non-JSON body: {raw_body[:200]}") from exc
+
+    if isinstance(payload, str):
+        raise RuntimeError(f"SageMaker returned unexpected string payload: {payload[:200]}")
     if not isinstance(payload, dict):
         raise RuntimeError("SageMaker returned a non-object JSON payload")
 

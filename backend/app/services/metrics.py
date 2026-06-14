@@ -241,6 +241,43 @@ def get_model_evaluation(version: str = VERSION) -> dict[str, Any] | None:
     }
 
 
+def get_last_training_at() -> str:
+    path = _train_log_path()
+    return _artifact_timestamp(path) if path.exists() else ""
+
+
+def _registry_entry(
+    *,
+    version: str,
+    alias: str,
+    stage: str,
+    status: str,
+    scores: dict[str, float],
+    encoder: str,
+    checkpoint: str,
+    epoch: int = 0,
+    promoted_at: str | None = None,
+) -> dict[str, Any]:
+    return {
+        "version": version,
+        "alias": alias,
+        "stage": stage,
+        "status": status,
+        "epoch": epoch,
+        "primary_metric": PRIMARY_METRIC,
+        "primary_f1": scores.get("tas_relaxed_f1", 0.0),
+        "tas_strict_f1": scores.get("tas_strict_f1", 0.0),
+        "tas_relaxed_f1": scores.get("tas_relaxed_f1", 0.0),
+        "span_f1": scores.get("span_f1", 0.0),
+        "sent_matched_f1": scores.get("sent_matched_f1", 0.0),
+        "sent_goldspan_f1": scores.get("sent_goldspan_f1", 0.0),
+        "global_f1": scores.get("global_f1", 0.0),
+        "encoder": encoder,
+        "checkpoint": checkpoint,
+        "promoted_at": promoted_at,
+    }
+
+
 def list_models() -> list[dict[str, Any]]:
     from backend.app.services import registry_db
 
@@ -265,20 +302,18 @@ def list_models() -> list[dict[str, Any]]:
     ev = get_model_evaluation()
     if not ev:
         return []
+
     scores = ev["scores"]
-    return [
-        {
-            "version": ev["version"],
-            "status": ev["status"],
-            "epoch": ev["epoch"],
-            "primary_metric": PRIMARY_METRIC,
-            "tas_strict_f1": scores["tas_strict_f1"],
-            "tas_relaxed_f1": scores["tas_relaxed_f1"],
-            "span_f1": scores["span_f1"],
-            "sent_matched_f1": scores["sent_matched_f1"],
-            "sent_goldspan_f1": scores["sent_goldspan_f1"],
-            "global_f1": scores["global_f1"],
-            "encoder": ev["training"]["encoder"],
-            "checkpoint": ev["training"]["checkpoint"],
-        }
-    ]
+    artifact_ts = ev.get("registered_at") or get_last_training_at()
+    champion = _registry_entry(
+        version=ev["version"],
+        alias="Champion",
+        stage="Production",
+        status=ev["status"],
+        scores=scores,
+        encoder=ev["training"]["encoder"],
+        checkpoint=ev["training"]["checkpoint"],
+        epoch=ev["epoch"],
+        promoted_at=artifact_ts or None,
+    )
+    return [champion]

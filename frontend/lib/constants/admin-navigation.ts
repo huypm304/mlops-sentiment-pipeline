@@ -5,7 +5,6 @@ import {
   GitBranch,
   Inbox,
   LayoutDashboard,
-  LineChart,
   Settings,
   Terminal,
   Workflow,
@@ -50,12 +49,6 @@ export const adminNavGroups: NavGroup[] = [
         href: "/admin/models",
         icon: GitBranch,
         description: "Production and candidate models",
-      },
-      {
-        title: "Evaluation",
-        href: "/admin/evaluation",
-        icon: LineChart,
-        description: "Production model metrics and confusion matrices",
       },
     ],
   },
@@ -108,4 +101,5 @@ export const adminHiddenRoutes = [
   "/admin/audit",
   "/admin/analytics",
   "/admin/compare",
+  "/admin/evaluation",
 ] as const

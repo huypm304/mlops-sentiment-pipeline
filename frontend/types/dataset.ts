@@ -33,6 +33,7 @@ export type DatasetListItem = {
   created_at: string
   splits: string[]
   audit_passed: boolean
+  audit_status?: "pass" | "pending" | "running" | "fail"
   audit_score: number | null
   total_rows: number
 }

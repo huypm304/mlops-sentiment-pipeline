@@ -3,6 +3,7 @@ locals {
 
   # Full MLOps prefix layout — markers ensure prefixes appear in the console
   artifact_prefixes = [
+    "dvc-store/",
     "datasets/pending/",
     "datasets/approved/",
     "datasets/rejected/",
@@ -11,6 +12,7 @@ locals {
     "models/candidates/",
     "models/production/",
     "models/archived/",
+    "training-runs/",
     "reports/audit/",
     "reports/evaluation/",
     "reports/calibration/",

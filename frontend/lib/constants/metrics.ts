@@ -28,9 +28,12 @@ export type TrainingHistoryPoint = {
 
 export type ModelSummary = {
   version: string
+  alias?: string
+  stage?: string
   status: string
   epoch: number
   primary_metric: typeof PRIMARY_METRIC
+  primary_f1?: number
   tas_strict_f1: number
   tas_relaxed_f1: number
   span_f1: number
@@ -39,6 +42,7 @@ export type ModelSummary = {
   global_f1: number
   encoder: string
   checkpoint: string
+  promoted_at?: string | null
 }
 
 export function metricLabel(key: keyof EvaluationScores | string): string {

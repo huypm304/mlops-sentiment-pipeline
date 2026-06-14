@@ -1,0 +1,34 @@
+{
+  "run_id": "run-20260606-001",
+  "status": "COMPLETED",
+  "dataset_id": "dataset-v1",
+  "generated_at": "2026-06-14T06:14:36.287349Z",
+  "best_epoch": 49,
+  "config": {
+    "epochs": 50,
+    "batch_size": 24,
+    "lr_backbone": 8e-06,
+    "lr_heads": 3e-05,
+    "model_name": "Fsoft-AIC/videberta-base",
+    "patience": 8,
+    "lambda_bio": 1.1,
+    "lambda_sent": 1.4,
+    "lambda_global": 0.2
+  },
+  "metrics": {
+    "tas_strict_f1": 0.5821,
+    "tas_relaxed_f1": 0.593,
+    "span_f1": 0.821,
+    "sent_matched_f1": 0.6615,
+    "sent_goldspan_f1": 0.6279,
+    "global_f1": 0.6602
+  },
+  "artifacts": [
+    "run_config.json",
+    "train_log.csv",
+    "summary.json",
+    "classification_report.json",
+    "learning_curve.png",
+    "confusion_matrix.png"
+  ]
+}

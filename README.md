@@ -449,6 +449,10 @@ Scripts:
 ./scripts/runtime_destroy.sh     # safe — keeps core data
 ./scripts/upload_model.sh
 ./scripts/upload_dataset.sh
+
+# Official benchmark dataset (DVC → S3 approved); see docs/data-management.md
+./scripts/dvc_setup.sh
+python scripts/publish_approved_dataset.py --dataset-id dataset-v1
 ```
 
 ---

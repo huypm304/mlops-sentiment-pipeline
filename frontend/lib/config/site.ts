@@ -1,6 +1,5 @@
 export const siteConfig = {
-  name: "ABSA Platform",
-  description:
-    "Vietnamese Aspect-Based Sentiment Analysis for customer insights and MLOps operations.",
+  name: "ABSA Studio",
+  description: "Vietnamese aspect-based sentiment analysis — datasets, training, registry, and inference ops.",
   url: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
 } as const

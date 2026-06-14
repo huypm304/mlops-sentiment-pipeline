@@ -50,7 +50,13 @@ export type PipelineRun = {
   start_date: string
   stop_date: string | null
   dataset_key: string | null
+  dataset_id?: string
   run_id?: string
+  base_model_id?: string
+  candidate_model_id?: string
+  best_f1?: number | null
+  duration_seconds?: number | null
+  artifact_uri?: string | null
   approval_id?: string
   training_config?: TrainingConfig
   demo?: boolean

@@ -1,7 +1,6 @@
 "use client"
 
 import Link from "next/link"
-import { LayoutGrid } from "lucide-react"
 
 import { NavMain } from "@/components/layout/nav-main"
 import { ThemeToggle } from "@/components/layout/theme-toggle"
@@ -26,7 +25,7 @@ import type { NavGroup } from "@/types/navigation"
 type AppShellProps = {
   children: React.ReactNode
   navGroups: NavGroup[]
-  brand: { title: string; subtitle: string; href: string }
+  brand: { title: string; subtitle?: string; href: string }
   footer?: React.ReactNode
   headerExtra?: React.ReactNode
   switchLink?: { href: string; label: string }
@@ -51,21 +50,21 @@ export function AppShell({
         }
       >
         <Sidebar className="border-r border-border bg-sidebar">
-          <SidebarHeader className="border-b border-border/60 p-2">
+          <SidebarHeader className="border-b border-sidebar-border px-3 py-3">
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton size="lg" asChild className="h-9">
-                  <Link href={brand.href}>
-                    <div className="flex size-6 items-center justify-center rounded border border-border/80 bg-background">
-                      <LayoutGrid className="size-3 text-muted-foreground" />
+                <SidebarMenuButton size="lg" asChild className="h-auto px-0 hover:bg-transparent">
+                  <Link href={brand.href} className="gap-2.5">
+                    <div className="flex size-7 items-center justify-center rounded-sm border border-sidebar-border bg-background font-mono text-[10px] font-bold text-primary">
+                      AB
                     </div>
                     <div className="grid leading-tight group-data-[collapsible=icon]:hidden">
-                      <span className="text-[13px] font-semibold tracking-tight">
+                      <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">
                         {brand.title}
                       </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {brand.subtitle}
-                      </span>
+                      {brand.subtitle ? (
+                        <span className="text-[10px] text-muted-foreground">{brand.subtitle}</span>
+                      ) : null}
                     </div>
                   </Link>
                 </SidebarMenuButton>
@@ -96,7 +95,7 @@ export function AppShell({
               <ThemeToggle />
             </div>
           </header>
-          <main className="flex flex-1 flex-col gap-6 p-6">{children}</main>
+          <main className="flex flex-1 flex-col gap-4 px-6 py-4">{children}</main>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

@@ -32,8 +32,9 @@ export function NavMain({ groups }: NavMainProps) {
             <SidebarMenu className="gap-0.5">
               {group.items.map((item) => {
                 const isActive =
-                  pathname === item.href ||
-                  pathname.startsWith(`${item.href}/`)
+                  item.href === "/"
+                    ? pathname === "/"
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`)
 
                 return (
                   <SidebarMenuItem key={item.href}>
@@ -42,8 +43,9 @@ export function NavMain({ groups }: NavMainProps) {
                       isActive={isActive}
                       tooltip={item.title}
                       className={cn(
-                        "h-8 rounded-md text-[13px]",
-                        isActive && "bg-primary/10 text-primary"
+                        "h-8 rounded-none border-l-2 border-transparent px-2 text-[13px] font-medium",
+                        isActive &&
+                          "border-l-primary bg-accent text-foreground shadow-none",
                       )}
                     >
                       <Link href={item.href}>

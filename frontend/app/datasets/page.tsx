@@ -1,92 +1,183 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Loader2, Upload, X } from "lucide-react"
 
 import { ConsoleShell } from "@/components/layout/console-shell"
-import { SectionHeader } from "@/components/console/section-header"
-import { TableCard, ConsoleTable, ConsoleThead, ConsoleTh, ConsoleTr, ConsoleTd } from "@/components/console/table-card"
-import { StatusBadge } from "@/components/console/status-badge"
+import {
+  AuditPill,
+  PlatformMetadataLine,
+  RegistryEmpty,
+  RegistryLink,
+  RegistryPageHeader,
+  RegistrySurface,
+  RegistryTable,
+  RegistryTd,
+  RegistryTh,
+  RegistryThead,
+  RegistryToolbar,
+  RegistryTr,
+} from "@/components/console/registry"
 import { Button } from "@/components/ui/button"
 import { fetchDatasets, uploadDatasetBundle, auditDataset } from "@/lib/api/datasets"
+import { datasetAuditLabel } from "@/lib/console/format"
 import type { DatasetListItem } from "@/types/dataset"
 
 export default function DatasetsPage() {
   const [rows, setRows] = useState<DatasetListItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [showUpload, setShowUpload] = useState(false)
+  const [search, setSearch] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [auditFilter, setAuditFilter] = useState("all")
 
   function reload() {
     setLoading(true)
+    setNotice(null)
     fetchDatasets()
-      .then(setRows)
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load datasets"))
+      .then((datasets) => {
+        setRows(datasets)
+        if (datasets.length === 0) {
+          setNotice("Chưa có dataset nào. Upload train/dev/test JSONL để bắt đầu.")
+        }
+      })
+      .catch((err) => {
+        setRows([])
+        setNotice(err instanceof Error ? err.message : "Không tải được datasets.")
+      })
       .finally(() => setLoading(false))
   }
 
-  useEffect(() => { reload() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    reload()
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    return rows.filter((row) => {
+      const audit = row.audit_status ?? (row.audit_passed ? "pass" : "pending")
+      if (statusFilter !== "all" && row.status !== statusFilter) return false
+      if (auditFilter !== "all" && audit !== auditFilter) return false
+      if (!q) return true
+      return row.name.toLowerCase().includes(q) || row.dataset_id.toLowerCase().includes(q)
+    })
+  }, [rows, search, statusFilter, auditFilter])
 
   return (
     <ConsoleShell>
       <section className="space-y-4">
-        <SectionHeader title="Datasets" description="Registry and audit status.">
-          <Button size="sm" onClick={() => setShowUpload(true)}>
-            <Upload className="mr-1.5 size-3.5" />
-            Upload dataset
-          </Button>
-        </SectionHeader>
+        <RegistryPageHeader
+          title="Dataset Registry"
+          metadata={<PlatformMetadataLine />}
+          actions={
+            <Button size="sm" onClick={() => setShowUpload(true)}>
+              <Upload className="size-3.5" />
+              Upload dataset
+            </Button>
+          }
+        />
 
         {showUpload && (
           <UploadSheet
             onClose={() => setShowUpload(false)}
-            onSuccess={() => { setShowUpload(false); reload() }}
+            onSuccess={() => {
+              setShowUpload(false)
+              reload()
+            }}
           />
         )}
 
-        <TableCard
-          title="Dataset registry"
-          loading={loading}
-          loadingLabel="Loading datasets"
-          error={error}
-          empty={!loading && !error && rows.length === 0}
-          emptyLabel="No datasets found."
-        >
-          <ConsoleTable>
-            <ConsoleThead>
-              <tr>
-                <ConsoleTh>Dataset</ConsoleTh>
-                <ConsoleTh>Status</ConsoleTh>
-                <ConsoleTh>Splits</ConsoleTh>
-                <ConsoleTh align="right">Rows</ConsoleTh>
-                <ConsoleTh align="right">Audit</ConsoleTh>
-                <ConsoleTh>Created</ConsoleTh>
-              </tr>
-            </ConsoleThead>
-            <tbody>
-              {rows.map((row) => (
-                <ConsoleTr key={row.dataset_id}>
-                  <ConsoleTd>
-                    <Link href={`/datasets/${encodeURIComponent(row.dataset_id)}`} className="font-medium hover:underline">
-                      {row.name}
-                    </Link>
-                    <p className="font-mono text-xs text-muted-foreground">{row.dataset_id}</p>
-                  </ConsoleTd>
-                  <ConsoleTd><StatusBadge value={row.status} /></ConsoleTd>
-                  <ConsoleTd muted>{row.splits.join(", ")}</ConsoleTd>
-                  <ConsoleTd align="right" numeric>{row.total_rows.toLocaleString()}</ConsoleTd>
-                  <ConsoleTd align="right" numeric>
-                    {row.audit_score == null ? "-" : `${Math.round(row.audit_score * 100)}%`}
-                  </ConsoleTd>
-                  <ConsoleTd muted>
-                    {row.created_at ? new Date(row.created_at).toLocaleString() : "-"}
-                  </ConsoleTd>
-                </ConsoleTr>
-              ))}
-            </tbody>
-          </ConsoleTable>
-        </TableCard>
+        {loading ? (
+          <div className="flex items-center gap-2 py-8 text-[13px] text-muted-foreground">
+            <Loader2 className="size-4 animate-spin" />
+            Loading datasets…
+          </div>
+        ) : (
+          <RegistrySurface
+            notice={notice}
+            toolbar={
+              <RegistryToolbar
+                search={search}
+                onSearchChange={setSearch}
+                searchPlaceholder="Filter datasets by name"
+                filters={[
+                  {
+                    label: "Status",
+                    value: statusFilter,
+                    onChange: setStatusFilter,
+                    options: [
+                      { label: "All", value: "all" },
+                      { label: "Approved", value: "approved" },
+                      { label: "Audited", value: "audited" },
+                      { label: "Pending", value: "pending" },
+                    ],
+                  },
+                  {
+                    label: "Audit",
+                    value: auditFilter,
+                    onChange: setAuditFilter,
+                    options: [
+                      { label: "All", value: "all" },
+                      { label: "Pass", value: "pass" },
+                      { label: "Running", value: "running" },
+                      { label: "Pending", value: "pending" },
+                    ],
+                  },
+                ]}
+              />
+            }
+          >
+            {filtered.length === 0 ? (
+              <RegistryEmpty
+                title="No datasets registered"
+                description="Upload train/dev/test JSONL splits to start auditing and training."
+                action={
+                  <Button size="sm" onClick={() => setShowUpload(true)}>
+                    Upload dataset
+                  </Button>
+                }
+              />
+            ) : (
+              <RegistryTable>
+                <RegistryThead>
+                  <tr>
+                    <RegistryTh>Dataset</RegistryTh>
+                    <RegistryTh>Status</RegistryTh>
+                    <RegistryTh align="right">Samples</RegistryTh>
+                    <RegistryTh>Audit</RegistryTh>
+                    <RegistryTh>Splits</RegistryTh>
+                  </tr>
+                </RegistryThead>
+                <tbody>
+                  {filtered.map((row) => {
+                    const auditStatus = row.audit_status ?? (row.audit_passed ? "pass" : "pending")
+                    const auditLabel = datasetAuditLabel(auditStatus, row.audit_passed)
+                    return (
+                      <RegistryTr key={row.dataset_id}>
+                        <RegistryTd>
+                          <RegistryLink href={`/datasets/${encodeURIComponent(row.dataset_id)}`}>
+                            {row.name}
+                          </RegistryLink>
+                        </RegistryTd>
+                        <RegistryTd muted className="capitalize">
+                          {row.status}
+                        </RegistryTd>
+                        <RegistryTd align="right" numeric>
+                          {row.total_rows.toLocaleString()}
+                        </RegistryTd>
+                        <RegistryTd>
+                          <AuditPill label={auditLabel} />
+                        </RegistryTd>
+                        <RegistryTd muted>{row.splits.join(", ")}</RegistryTd>
+                      </RegistryTr>
+                    )
+                  })}
+                </tbody>
+              </RegistryTable>
+            )}
+          </RegistrySurface>
+        )}
       </section>
     </ConsoleShell>
   )
@@ -106,15 +197,32 @@ function UploadSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) { setUploadError("Dataset name is required."); return }
-    if (!trainFile) { setUploadError("Train file is required."); return }
-    if (!devFile) { setUploadError("Dev file is required."); return }
+    if (!name.trim()) {
+      setUploadError("Dataset name is required.")
+      return
+    }
+    if (!trainFile) {
+      setUploadError("Train file is required.")
+      return
+    }
+    if (!devFile) {
+      setUploadError("Dev file is required.")
+      return
+    }
     setUploadError(null)
     setSubmitting(true)
     try {
-      const manifest = await uploadDatasetBundle({ name: name.trim(), train: trainFile, dev: devFile, test: testFile })
-      // kick off audit immediately — failures are non-fatal
-      try { await auditDataset(manifest.dataset_id) } catch { /* ignore */ }
+      const manifest = await uploadDatasetBundle({
+        name: name.trim(),
+        train: trainFile,
+        dev: devFile,
+        test: testFile,
+      })
+      try {
+        await auditDataset(manifest.dataset_id)
+      } catch {
+        /* non-fatal */
+      }
       onSuccess()
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : "Upload failed")
@@ -136,7 +244,9 @@ function UploadSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
 
         <form onSubmit={handleSubmit} className="flex flex-1 flex-col gap-5 overflow-y-auto p-5">
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground" htmlFor="ds-name">Dataset name *</label>
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="ds-name">
+              Dataset name *
+            </label>
             <input
               id="ds-name"
               className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
@@ -146,12 +256,32 @@ function UploadSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
             />
           </div>
 
-          <FileField label="Train file (.jsonl) *" accept=".jsonl,.json,.csv" fileRef={trainRef} file={trainFile} onChange={setTrainFile} />
-          <FileField label="Dev file (.jsonl) *" accept=".jsonl,.json,.csv" fileRef={devRef} file={devFile} onChange={setDevFile} />
-          <FileField label="Test file (.jsonl) — optional" accept=".jsonl,.json,.csv" fileRef={testRef} file={testFile} onChange={setTestFile} />
+          <FileField
+            label="Train file (.jsonl) *"
+            accept=".jsonl,.json,.csv"
+            fileRef={trainRef}
+            file={trainFile}
+            onChange={setTrainFile}
+          />
+          <FileField
+            label="Dev file (.jsonl) *"
+            accept=".jsonl,.json,.csv"
+            fileRef={devRef}
+            file={devFile}
+            onChange={setDevFile}
+          />
+          <FileField
+            label="Test file (.jsonl) — optional"
+            accept=".jsonl,.json,.csv"
+            fileRef={testRef}
+            file={testFile}
+            onChange={setTestFile}
+          />
 
           {uploadError && (
-            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{uploadError}</p>
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {uploadError}
+            </p>
           )}
 
           <div className="mt-auto flex gap-2">
@@ -159,7 +289,14 @@ function UploadSheet({ onClose, onSuccess }: { onClose: () => void; onSuccess: (
               Cancel
             </Button>
             <Button type="submit" className="flex-1" disabled={submitting}>
-              {submitting ? <><Loader2 className="mr-1.5 size-3.5 animate-spin" />Uploading &amp; auditing…</> : "Upload"}
+              {submitting ? (
+                <>
+                  <Loader2 className="mr-1.5 size-3.5 animate-spin" />
+                  Uploading &amp; auditing…
+                </>
+              ) : (
+                "Upload"
+              )}
             </Button>
           </div>
         </form>
@@ -194,7 +331,11 @@ function FileField({
           <button
             type="button"
             className="ml-auto shrink-0 rounded p-0.5 hover:bg-muted"
-            onClick={(e) => { e.stopPropagation(); onChange(null); if (fileRef.current) fileRef.current.value = "" }}
+            onClick={(e) => {
+              e.stopPropagation()
+              onChange(null)
+              if (fileRef.current) fileRef.current.value = ""
+            }}
           >
             <X className="size-3" />
           </button>

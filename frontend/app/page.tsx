@@ -2,36 +2,64 @@
 
 import Link from "next/link"
 import { useEffect, useMemo, useState } from "react"
+import { Loader2 } from "lucide-react"
 
+import {
+  AliasPill,
+  AuditPill,
+  PlatformMetadataLine,
+  RegistryLink,
+  RegistryPageHeader,
+  RegistrySurface,
+  RegistryTable,
+  RegistryTd,
+  RegistryTh,
+  RegistryThead,
+  RegistryTr,
+  RunNameCell,
+  RunStatusCell,
+} from "@/components/console/registry"
 import { ConsoleShell } from "@/components/layout/console-shell"
-import { SectionHeader } from "@/components/console/section-header"
-import { TableCard, ConsoleTable, ConsoleThead, ConsoleTh, ConsoleTr, ConsoleTd } from "@/components/console/table-card"
-import { StatusBadge } from "@/components/console/status-badge"
+import { Button } from "@/components/ui/button"
+import { fetchAnalytics } from "@/lib/api/analytics"
 import { fetchDatasets } from "@/lib/api/datasets"
 import { fetchModels } from "@/lib/api/metrics"
+import { fetchHealth, fetchMonitoring } from "@/lib/api/runtime"
 import { fetchPipelineRuns } from "@/lib/api/pipeline"
+import { datasetAuditLabel } from "@/lib/console/format"
+import type { ModelSummary } from "@/lib/constants/metrics"
 import type { DatasetListItem } from "@/types/dataset"
 import type { PipelineRun } from "@/types/pipeline"
-import type { ModelSummary } from "@/lib/constants/metrics"
-
-const quickActions = [
-  { label: "Upload dataset", href: "/datasets" },
-  { label: "Start training", href: "/training-runs" },
-  { label: "View models", href: "/models" },
-  { label: "Open inference", href: "/inference" },
-]
 
 export default function HomePage() {
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [runs, setRuns] = useState<PipelineRun[]>([])
   const [models, setModels] = useState<ModelSummary[]>([])
   const [loading, setLoading] = useState(true)
+  const [apiHealth, setApiHealth] = useState("unknown")
+  const [predictions24h, setPredictions24h] = useState(0)
+  const [lowConf, setLowConf] = useState(0)
+  const [driftStatus, setDriftStatus] = useState("unknown")
 
   useEffect(() => {
     Promise.all([
       fetchDatasets().catch(() => []),
-      fetchPipelineRuns(8).then((res) => res.runs).catch(() => []),
+      fetchPipelineRuns(8)
+        .then((res) => res.runs)
+        .catch(() => []),
       fetchModels().catch(() => []),
+      fetchHealth()
+        .then((h) => setApiHealth(h.endpoint_health))
+        .catch(() => setApiHealth("unknown")),
+      fetchAnalytics(24)
+        .then((a) => {
+          setPredictions24h(a.summary.predictions)
+          setLowConf(a.summary.low_confidence_rate)
+        })
+        .catch(() => null),
+      fetchMonitoring()
+        .then((m) => setDriftStatus(m.drift.status))
+        .catch(() => null),
     ])
       .then(([d, r, m]) => {
         setDatasets(d)
@@ -46,133 +74,168 @@ export default function HomePage() {
     [models],
   )
 
+  if (loading) {
+    return (
+      <ConsoleShell>
+        <div className="flex items-center gap-2 py-16 text-[13px] text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" />
+          Loading workspace…
+        </div>
+      </ConsoleShell>
+    )
+  }
+
+  const metaLine = [
+    `API ${apiHealth}`,
+    `${predictions24h} predictions (24h)`,
+    productionModel ? `Champion ${productionModel.version}` : "No champion",
+    `Drift ${driftStatus.replace(/_/g, " ")}`,
+    `Low confidence ${lowConf.toFixed(1)}%`,
+  ].join(" · ")
+
   return (
     <ConsoleShell>
-      <section className="space-y-6">
-        <SectionHeader
-          title="Welcome"
-          description="Operational workspace for ABSA datasets, runs, models, inference, and monitoring."
+      <section className="space-y-4">
+        <RegistryPageHeader
+          title="Workspace overview"
+          metadata={
+            <>
+              <PlatformMetadataLine />
+              <p className="mt-0.5">{metaLine}</p>
+            </>
+          }
+          actions={
+            <>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/datasets">Register dataset</Link>
+              </Button>
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/inference">Test inference</Link>
+              </Button>
+              <Button size="sm" asChild>
+                <Link href="/training-runs">Training runs</Link>
+              </Button>
+            </>
+          }
         />
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {quickActions.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className="rounded-md border border-border bg-card px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/30"
-            >
-              {item.label}
-            </Link>
-          ))}
+        <div className="grid gap-4 xl:grid-cols-2">
+          <RegistrySurface>
+            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+              <p className="text-[13px] font-semibold">Datasets</p>
+              <RegistryLink href="/datasets">View all</RegistryLink>
+            </div>
+            <RegistryTable>
+              <RegistryThead>
+                <tr>
+                  <RegistryTh>Dataset</RegistryTh>
+                  <RegistryTh>Status</RegistryTh>
+                  <RegistryTh align="right">Samples</RegistryTh>
+                  <RegistryTh>Audit</RegistryTh>
+                </tr>
+              </RegistryThead>
+              <tbody>
+                {datasets.slice(0, 5).map((row) => (
+                  <RegistryTr key={row.dataset_id}>
+                    <RegistryTd>
+                      <RegistryLink href={`/datasets/${encodeURIComponent(row.dataset_id)}`}>
+                        {row.name}
+                      </RegistryLink>
+                    </RegistryTd>
+                    <RegistryTd muted className="capitalize">
+                      {row.status}
+                    </RegistryTd>
+                    <RegistryTd align="right" numeric>
+                      {row.total_rows.toLocaleString()}
+                    </RegistryTd>
+                    <RegistryTd>
+                      <AuditPill
+                        label={datasetAuditLabel(
+                          row.audit_status ?? (row.audit_passed ? "pass" : "pending"),
+                          row.audit_passed,
+                        )}
+                      />
+                    </RegistryTd>
+                  </RegistryTr>
+                ))}
+              </tbody>
+            </RegistryTable>
+          </RegistrySurface>
+
+          <RegistrySurface>
+            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+              <p className="text-[13px] font-semibold">Training runs</p>
+              <RegistryLink href="/training-runs">View all</RegistryLink>
+            </div>
+            <RegistryTable>
+              <RegistryThead>
+                <tr>
+                  <RegistryTh>Run</RegistryTh>
+                  <RegistryTh>Status</RegistryTh>
+                  <RegistryTh>Dataset</RegistryTh>
+                </tr>
+              </RegistryThead>
+              <tbody>
+                {runs.slice(0, 5).map((run) => (
+                  <RegistryTr key={run.execution_arn}>
+                    <RegistryTd>
+                      <RunNameCell
+                        name={run.run_id ?? run.name}
+                        href={`/training-runs/${encodeURIComponent(run.execution_arn)}`}
+                        status={run.status}
+                      />
+                    </RegistryTd>
+                    <RegistryTd>
+                      <RunStatusCell status={run.status} timestamp={run.start_date} />
+                    </RegistryTd>
+                    <RegistryTd mono muted>
+                      {run.dataset_id ?? run.dataset_key ?? "—"}
+                    </RegistryTd>
+                  </RegistryTr>
+                ))}
+              </tbody>
+            </RegistryTable>
+          </RegistrySurface>
         </div>
 
-        <section className="grid gap-6 xl:grid-cols-[2fr_1fr]">
-          <div className="space-y-6">
-            <TableCard
-              title="Recent datasets"
-              loading={loading}
-              loadingLabel="Loading datasets"
-              empty={!loading && datasets.length === 0}
-              emptyLabel="No datasets found."
-            >
-              <ConsoleTable>
-                <ConsoleThead>
-                  <tr>
-                    <ConsoleTh>Dataset</ConsoleTh>
-                    <ConsoleTh>Status</ConsoleTh>
-                    <ConsoleTh align="right">Rows</ConsoleTh>
-                    <ConsoleTh align="right">Audit</ConsoleTh>
-                  </tr>
-                </ConsoleThead>
-                <tbody>
-                  {datasets.slice(0, 6).map((row) => (
-                    <ConsoleTr key={row.dataset_id}>
-                      <ConsoleTd>
-                        <Link href={`/datasets/${encodeURIComponent(row.dataset_id)}`} className="font-medium hover:underline">
-                          {row.name}
-                        </Link>
-                      </ConsoleTd>
-                      <ConsoleTd><StatusBadge value={row.status} /></ConsoleTd>
-                      <ConsoleTd align="right" numeric>{row.total_rows.toLocaleString()}</ConsoleTd>
-                      <ConsoleTd align="right" numeric>
-                        {row.audit_score == null ? "-" : `${Math.round(row.audit_score * 100)}%`}
-                      </ConsoleTd>
-                    </ConsoleTr>
-                  ))}
-                </tbody>
-              </ConsoleTable>
-            </TableCard>
-
-            <TableCard
-              title="Recent training runs"
-              loading={loading}
-              loadingLabel="Loading runs"
-              empty={!loading && runs.length === 0}
-              emptyLabel="No runs found."
-            >
-              <ConsoleTable>
-                <ConsoleThead>
-                  <tr>
-                    <ConsoleTh>Run</ConsoleTh>
-                    <ConsoleTh>Status</ConsoleTh>
-                    <ConsoleTh>Start</ConsoleTh>
-                  </tr>
-                </ConsoleThead>
-                <tbody>
-                  {runs.slice(0, 6).map((run) => (
-                    <ConsoleTr key={run.execution_arn}>
-                      <ConsoleTd>
-                        <Link
-                          href={`/training-runs/${encodeURIComponent(run.execution_arn)}`}
-                          className="font-medium hover:underline"
-                        >
-                          {run.run_id ?? run.name}
-                        </Link>
-                      </ConsoleTd>
-                      <ConsoleTd><StatusBadge value={run.status} /></ConsoleTd>
-                      <ConsoleTd muted>
-                        {run.start_date ? new Date(run.start_date).toLocaleString() : "-"}
-                      </ConsoleTd>
-                    </ConsoleTr>
-                  ))}
-                </tbody>
-              </ConsoleTable>
-            </TableCard>
-          </div>
-
-          <div className="rounded-md border border-border bg-card">
-            <div className="border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold">Current production model</h2>
+        {productionModel ? (
+          <RegistrySurface>
+            <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
+              <p className="text-[13px] font-semibold">Production model</p>
+              <RegistryLink href={`/models/${encodeURIComponent(productionModel.version)}`}>
+                Open registry
+              </RegistryLink>
             </div>
-            {!productionModel ? (
-              <p className="px-4 py-6 text-sm text-muted-foreground">No model found.</p>
-            ) : (
-              <div className="space-y-2 px-4 py-4 text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Version</span>
-                  <span className="font-mono">{productionModel.version}</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Status</span>
-                  <StatusBadge value={productionModel.status} />
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">Global F1</span>
-                  <span className="tabular-nums">{(productionModel.global_f1 * 100).toFixed(1)}%</span>
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-muted-foreground">TAS Relaxed F1</span>
-                  <span className="tabular-nums">{(productionModel.tas_relaxed_f1 * 100).toFixed(1)}%</span>
-                </div>
-                <div className="pt-2">
-                  <Link href={`/models/${encodeURIComponent(productionModel.version)}`} className="text-sm font-medium text-primary hover:underline">
-                    View model detail
-                  </Link>
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
+            <RegistryTable>
+              <RegistryThead>
+                <tr>
+                  <RegistryTh>Name</RegistryTh>
+                  <RegistryTh>Alias</RegistryTh>
+                  <RegistryTh align="right">TAS F1</RegistryTh>
+                  <RegistryTh>Checkpoint</RegistryTh>
+                </tr>
+              </RegistryThead>
+              <tbody>
+                <RegistryTr>
+                  <RegistryTd>
+                    <RegistryLink href={`/models/${encodeURIComponent(productionModel.version)}`}>
+                      {productionModel.version}
+                    </RegistryLink>
+                  </RegistryTd>
+                  <RegistryTd>
+                    <AliasPill alias={productionModel.alias ?? "Champion"} />
+                  </RegistryTd>
+                  <RegistryTd align="right" numeric>
+                    {(productionModel.tas_relaxed_f1 * 100).toFixed(1)}%
+                  </RegistryTd>
+                  <RegistryTd mono muted>
+                    {productionModel.checkpoint}
+                  </RegistryTd>
+                </RegistryTr>
+              </tbody>
+            </RegistryTable>
+          </RegistrySurface>
+        ) : null}
       </section>
     </ConsoleShell>
   )

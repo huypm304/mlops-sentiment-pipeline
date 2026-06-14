@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -347,11 +348,36 @@ class RegistryStore:
         )
         return f"s3://{self.config.artifacts_bucket}/{key}"
 
+    def put_file_s3(
+        self,
+        key: str,
+        local_path: Path | str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        path = Path(local_path)
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        if not self.config.artifacts_bucket:
+            raise RuntimeError("ARTIFACTS_BUCKET is not configured")
+        self._s3.upload_file(
+            str(path),
+            self.config.artifacts_bucket,
+            key,
+            ExtraArgs={"ContentType": content_type},
+        )
+        return f"s3://{self.config.artifacts_bucket}/{key}"
+
     def dataset_record_from_manifest(self, manifest: dict[str, Any]) -> dict[str, Any]:
         splits = manifest.get("splits") or {}
         total_rows = sum(int(info.get("rows", 0)) for info in splits.values())
         dataset_id = manifest["dataset_id"]
-        prefix = f"datasets/pending/{dataset_id}"
+        approved_prefix = manifest.get("s3_approved_prefix", "").rstrip("/")
+        pending_prefix = f"datasets/pending/{dataset_id}"
+        if approved_prefix and manifest.get("status", "").lower() in {"approved", "audited"}:
+            prefix = approved_prefix
+        else:
+            prefix = pending_prefix
         return {
             "dataset_id": dataset_id,
             "created_at": manifest.get("created_at", now_iso()),

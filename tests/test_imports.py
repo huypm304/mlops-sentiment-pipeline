@@ -47,7 +47,8 @@ def test_dataset_import():
 
 
 def test_model_import():
-    from src.absa.model import ABSAModel, extract_contrast_feature, CONTRAST_WORDS
+    from src.absa.model import ABSAModel, extract_contrast_feature
+    from src.absa.utils import CONTRAST_WORDS
     assert "nhưng" in CONTRAST_WORDS
 
 

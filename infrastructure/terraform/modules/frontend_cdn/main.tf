@@ -12,8 +12,9 @@ locals {
 }
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = local.bucket_name
-  tags   = merge(var.common_tags, { Name = local.bucket_name })
+  bucket        = local.bucket_name
+  force_destroy = true
+  tags          = merge(var.common_tags, { Name = local.bucket_name })
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {

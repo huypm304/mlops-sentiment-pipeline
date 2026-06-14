@@ -24,9 +24,10 @@ export type PredictApiResponse = {
 function toSentiment(
   value: string
 ): "positive" | "negative" | "neutral" {
-  const s = value.toLowerCase()
-  if (s === "positive") return "positive"
-  if (s === "negative") return "negative"
+  const s = value.trim().toLowerCase()
+  if (s === "positive" || s === "pos") return "positive"
+  if (s === "negative" || s === "neg") return "negative"
+  if (s === "neutral" || s === "neu") return "neutral"
   return "neutral"
 }
 
