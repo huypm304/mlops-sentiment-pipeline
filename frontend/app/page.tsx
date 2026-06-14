@@ -27,6 +27,7 @@ import { fetchModels } from "@/lib/api/metrics"
 import { fetchHealth, fetchMonitoring } from "@/lib/api/runtime"
 import { fetchPipelineRuns } from "@/lib/api/pipeline"
 import { datasetAuditLabel } from "@/lib/console/format"
+import { modelDetailPath } from "@/lib/console/paths"
 import type { ModelSummary } from "@/lib/constants/metrics"
 import type { DatasetListItem } from "@/types/dataset"
 import type { PipelineRun } from "@/types/pipeline"
@@ -202,7 +203,7 @@ export default function HomePage() {
           <RegistrySurface>
             <div className="flex items-center justify-between border-b border-border px-3 py-1.5">
               <p className="text-[13px] font-semibold">Production model</p>
-              <RegistryLink href={`/models/${encodeURIComponent(productionModel.version)}`}>
+              <RegistryLink href={modelDetailPath(productionModel.version)}>
                 Open registry
               </RegistryLink>
             </div>
@@ -218,7 +219,7 @@ export default function HomePage() {
               <tbody>
                 <RegistryTr>
                   <RegistryTd>
-                    <RegistryLink href={`/models/${encodeURIComponent(productionModel.version)}`}>
+                    <RegistryLink href={modelDetailPath(productionModel.version)}>
                       {productionModel.version}
                     </RegistryLink>
                   </RegistryTd>

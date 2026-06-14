@@ -21,6 +21,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { fetchModels } from "@/lib/api/metrics"
 import { formatShortDate } from "@/lib/console/format"
+import { modelDetailPath } from "@/lib/console/paths"
 import type { ModelSummary } from "@/lib/constants/metrics"
 
 const statusOrder = ["production", "candidate", "rejected", "archived"]
@@ -134,13 +135,13 @@ export default function ModelsPage() {
                   {filtered.map((row) => (
                     <RegistryTr key={row.version}>
                       <RegistryTd>
-                        <RegistryLink href={`/models/${encodeURIComponent(row.version)}`}>
+                        <RegistryLink href={modelDetailPath(row.version)}>
                           {row.version}
                         </RegistryLink>
                       </RegistryTd>
                       <RegistryTd>
                         {row.epoch > 0 ? (
-                          <RegistryLink href={`/models/${encodeURIComponent(row.version)}`}>
+                          <RegistryLink href={modelDetailPath(row.version)}>
                             Version {row.epoch}
                           </RegistryLink>
                         ) : (

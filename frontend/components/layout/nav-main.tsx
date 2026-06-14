@@ -12,6 +12,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import type { NavGroup } from "@/types/navigation"
+import { appPath } from "@/lib/console/paths"
 import { cn } from "@/lib/utils"
 
 type NavMainProps = {
@@ -48,7 +49,7 @@ export function NavMain({ groups }: NavMainProps) {
                           "border-l-primary bg-accent text-foreground shadow-none",
                       )}
                     >
-                      <Link href={item.href}>
+                      <Link href={appPath(item.href)}>
                         <item.icon className="size-4" />
                         <span>{item.title}</span>
                       </Link>
