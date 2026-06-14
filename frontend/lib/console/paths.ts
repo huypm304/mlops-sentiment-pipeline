@@ -16,3 +16,11 @@ export function appPath(path: string): string {
 export function modelDetailPath(version: string): string {
   return appPath(`/models/detail?version=${encodeURIComponent(version)}`)
 }
+
+export function datasetDetailPath(datasetId: string): string {
+  return appPath(`/datasets/detail?id=${encodeURIComponent(datasetId)}`)
+}
+
+export function trainingRunDetailPath(runId: string): string {
+  return appPath(`/training-runs/detail?id=${encodeURIComponent(runId)}`)
+}

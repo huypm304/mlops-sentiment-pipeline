@@ -1,6 +1,8 @@
 "use client"
 
 import Link from "next/link"
+
+import { appPath } from "@/lib/console/paths"
 import { useEffect, useMemo, useState } from "react"
 import { Loader2, PlayCircle } from "lucide-react"
 
@@ -52,7 +54,7 @@ export function DatasetDetailClient({ datasetId }: { datasetId: string }) {
       <section className="space-y-4">
         <SectionHeader title="Dataset detail" description={datasetId}>
           <div className="flex items-center gap-2">
-            <Link href="/datasets" className="text-xs text-muted-foreground hover:underline">
+            <Link href={appPath("/datasets")} className="text-xs text-muted-foreground hover:underline">
               Back to datasets
             </Link>
             {dataset && dataset.status !== "approved" && (
