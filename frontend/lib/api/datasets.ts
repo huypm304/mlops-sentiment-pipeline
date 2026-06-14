@@ -6,6 +6,20 @@ import type {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? ""
 
+async function fetchOrThrow(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init)
+  } catch (err) {
+    const target = typeof input === "string" ? input : input.toString()
+    const hint = target.includes("amazonaws.com")
+      ? "S3 upload blocked — artifact bucket CORS must allow this site origin."
+      : "Check NEXT_PUBLIC_API_URL and API CORS (api.minhhuy.me)."
+    throw new Error(
+      `Network error calling ${target.split("?")[0]}: ${err instanceof Error ? err.message : "fetch failed"}. ${hint}`,
+    )
+  }
+}
+
 function assertJson(res: Response): void {
   const ct = res.headers.get("content-type") ?? ""
   if (!ct.includes("json")) {
@@ -37,7 +51,7 @@ async function parseError(res: Response): Promise<string> {
 
 export async function fetchDatasets(): Promise<DatasetListItem[]> {
   if (!API_BASE) throw new Error("API not configured – set NEXT_PUBLIC_API_URL")
-  const res = await fetch(`${API_BASE}/datasets`)
+  const res = await fetchOrThrow(`${API_BASE}/datasets`)
   if (!res.ok) throw new Error(await parseError(res))
   assertJson(res)
   const data = (await res.json()) as { datasets: DatasetListItem[] }
@@ -46,7 +60,7 @@ export async function fetchDatasets(): Promise<DatasetListItem[]> {
 
 export async function fetchDataset(datasetId: string): Promise<DatasetManifest> {
   if (!API_BASE) throw new Error("API not configured – set NEXT_PUBLIC_API_URL")
-  const res = await fetch(`${API_BASE}/datasets/${encodeURIComponent(datasetId)}`)
+  const res = await fetchOrThrow(`${API_BASE}/datasets/${encodeURIComponent(datasetId)}`)
   if (!res.ok) throw new Error(await parseError(res))
   assertJson(res)
   return res.json() as Promise<DatasetManifest>
@@ -58,7 +72,7 @@ async function uploadViaPresign(input: {
   dev: File
   test?: File | null
 }): Promise<DatasetManifest> {
-  const res = await fetch(`${API_BASE}/datasets/presign-upload`, {
+  const res = await fetchOrThrow(`${API_BASE}/datasets/presign-upload`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: input.name, uploaded_by: "admin-ui" }),
@@ -80,7 +94,7 @@ async function uploadViaPresign(input: {
   for (const [split, file] of uploads) {
     const url = payload.upload_urls[split]
     if (!url) throw new Error(`Missing presigned URL for split '${split}'`)
-    const putRes = await fetch(url, {
+    const putRes = await fetchOrThrow(url, {
       method: "PUT",
       body: file,
       headers: { "Content-Type": "application/x-ndjson" },
@@ -122,7 +136,7 @@ export async function uploadDatasetBundle(input: {
   form.append("dev", input.dev)
   if (input.test) form.append("test", input.test)
 
-  const res = await fetch(`${API_BASE}/datasets/upload`, {
+  const res = await fetchOrThrow(`${API_BASE}/datasets/upload`, {
     method: "POST",
     body: form,
   })
@@ -132,7 +146,7 @@ export async function uploadDatasetBundle(input: {
 }
 
 export async function auditDataset(datasetId: string): Promise<DatasetAuditResponse> {
-  const res = await fetch(`${API_BASE}/datasets/${encodeURIComponent(datasetId)}/audit`, {
+  const res = await fetchOrThrow(`${API_BASE}/datasets/${encodeURIComponent(datasetId)}/audit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
