@@ -127,9 +127,12 @@ export async function fetchModelEvaluation(
   return mapEvaluation(data)
 }
 
-export async function fetchTrainingHistory(): Promise<TrainingHistoryPoint[]> {
+export async function fetchTrainingHistory(
+  modelId?: string,
+): Promise<TrainingHistoryPoint[]> {
+  const query = modelId ? `?model_id=${encodeURIComponent(modelId)}` : ""
   const res = await apiClient<{ history: TrainingHistoryPoint[] }>(
-    "/metrics/training/history"
+    `/metrics/training/history${query}`,
   )
   return res.history
 }

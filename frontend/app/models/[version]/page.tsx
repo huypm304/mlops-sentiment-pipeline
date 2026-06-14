@@ -5,7 +5,7 @@ type PageProps = {
 }
 
 export function generateStaticParams() {
-  return [{ version: "absa-v1" }]
+  return [{ version: "absa-v2b" }, { version: "absa-v1" }]
 }
 
 export default async function ModelDetailPage({ params }: PageProps) {

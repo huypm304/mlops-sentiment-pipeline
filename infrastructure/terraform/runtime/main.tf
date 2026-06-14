@@ -59,6 +59,7 @@ locals {
     PROJECT             = var.project
     ENVIRONMENT         = var.environment
     ARTIFACTS_BUCKET    = local.artifact_bucket_name
+    PRODUCTION_MODEL_ID = "absa-v2b"
     DATASETS_TABLE      = local.datasets_table_name
     TRAINING_RUNS_TABLE = local.training_runs_table_name
     MODELS_TABLE        = local.models_table_name
