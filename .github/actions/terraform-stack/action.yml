@@ -25,15 +25,15 @@ inputs:
     required: false
     default: "api"
   enable_sagemaker_endpoint:
-    description: Runtime only — create SageMaker inference endpoint (~$50+/month if always on)
+    description: Runtime — create SageMaker inference endpoint
     required: false
     default: "false"
   enable_sagemaker_training:
-    description: Runtime only — wire real SageMaker training jobs (~$1–10+ per run)
+    description: Runtime — wire SageMaker training jobs in pipeline
     required: false
     default: "false"
   enable_eventbridge_monitoring:
-    description: Runtime only — hourly EventBridge monitoring schedules (low cost)
+    description: Runtime — EventBridge monitoring schedules
     required: false
     default: "true"
   sagemaker_instance_type:

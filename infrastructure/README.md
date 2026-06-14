@@ -246,20 +246,16 @@ Deploy order on GitHub:
 | `destroy-all-danger.yml` | Destroy runtime + core (artifact bucket blocked by default) |
 | `pr-validate.yml` | fmt + validate on pull requests |
 
-### Cost control on Deploy Runtime
+### Deploy Runtime options
 
-Expensive services are **disabled by default**. When running **Deploy Runtime** on GitHub:
+| Input | Default |
+|---|---|
+| `enable_sagemaker_endpoint` | `false` |
+| `enable_sagemaker_training` | `false` |
+| `enable_eventbridge_monitoring` | `true` |
+| `sagemaker_instance_type` | `ml.m5.large` |
 
-| Input | Default | Est. cost |
-|---|---|---|
-| `enable_sagemaker_endpoint` | `false` | ~$50+/month (ml.m5.large always-on) |
-| `enable_sagemaker_training` | `false` | ~$1–10+ per training job |
-| `enable_eventbridge_monitoring` | `true` | ~$0–1/month |
-| `sagemaker_instance_type` | `ml.m5.large` | only applies when endpoint enabled |
-
-If either SageMaker flag is `true`, you must type **`I-ACCEPT-SAGEMAKER-COST`** in `cost_acknowledgement`.
-
-**Demo-safe defaults:** leave both SageMaker flags at `false`. Use **Plan Runtime** first to preview changes without applying.
+Use **Plan Runtime** to preview changes without applying.
 
 Composite action: `.github/actions/terraform-stack/`.
 
