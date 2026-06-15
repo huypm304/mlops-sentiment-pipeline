@@ -1,0 +1,56 @@
+{
+  "schema_audit": {
+    "critical_schema_error_target_pct": 0.0,
+    "must_fix_if_over_pct": 0.5,
+    "pass_status": "pass",
+    "fail_status": "fail"
+  },
+  "span_offset_audit": {
+    "exact_offset_match_target_pct": 99.5,
+    "trimmed_offset_match_target_pct": 99.8,
+    "empty_span_target_pct": 0.0,
+    "out_of_bound_target_pct": 0.0,
+    "span_too_wide_target_pct_lt": 1.0,
+    "duplicate_exact_opinion_target_pct_lt": 0.5,
+    "pass_status": "pass",
+    "warn_status": "warn"
+  },
+  "label_consistency_audit": {
+    "aspect_suspicious_good_lt_pct": 3.0,
+    "aspect_suspicious_review_max_pct": 7.0,
+    "sentiment_suspicious_good_lt_pct": 5.0,
+    "sentiment_suspicious_review_max_pct": 10.0,
+    "pass_status": "pass",
+    "warn_status": "warn",
+    "fail_status": "fail"
+  },
+  "distribution_audit": {
+    "train_per_aspect_min_opinions": 300,
+    "dev_per_aspect_min_opinions": 50,
+    "train_cell_min_30": true,
+    "train_cell_min_50": true,
+    "train_cell_min_100": true,
+    "pass_status": "pass",
+    "warn_status": "warn"
+  },
+  "global_sentiment_audit": {
+    "consistency_good_ge_pct": 95.0,
+    "consistency_acceptable_ge_pct": 90.0,
+    "pass_status": "pass",
+    "warn_status": "warn",
+    "fail_status": "fail"
+  },
+  "leakage_audit": {
+    "exact_leakage_target_pct": 0.0,
+    "exact_leakage_warning_over_pct": 1.0,
+    "near_duplicate_target_lt_pct": 2.0,
+    "near_threshold_jaccard": 0.9,
+    "pass_status": "pass",
+    "warn_status": "warn",
+    "fail_status": "fail"
+  },
+  "overall": {
+    "pass_with_warnings_allowed": true,
+    "fail_on_modules": ["schema_audit", "leakage_audit", "span_offset_audit"]
+  }
+}

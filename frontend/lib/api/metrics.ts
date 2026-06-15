@@ -1,23 +1,17 @@
 import { apiClient } from "@/lib/api/client"
+import type {
+  EvaluationScores,
+  ModelSummary,
+  TrainingHistoryPoint,
+} from "@/lib/constants/metrics"
 import type { ModelEvaluation } from "@/types/evaluation"
-
-export type ModelSummary = {
-  version: string
-  status: string
-  epoch: number
-  composite: number
-  sent_f1: number
-  span_f1: number
-  glob_f1: number
-  encoder: string
-  checkpoint: string
-}
 
 type MetricsApiEvaluation = {
   version: string
   status: "production" | "archived"
   epoch: number
   phase: string
+  primary_metric: string
   registered_at: string
   evaluated_at: string
   inference_latency_ms: number
@@ -35,13 +29,7 @@ type MetricsApiEvaluation = {
     trained_at: string
     checkpoint: string
   }
-  scores: {
-    span_f1: number
-    sent_f1: number
-    glob_f1: number
-    composite: number
-    train_loss: number
-  }
+  scores: EvaluationScores
   sentiment: {
     accuracy: number
     precision: number
@@ -82,16 +70,7 @@ type MetricsApiEvaluation = {
   }[]
 }
 
-export type TrainingHistoryPoint = {
-  epoch: number
-  phase: string
-  train_loss: number
-  span_f1: number
-  sent_f1: number
-  glob_f1: number
-  composite: number
-  is_best: boolean
-}
+export type { EvaluationScores, ModelSummary, TrainingHistoryPoint }
 
 function mapEvaluation(data: MetricsApiEvaluation): ModelEvaluation {
   return {
@@ -100,6 +79,7 @@ function mapEvaluation(data: MetricsApiEvaluation): ModelEvaluation {
     registeredAt: data.registered_at,
     evaluatedAt: data.evaluated_at,
     inferenceLatencyMs: data.inference_latency_ms,
+    primaryMetric: data.primary_metric,
     dataset: {
       version: data.dataset.version,
       trainSamples: data.dataset.train_samples,

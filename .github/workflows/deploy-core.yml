@@ -1,0 +1,55 @@
+# Provision persistent MLOps storage: S3 artifacts + DynamoDB registry tables.
+name: Deploy Core
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: Auto-approve apply
+        type: boolean
+        default: true
+      domain_name:
+        description: Root domain for Route53 zone
+        required: false
+        default: "minhhuy.me"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absa-mlops-core
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ap-southeast-1
+      TF_STATE_BUCKET: absa-mlops-demo-tf-state
+      TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
+      TF_STATE_KEY: core/terraform.tfstate
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: core
+          command: apply
+          auto_approve: ${{ inputs.auto_approve }}
+          domain_name: ${{ inputs.domain_name }}
+
+      - name: Print outputs
+        working-directory: infrastructure/terraform/core
+        shell: bash
+        run: |
+          echo "## Core outputs" >> "$GITHUB_STEP_SUMMARY"
+          terraform output -json | python3 -c "
+          import json, sys
+          for k, v in json.load(sys.stdin).items():
+              print(f'- **{k}**: {v.get(\"value\", v)}')
+          " >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || terraform output >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "If this is the first deploy, set registrar nameservers to **route53_name_servers** before Deploy Runtime." >> "$GITHUB_STEP_SUMMARY"

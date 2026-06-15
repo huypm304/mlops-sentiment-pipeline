@@ -249,6 +249,10 @@ absa-mlops-platform/
 ├── model/
 ├── infrastructure/
 │   └── terraform/
+│       ├── bootstrap/
+│       ├── core/
+│       ├── runtime/
+│       └── modules/
 ├── scripts/
 ├── docs/
 └── .github/workflows/

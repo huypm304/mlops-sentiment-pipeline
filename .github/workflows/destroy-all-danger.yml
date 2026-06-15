@@ -1,0 +1,60 @@
+# DANGER: destroys runtime then core. Artifact bucket has prevent_destroy and will block unless removed manually.
+name: Destroy All (Danger)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type DESTROY-ALL-ABSA-MLOPS to confirm
+        required: true
+      auto_approve:
+        description: Auto-approve destroy
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absa-mlops-destroy-all
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    if: inputs.confirm == 'DESTROY-ALL-ABSA-MLOPS'
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ap-southeast-1
+      TF_STATE_BUCKET: absa-mlops-demo-tf-state
+      TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
+      TF_VAR_core_state_bucket: absa-mlops-demo-tf-state
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Destroy runtime
+        uses: ./.github/actions/terraform-stack
+        with:
+          stack: runtime
+          command: destroy
+          auto_approve: ${{ inputs.auto_approve }}
+        env:
+          TF_STATE_KEY: runtime/terraform.tfstate
+
+      - name: Destroy core
+        uses: ./.github/actions/terraform-stack
+        with:
+          stack: core
+          command: destroy
+          auto_approve: ${{ inputs.auto_approve }}
+        env:
+          TF_STATE_KEY: core/terraform.tfstate
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "## Destroy-all completed (or blocked)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Bootstrap (state bucket) was NOT destroyed." >> "$GITHUB_STEP_SUMMARY"
+          echo "If core destroy failed, the artifact bucket likely has prevent_destroy." >> "$GITHUB_STEP_SUMMARY"

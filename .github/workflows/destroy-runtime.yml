@@ -1,0 +1,48 @@
+# Destroy runtime services only. Preserves S3 artifacts and DynamoDB registry (core stack).
+name: Destroy Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type destroy-runtime to confirm
+        required: true
+      auto_approve:
+        description: Auto-approve destroy
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absa-mlops-runtime
+  cancel-in-progress: false
+
+jobs:
+  destroy:
+    if: inputs.confirm == 'destroy-runtime'
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ap-southeast-1
+      TF_STATE_BUCKET: absa-mlops-demo-tf-state
+      TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
+      TF_STATE_KEY: runtime/terraform.tfstate
+      TF_VAR_core_state_bucket: absa-mlops-demo-tf-state
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: runtime
+          command: destroy
+          auto_approve: ${{ inputs.auto_approve }}
+
+      - name: Summary
+        shell: bash
+        run: |
+          echo "## Runtime destroyed" >> "$GITHUB_STEP_SUMMARY"
+          echo "Core artifacts and DynamoDB registry are preserved." >> "$GITHUB_STEP_SUMMARY"

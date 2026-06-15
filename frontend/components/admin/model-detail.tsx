@@ -8,6 +8,7 @@ import { ChartPanel } from "@/components/dashboard/chart-panel"
 import { Button } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/empty-state"
 import { fetchModelEvaluation } from "@/lib/api/metrics"
+import { metricLabel } from "@/lib/constants/metrics"
 import type { ModelEvaluation } from "@/types/evaluation"
 import { cn } from "@/lib/utils"
 
@@ -99,11 +100,13 @@ export function ModelDetail({ version }: ModelDetailProps) {
 
       {evaluation.scores ? (
         <ChartPanel title="Validation summary" description="Best checkpoint on held-out set">
-          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Metric label="Composite" value={evaluation.scores.composite} />
-            <Metric label="Span F1" value={evaluation.scores.span_f1} />
-            <Metric label="Sentiment F1" value={evaluation.scores.sent_f1} />
-            <Metric label="Global F1" value={evaluation.scores.glob_f1} />
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+            <Metric label={metricLabel("tas_relaxed_f1")} value={evaluation.scores.tas_relaxed_f1} />
+            <Metric label={metricLabel("tas_strict_f1")} value={evaluation.scores.tas_strict_f1} />
+            <Metric label={metricLabel("span_f1")} value={evaluation.scores.span_f1} />
+            <Metric label={metricLabel("sent_matched_f1")} value={evaluation.scores.sent_matched_f1} />
+            <Metric label={metricLabel("sent_goldspan_f1")} value={evaluation.scores.sent_goldspan_f1} />
+            <Metric label={metricLabel("global_f1")} value={evaluation.scores.global_f1} />
           </dl>
           <div className="mt-4 border-t border-white/[0.06] pt-4">
             <Button size="sm" className="gap-2" asChild>

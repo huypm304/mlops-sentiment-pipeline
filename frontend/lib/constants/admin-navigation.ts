@@ -1,10 +1,13 @@
 import {
   Activity,
-  BarChart3,
-  FileSearch,
-  GitCompare,
+  CircleDollarSign,
+  Database,
   GitBranch,
-  History,
+  Inbox,
+  LayoutDashboard,
+  LineChart,
+  Settings,
+  Terminal,
   Workflow,
 } from "lucide-react"
 
@@ -12,48 +15,13 @@ import type { NavGroup } from "@/types/navigation"
 
 export const adminNavGroups: NavGroup[] = [
   {
-    title: "Operations",
+    title: "Overview",
     items: [
       {
-        title: "Monitoring",
-        href: "/admin/monitoring",
-        icon: Activity,
-        description: "API health, latency, errors",
-      },
-      {
-        title: "Pipeline",
-        href: "/admin/pipeline",
-        icon: Workflow,
-        description: "Retraining workflow",
-      },
-      {
-        title: "Deployments",
-        href: "/admin/deployments",
-        icon: History,
-        description: "Release history",
-      },
-    ],
-  },
-  {
-    title: "Models",
-    items: [
-      {
-        title: "Registry",
-        href: "/admin/models",
-        icon: GitBranch,
-        description: "Registered model versions",
-      },
-      {
-        title: "Compare",
-        href: "/admin/compare",
-        icon: GitCompare,
-        description: "Version comparison",
-      },
-      {
-        title: "Evaluation",
-        href: "/admin/evaluation",
-        icon: BarChart3,
-        description: "Training & validation reports",
+        title: "Dashboard",
+        href: "/admin/dashboard",
+        icon: LayoutDashboard,
+        description: "Operational overview",
       },
     ],
   },
@@ -61,13 +29,83 @@ export const adminNavGroups: NavGroup[] = [
     title: "Data",
     items: [
       {
-        title: "Audit",
-        href: "/admin/audit",
-        icon: FileSearch,
-        description: "Dataset quality reports",
+        title: "Datasets",
+        href: "/admin/datasets",
+        icon: Database,
+        description: "Dataset registry and uploads",
+      },
+    ],
+  },
+  {
+    title: "Model",
+    items: [
+      {
+        title: "Training Runs",
+        href: "/admin/pipeline",
+        icon: Workflow,
+        description: "Retraining pipeline",
+      },
+      {
+        title: "Model Registry",
+        href: "/admin/models",
+        icon: GitBranch,
+        description: "Production and candidate models",
+      },
+      {
+        title: "Evaluation",
+        href: "/admin/evaluation",
+        icon: LineChart,
+        description: "Production model metrics and confusion matrices",
+      },
+    ],
+  },
+  {
+    title: "Operations",
+    items: [
+      {
+        title: "Inference",
+        href: "/admin/inference",
+        icon: Terminal,
+        description: "Inference playground",
+      },
+      {
+        title: "Monitoring",
+        href: "/admin/monitoring",
+        icon: Activity,
+        description: "API health and review signals",
+      },
+      {
+        title: "Review Queue",
+        href: "/admin/review-queue",
+        icon: Inbox,
+        description: "Low-confidence prediction review",
+      },
+      {
+        title: "Cost & Usage",
+        href: "/admin/cost",
+        icon: CircleDollarSign,
+        description: "Resource cost estimates",
+      },
+    ],
+  },
+  {
+    title: "System",
+    items: [
+      {
+        title: "Settings",
+        href: "/admin/settings",
+        icon: Settings,
+        description: "Platform configuration",
       },
     ],
   },
 ]
 
-export const defaultAdminRoute = "/admin/monitoring" as const
+export const defaultAdminRoute = "/admin/dashboard" as const
+
+/** Routes kept in codebase but hidden from sidebar navigation. */
+export const adminHiddenRoutes = [
+  "/admin/audit",
+  "/admin/analytics",
+  "/admin/compare",
+] as const

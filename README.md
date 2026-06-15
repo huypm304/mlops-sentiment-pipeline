@@ -97,34 +97,76 @@ mlops-sentiment-pipeline/
 │       ├── schemas/          # Pydantic request/response
 │       └── config/           # MODEL_DIR, CORS, Step Functions ARN, …
 │
-├── model/                    # Mã nguồn & artifact mô hình ABSA
-│   ├── train.py              # Huấn luyện multi-task (BIO + sentiment + global)
-│   ├── inference.py          # Load checkpoint, predict một câu
-│   ├── postprocess.py        # Hậu xử lý span/opinion
-│   ├── config.json           # Hyperparameters & postprocess config
-│   ├── best_model.pt         # Checkpoint (cần có khi chạy inference)
-│   └── *.jsonl               # Dữ liệu train/demo mẫu
+├── src/absa/                 # Core ABSA modules (refactored, SageMaker-ready)
+│   ├── labels.py             # ASPECTS, BIO labels, sentiment mapping
+│   ├── model.py              # ABSAModel (identical architecture to training)
+│   ├── dataset.py            # ABSADataset + span helpers
+│   ├── losses.py             # focal_loss, LBTWWeighter, contrast_loss
+│   ├── metrics.py            # P/R/F1 helpers, confusion_payload
+│   ├── evaluation.py         # evaluate() + report wrappers
+│   ├── inference.py          # load_model (strict=True), predict_one/batch
+│   ├── postprocess.py        # Confidence filtering, dedup, review flags
+│   ├── schemas.py            # Pydantic schemas for FastAPI
+│   └── utils.py              # set_seed, md5_file, IO helpers
 │
-├── train/                    # Notebook/script huấn luyện phiên bản Kaggle (legacy)
+├── model/                    # Legacy inference + artifacts (backward compat)
+│   ├── inference.py          # DEPRECATED → use src.absa.inference
+│   ├── postprocess.py        # Hậu xử lý (legacy)
+│   ├── best_model.pt         # Checkpoint (gitignored)
+│   ├── run_config.json       # Training hyperparameters
+│   └── train_log.csv         # Training history (all 50 epochs)
+│
+├── training/
+│   └── train_absa_full_kaggle.py   # Frozen Kaggle training script (do not modify)
+│
+├── train/                    # Original training script location (frozen)
+│
+├── scripts/                  # MLOps scripts
+│   ├── eval_model.py         # Evaluate checkpoint (strict=True, MD5, baseline check)
+│   ├── generate_reports.py   # Orchestrator: learning curves + confusion + summary
+│   ├── make_learning_curves.py
+│   ├── make_confusion_plots.py
+│   ├── make_data_reports.py
+│   ├── export_model_artifacts.py   # model_card, label_mapping, checksum
+│   └── package_final_artifacts.py  # Validate + manifest + optional zip
+│
+├── api/
+│   └── main.py               # FastAPI inference API (thesis/SageMaker deploy)
+│
+├── tests/                    # Test suite
+│   ├── test_imports.py
+│   ├── test_strict_load.py
+│   ├── test_inference_smoke.py
+│   ├── test_eval_consistency.py
+│   └── fixtures/dev_mini.jsonl
+│
+├── final_artifacts/          # All outputs for submission/deployment
+│   ├── model/                # model_card, label_mapping, checksum, pointer
+│   ├── evaluation/           # eval reports, per_aspect_report, confusion JSON
+│   ├── figures/              # Learning curves, confusion matrices, aspect bars
+│   ├── data/                 # dataset_manifest, distributions, leakage report
+│   ├── mlops/                # MLOps metadata
+│   └── demo/                 # demo_success_30.jsonl
 │
 ├── lambda/                   # Handlers triển khai AWS
-│   ├── predict/              # Proxy inference → SageMaker (scaffold)
-│   ├── audit/                # Audit dataset từ S3 / Step Functions
+│   ├── predict/              # Inference API
+│   ├── audit/                # Dataset audit + presign upload
 │   │   └── dataset_audit/    # Engine: validators, benchmarks, engine
-│   ├── analytics/            # Analytics serverless (scaffold)
-│   └── retrain_trigger/      # Khởi chạy Step Functions retrain
+│   ├── pipeline/             # Training pipeline trigger + Step Functions tasks
+│   └── metrics/              # Monitoring, drift, review queue
 │
 ├── infrastructure/
-│   ├── terraform/            # IaC root + environments (dev, prod)
-│   │   ├── modules/          # lambda, api_gateway, s3, iam, sagemaker, …
-│   │   └── environments/
-│   └── step-functions/
-│       └── retrain-pipeline.asl.json   # Định nghĩa workflow tái huấn luyện
+│   ├── terraform/
+│   │   ├── bootstrap/        # State bucket, lock table, budget
+│   │   ├── core/             # S3 artifacts, DynamoDB registry
+│   │   ├── runtime/          # Lambda, API, Step Functions, CloudWatch
+│   │   └── modules/
+│   └── README.md
 │
-├── scripts/                  # Shell: terraform, deploy lambda, upload S3, DNS
+├── scripts/                  # bootstrap/core/runtime apply, upload S3, DNS
 ├── reports/                  # Audit JSON & inference log (local, gitignored một phần)
 ├── docs/                     # Tài liệu kiến trúc
-└── .github/workflows/        # Terraform apply/destroy/PR
+└── .github/workflows/        # deploy-bootstrap/core/runtime, destroy, pr-validate
 ```
 
 ---
@@ -137,9 +179,176 @@ mlops-sentiment-pipeline/
 2. **Sentiment theo opinion** — Negative / Positive / Neutral (0/1/2)
 3. **Global sentiment** — Cảm xúc tổng thể câu
 
-**Kiến trúc:** Encoder `Fsoft-AIC/videberta-base`, multi-task heads, hậu xử lý span trong `model/postprocess.py`.
+**Kiến trúc:** Encoder `Fsoft-AIC/videberta-base` (ViDeBERTa), multi-task heads:
+- BiLSTM + CRF BIO tagger cho target/aspect extraction
+- Attention-weighted span pooling + cross-attention + span self-attention
+- Aspect embedding + clause position embedding
+- Polarity-aware global head (neg_pool, pos_pool, contra_vec → global sentiment)
 
-**Artifact chính:** `model/best_model.pt`, `model/config.json`, `model/train_log.csv`, `model/confusion_matrices.jsonl`.
+**Aspect cố định:** `Fashion, Electronics, General, Service, Ship, Price, App`
+
+**Sentiment:** `0=NEG, 1=POS, 2=NEU` (giữ nguyên mapping)
+
+**Artifact chính:** `model/best_model.pt`, `model/run_config.json`, `model/train_log.csv`
+
+**Refactored modules:** `src/absa/` — cùng logic, strict=True load, SageMaker-ready
+
+---
+
+## Training
+
+Script gốc (frozen — không sửa):
+
+```bash
+python training/train_absa_full_kaggle.py \
+  --train-file /kaggle/input/.../train_aug500.jsonl \
+  --val-file   /kaggle/input/.../dev_clean.jsonl \
+  --output-dir /kaggle/working/run2b
+```
+
+---
+
+## Evaluation
+
+```bash
+python scripts/eval_model.py \
+  --model-path final_artifacts/model/best_model.pt \
+  --model-name Fsoft-AIC/videberta-base \
+  --eval-file  /path/to/dev_clean.jsonl \
+  --output-dir final_artifacts/evaluation \
+  --strict-load true
+```
+
+Kết quả so baseline (`model/train_log.csv` best epoch):
+- `tas_relaxed_f1 ≈ 0.58`
+- `span_f1 ≈ 0.82`
+- `sent_matched_f1 ≈ 0.65`
+- `global_f1 ≈ 0.65`
+
+---
+
+## Report generation
+
+```bash
+python scripts/generate_reports.py \
+  --train-log     model/train_log.csv \
+  --confusion-file model/confusion_matrices.jsonl \
+  --eval-main     final_artifacts/evaluation/eval_report.json \
+  --output-dir    final_artifacts
+```
+
+---
+
+## Inference API (thesis/deploy)
+
+```bash
+export ABSA_MODEL_DIR=final_artifacts/model
+export ABSA_DEVICE=cpu
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+| Endpoint | Method | Chức năng |
+|----------|--------|-----------|
+| `/health` | GET | Model status + version |
+| `/model-info` | GET | Architecture info |
+| `/predict` | POST | Single text ABSA |
+| `/predict-batch` | POST | Batch (max 32) |
+| `/metrics/demo` | GET | Latency stats |
+
+---
+
+## Dataset schema
+
+```jsonc
+{
+  "text": "Giá mềm, chất vải mát.",
+  "opinions": [
+    {
+      "target": "Giá",
+      "aspect": "Price",
+      "sentiment": 1,   // 0=NEG, 1=POS, 2=NEU
+      "start": 0,
+      "end": 3
+    }
+  ],
+  "global_sentiment": 1
+}
+```
+
+---
+
+## Final artifacts structure
+
+```text
+final_artifacts/
+├── model/
+│   ├── model_card.json        # architecture, metrics, limitations
+│   ├── label_mapping.json     # ASPECTS, BIO labels, sentiment IDs
+│   ├── run_config.json        # training hyperparameters
+│   ├── tokenizer_info.json
+│   ├── postprocess_config.json
+│   ├── requirements.txt
+│   ├── checksum.txt
+│   └── pointer.txt            # → best_model.pt path
+├── evaluation/
+│   ├── eval_report.json       # full metric dict
+│   ├── per_aspect_report.csv
+│   ├── per_class_report.csv
+│   └── confusion_matrix.json
+├── figures/
+│   ├── learning_curve_*.png   # 6 plots
+│   ├── sentiment_confusion_matrix.png
+│   └── per_aspect_*_f1.png
+├── data/
+│   ├── dataset_manifest.json
+│   └── *.csv
+└── demo/
+    └── demo_success_30.jsonl
+```
+
+---
+
+## SageMaker deployment path
+
+`final_artifacts/` maps to `model.tar.gz` container structure:
+
+```text
+model.tar.gz/
+├── code/        # src/absa/ + api/main.py (inference handler)
+├── model/       # best_model.pt + configs
+└── requirements.txt
+```
+
+Package:
+
+```bash
+python scripts/package_final_artifacts.py \
+  --artifacts-dir final_artifacts \
+  --output-zip    final_artifacts/absa_model_package.zip
+```
+
+---
+
+## Known limitations
+
+- Weak on implicit opinions and sarcasm
+- Boundary errors may occur on short (1-token) targets
+- May fail on clean-short multi-aspect stress tests
+- Confidence threshold + review queue are recommended for production use
+- Model trained on Vietnamese e-commerce; other domains require re-training
+
+---
+
+## Troubleshooting
+
+**strict=True load fails:**
+> Checkpoint architecture mismatch. Ensure `ABSAModel` in `src/absa/model.py` matches the saved checkpoint. Do not use `strict=False` to bypass.
+
+**Model not loading at API startup:**
+> Set `ABSA_MODEL_DIR` to the directory containing `best_model.pt` (or `pointer.txt`) and `run_config.json`.
+
+**Eval metrics differ from training log:**
+> Check dev file schema (requires `start`, `end`, `sentiment` as int). See baseline: `model/train_log.csv` best epoch.
 
 ---
 
@@ -211,9 +420,9 @@ Raw JSONL → Normalize → Audit → Clean → Split → Train → Evaluate
 
 **Audit kiểm tra:** parse JSONL, span offset, schema aspect, polarity, duplicate opinions, global consistency (xem `lambda/audit/README.md`).
 
-**Step Functions** (`infrastructure/step-functions/retrain-pipeline.asl.json`):
+**Step Functions** (`infrastructure/terraform/modules/step_functions/training_pipeline.asl.json`):
 
-`Upload → Audit → Clean → Train → Evaluate → Register → Deploy`
+`ValidateDataset → EstimateCost → CheckApproval → StartTraining → Evaluate → Calibrate → Compare → Gate → Register → SmokeTest → Promote/Reject → Notify`
 
 Báo cáo audit local lưu tại `reports/audit/`; inference log tại `reports/monitoring/inference_log.jsonl`.
 
@@ -221,10 +430,26 @@ Báo cáo audit local lưu tại `reports/audit/`; inference log tại `reports/
 
 ## Hạ tầng Terraform
 
-- **Root:** `infrastructure/terraform/` — wiring S3, IAM, 4 Lambda, SageMaker, Step Functions, API Gateway, CloudWatch, Route53/ACM (tùy domain).
-- **Môi trường:** `environments/dev`, `environments/prod` — `terraform.tfvars`, backend S3 state.
+Kiến trúc mới tách thành 3 stack độc lập (một môi trường `demo`):
 
-Scripts tiện ích: `scripts/terraform_apply.sh`, `deploy_lambda.sh`, `upload_dataset.sh`, `upload_model.sh`, `bootstrap_tf_state.sh`.
+| Stack | Thư mục | Nội dung |
+|---|---|---|
+| Bootstrap | `infrastructure/terraform/bootstrap/` | S3 state, DynamoDB lock |
+| Core | `infrastructure/terraform/core/` | S3 artifacts, DynamoDB registry |
+| Runtime | `infrastructure/terraform/runtime/` | Lambda, API Gateway, Step Functions, CloudWatch |
+
+Chi tiết: [`infrastructure/README.md`](infrastructure/README.md)
+
+Scripts:
+
+```bash
+./scripts/bootstrap_apply.sh   # once per account
+./scripts/core_apply.sh
+./scripts/runtime_apply.sh
+./scripts/runtime_destroy.sh     # safe — keeps core data
+./scripts/upload_model.sh
+./scripts/upload_dataset.sh
+```
 
 ---
 
@@ -232,11 +457,23 @@ Scripts tiện ích: `scripts/terraform_apply.sh`, `deploy_lambda.sh`, `upload_d
 
 | Workflow | Mục đích |
 |----------|----------|
-| `terraform-pr.yml` | Validate/plan trên PR |
-| `terraform-apply.yml` | `workflow_dispatch` apply (dev/prod) |
-| `terraform-destroy.yml` | Hủy infra (cẩn trọng) |
+| `pr-validate.yml` | Validate Terraform + frontend trên PR |
+| `deploy-bootstrap.yml` | Bootstrap (1 lần/account) |
+| `deploy-core.yml` | Deploy core/stateful |
+| `plan-runtime.yml` | Xem plan + cost flags (không apply) |
+| `deploy-runtime.yml` | Deploy runtime — SageMaker **tắt mặc định** |
+| `destroy-runtime.yml` | Hủy runtime (giữ artifacts + registry) |
+| `destroy-all-danger.yml` | Hủy runtime + core (nguy hiểm) |
 
-Composite action: `.github/actions/terraform/`.
+**Kiểm soát chi phí khi Deploy Runtime:**
+
+- `enable_sagemaker_endpoint` = `false` (mặc định) — tránh ~$50+/tháng
+- `enable_sagemaker_training` = `false` (mặc định) — tránh ~$1–10+/job
+- Bật SageMaker → phải gõ `I-ACCEPT-SAGEMAKER-COST` vào `cost_acknowledgement`
+- Dùng **Plan Runtime** trước khi apply để xem thay đổi
+
+Cần cấu hình GitHub Secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
+Variables: `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`
 
 ---
 
@@ -277,11 +514,13 @@ print(run_dataset_audit(Path('model/demo_10.jsonl'))['passed'])
 
 ## Triển khai AWS (tóm tắt)
 
-1. Bootstrap state: `scripts/bootstrap_tf_state.sh`
-2. Cấu hình secrets GitHub: `AWS_*`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`
-3. Apply Terraform: `scripts/terraform_apply.sh` hoặc workflow **Terraform Apply**
-4. Upload dataset/model lên S3 bucket artifact
-5. Trỏ frontend `NEXT_PUBLIC_API_URL` tới API Gateway custom domain
+1. Tạo IAM user + access key trên AWS
+2. Cấu hình GitHub Secrets (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`) và Variables
+3. Chạy workflow **Deploy Bootstrap**
+4. Chạy **Deploy Core**
+5. Chạy **Deploy Runtime**
+6. Upload model baseline: `./scripts/upload_model.sh model models/v1`
+7. Trỏ frontend `NEXT_PUBLIC_API_URL` tới `api_url` output
 
 ---
 

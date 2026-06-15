@@ -1,0 +1,92 @@
+{
+  "train": {
+    "file": "data_stratified/train_aug500_boundary200.jsonl",
+    "rows": 7234,
+    "opinions_total": 12434,
+    "opinions_with_start_or_end": 12434,
+    "counts": {
+      "total_non_empty_lines": 7234,
+      "json_valid": 7234,
+      "has_text": 7234,
+      "has_opinions_key": 7234,
+      "opinions_is_list": 7234,
+      "has_global_sentiment": 7234,
+      "global_sentiment_valid": 7234,
+      "opinions_non_empty": 7234,
+      "all_opinions_aspect_valid": 7234,
+      "all_opinions_sentiment_valid": 7234,
+      "all_opinions_have_target": 7234,
+      "all_opinions_start_end_valid": 7234
+    },
+    "checklist_pct": {
+      "json_valid_100pct": 100.0,
+      "has_text_100pct": 100.0,
+      "has_opinions_key_100pct": 100.0,
+      "opinions_is_list_100pct": 100.0,
+      "global_sentiment_valid_100pct": 100.0,
+      "opinions_non_empty_100pct": 100.0,
+      "aspect_valid_100pct": 100.0,
+      "sentiment_valid_100pct": 100.0,
+      "target_present_100pct": 100.0,
+      "start_end_integer_and_bounds_100pct": 100.0
+    },
+    "thresholds": {
+      "critical_schema_error_target_pct": 0.0,
+      "must_fix_if_over_pct": 0.5,
+      "critical_schema_error_actual_pct": 0.0,
+      "critical_schema_pass": true,
+      "must_fix_before_training": false
+    },
+    "samples": {
+      "parse_errors": [],
+      "schema_errors": []
+    }
+  },
+  "dev": {
+    "file": "data_stratified/dev_clean.jsonl",
+    "rows": 765,
+    "opinions_total": 1280,
+    "opinions_with_start_or_end": 1280,
+    "counts": {
+      "total_non_empty_lines": 765,
+      "json_valid": 765,
+      "has_text": 765,
+      "has_opinions_key": 765,
+      "opinions_is_list": 765,
+      "has_global_sentiment": 765,
+      "global_sentiment_valid": 765,
+      "opinions_non_empty": 765,
+      "all_opinions_aspect_valid": 765,
+      "all_opinions_sentiment_valid": 765,
+      "all_opinions_have_target": 765,
+      "all_opinions_start_end_valid": 765
+    },
+    "checklist_pct": {
+      "json_valid_100pct": 100.0,
+      "has_text_100pct": 100.0,
+      "has_opinions_key_100pct": 100.0,
+      "opinions_is_list_100pct": 100.0,
+      "global_sentiment_valid_100pct": 100.0,
+      "opinions_non_empty_100pct": 100.0,
+      "aspect_valid_100pct": 100.0,
+      "sentiment_valid_100pct": 100.0,
+      "target_present_100pct": 100.0,
+      "start_end_integer_and_bounds_100pct": 100.0
+    },
+    "thresholds": {
+      "critical_schema_error_target_pct": 0.0,
+      "must_fix_if_over_pct": 0.5,
+      "critical_schema_error_actual_pct": 0.0,
+      "critical_schema_pass": true,
+      "must_fix_before_training": false
+    },
+    "samples": {
+      "parse_errors": [],
+      "schema_errors": []
+    }
+  },
+  "combined": {
+    "rows": 7999,
+    "critical_schema_error_pct": 0.0
+  }
+}

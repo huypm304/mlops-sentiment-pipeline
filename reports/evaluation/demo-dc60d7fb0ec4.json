@@ -1,0 +1,12 @@
+{
+  "run_id": "demo-dc60d7fb0ec4",
+  "candidate_model_id": "candidate-demo-dc60d7fb0ec4",
+  "metrics": {
+    "tas_f1": 0.735,
+    "span_f1": 0.692,
+    "sentiment_f1": 0.76,
+    "global_f1": 0.744,
+    "mode": "mock"
+  },
+  "evaluated_at": "2026-06-06T15:53:02.353539Z"
+}

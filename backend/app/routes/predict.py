@@ -21,10 +21,12 @@ async def predict(request: PredictRequest) -> PredictResponse:
 
     runtime_service.record_predict(raw["latency_ms"], error=False)
     drift_service.record_inference(
+        text=request.text,
         global_sentiment=raw["global_sentiment"],
         global_confidence=float(raw.get("global_confidence", 0)),
         opinions=raw["opinions"],
         latency_ms=raw["latency_ms"],
+        model_version=str(raw.get("model_version", "absa-v1")),
     )
 
     opinions = [
@@ -33,6 +35,8 @@ async def predict(request: PredictRequest) -> PredictResponse:
             aspect=o["aspect"],
             sentiment=o["sentiment"],
             confidence=o["confidence"],
+            raw_confidence=o.get("raw_confidence"),
+            calibrated_confidence=o.get("calibrated_confidence"),
             start=o.get("start"),
             end=o.get("end"),
         )
@@ -43,6 +47,8 @@ async def predict(request: PredictRequest) -> PredictResponse:
         opinions=opinions,
         global_sentiment=raw["global_sentiment"],
         global_confidence=raw.get("global_confidence", 0.0),
+        global_raw_confidence=raw.get("global_raw_confidence"),
+        model_version=raw.get("model_version"),
         latency_ms=raw["latency_ms"],
     )
 

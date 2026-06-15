@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +21,19 @@ ASPECT_LABELS = {
     "App": "App",
 }
 SENT_LABELS = ["NEG", "POS", "NEU"]
-VERSION = "best"
+VERSION = "absa-v1"
+PRIMARY_METRIC = "tas_relaxed_f1"
+
+
+def _float(row: dict[str, str], *keys: str) -> float:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            try:
+                return float(value)
+            except ValueError:
+                continue
+    return 0.0
 
 
 def _train_log_path() -> Path:
@@ -29,6 +42,27 @@ def _train_log_path() -> Path:
 
 def _confusion_path() -> Path:
     return MODEL_DIR / "confusion_matrices.jsonl"
+
+
+def _artifact_timestamp(path: Path | None = None) -> str:
+    target = path or _train_log_path()
+    if target.exists():
+        ts = datetime.fromtimestamp(target.stat().st_mtime, tz=timezone.utc)
+        return ts.isoformat().replace("+00:00", "Z")
+    return ""
+
+
+def _scores_from_row(row: dict[str, str]) -> dict[str, float]:
+    """Map train_log.csv columns to canonical evaluation score names."""
+    return {
+        "tas_strict_f1": _float(row, "tas_strict_f1"),
+        "tas_relaxed_f1": _float(row, "tas_relaxed_f1", "composite"),
+        "span_f1": _float(row, "span_f1"),
+        "sent_matched_f1": _float(row, "sent_matched_f1", "sent_f1"),
+        "sent_goldspan_f1": _float(row, "sent_goldspan_f1"),
+        "global_f1": _float(row, "global_f1", "glob_f1"),
+        "train_loss": _float(row, "train_loss"),
+    }
 
 
 def _load_config() -> dict[str, Any]:
@@ -49,10 +83,11 @@ def _read_train_rows() -> list[dict[str, str]]:
 
 
 def _best_train_row(rows: list[dict[str, str]]) -> dict[str, str] | None:
+    if not rows:
+        return None
     best_rows = [r for r in rows if r.get("is_best") == "best"]
-    if not best_rows:
-        return rows[-1] if rows else None
-    return max(best_rows, key=lambda r: float(r.get("composite", 0) or 0))
+    candidates = best_rows or rows
+    return max(candidates, key=lambda r: _float(r, "tas_relaxed_f1", "composite"))
 
 
 def _confusion_for_epoch(epoch: int) -> dict[str, Any] | None:
@@ -106,6 +141,16 @@ def _frontend_confusion(raw: list[list[int]]) -> dict[str, Any]:
     }
 
 
+def _history_from_row(row: dict[str, str], epoch: int) -> dict[str, Any]:
+    scores = _scores_from_row(row)
+    return {
+        "epoch": epoch,
+        "phase": row.get("phase", ""),
+        **scores,
+        "is_best": row.get("is_best") == "best",
+    }
+
+
 def get_training_history() -> list[dict[str, Any]]:
     rows = _read_train_rows()
     history = []
@@ -114,21 +159,12 @@ def get_training_history() -> list[dict[str, Any]]:
             epoch = int(r["epoch"])
         except (KeyError, ValueError):
             continue
-        history.append({
-            "epoch": epoch,
-            "phase": r.get("phase", ""),
-            "train_loss": float(r.get("train_loss", 0) or 0),
-            "span_f1": float(r.get("span_f1", 0) or 0),
-            "sent_f1": float(r.get("sent_f1", 0) or 0),
-            "glob_f1": float(r.get("glob_f1", 0) or 0),
-            "composite": float(r.get("composite", 0) or 0),
-            "is_best": r.get("is_best") == "best",
-        })
+        history.append(_history_from_row(r, epoch))
     return history
 
 
 def get_model_evaluation(version: str = VERSION) -> dict[str, Any] | None:
-    if version not in (VERSION, "best", "v1.0.0"):
+    if version not in (VERSION, "best", "v1.0.0", "absa-v1"):
         return None
 
     rows = _read_train_rows()
@@ -162,13 +198,17 @@ def get_model_evaluation(version: str = VERSION) -> dict[str, Any] | None:
             "support": 0,
         })
 
+    scores = _scores_from_row(best)
+    artifact_ts = _artifact_timestamp()
+
     return {
         "version": VERSION,
         "status": "production",
         "epoch": epoch,
         "phase": best.get("phase", ""),
-        "registered_at": "2025-01-01T00:00:00Z",
-        "evaluated_at": "2025-01-01T00:00:00Z",
+        "primary_metric": PRIMARY_METRIC,
+        "registered_at": artifact_ts,
+        "evaluated_at": artifact_ts,
         "inference_latency_ms": 0,
         "dataset": {
             "version": Path(config.get("train_file", "train")).name,
@@ -181,16 +221,10 @@ def get_model_evaluation(version: str = VERSION) -> dict[str, Any] | None:
             "epochs": int(config.get("epochs", 50)),
             "batch_size": int(config.get("batch_size", 16)),
             "learning_rate": float(config.get("lr_heads", 3e-5)),
-            "trained_at": "2025-01-01T00:00:00Z",
+            "trained_at": artifact_ts,
             "checkpoint": "best_model.pt",
         },
-        "scores": {
-            "span_f1": float(best.get("span_f1", 0) or 0),
-            "sent_f1": float(best.get("sent_f1", 0) or 0),
-            "glob_f1": float(best.get("glob_f1", 0) or 0),
-            "composite": float(best.get("composite", 0) or 0),
-            "train_loss": float(best.get("train_loss", 0) or 0),
-        },
+        "scores": scores,
         "sentiment": sentiment_metrics,
         "global_sentiment": global_metrics,
         "aspect_polarity": sentiment_metrics,
@@ -208,18 +242,42 @@ def get_model_evaluation(version: str = VERSION) -> dict[str, Any] | None:
 
 
 def list_models() -> list[dict[str, Any]]:
+    from backend.app.services import registry_db
+
+    store = registry_db.get_store()
+    if store is not None and store.config.models_table:
+        rows = store.list_models(limit=20)
+        if rows:
+            return [
+                {
+                    "version": row.get("model_id", row.get("version", "absa-v1")),
+                    "status": str(row.get("status", "production")).lower(),
+                    "primary_metric": "global_f1",
+                    "global_f1": float((row.get("metrics") or {}).get("global_f1", 0)),
+                    "span_f1": float((row.get("metrics") or {}).get("span_f1", 0)),
+                    "tas_relaxed_f1": float((row.get("metrics") or {}).get("tas_f1", 0)),
+                    "encoder": row.get("source", "sagemaker_training"),
+                    "checkpoint": row.get("artifact_prefix", ""),
+                }
+                for row in rows
+            ]
+
     ev = get_model_evaluation()
     if not ev:
         return []
+    scores = ev["scores"]
     return [
         {
             "version": ev["version"],
             "status": ev["status"],
             "epoch": ev["epoch"],
-            "composite": ev["scores"]["composite"],
-            "sent_f1": ev["scores"]["sent_f1"],
-            "span_f1": ev["scores"]["span_f1"],
-            "glob_f1": ev["scores"]["glob_f1"],
+            "primary_metric": PRIMARY_METRIC,
+            "tas_strict_f1": scores["tas_strict_f1"],
+            "tas_relaxed_f1": scores["tas_relaxed_f1"],
+            "span_f1": scores["span_f1"],
+            "sent_matched_f1": scores["sent_matched_f1"],
+            "sent_goldspan_f1": scores["sent_goldspan_f1"],
+            "global_f1": scores["global_f1"],
             "encoder": ev["training"]["encoder"],
             "checkpoint": ev["training"]["checkpoint"],
         }

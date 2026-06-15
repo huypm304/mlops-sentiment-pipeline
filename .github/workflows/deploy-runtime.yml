@@ -1,0 +1,155 @@
+# Deploy runtime services: Lambda, API Gateway, Step Functions, EventBridge, CloudWatch.
+# Costly SageMaker services are OFF by default — enable only for specific demos.
+name: Deploy Runtime
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: Auto-approve apply
+        type: boolean
+        default: true
+
+      # --- Cost control: expensive services (default OFF) ---
+      enable_sagemaker_endpoint:
+        description: "COSTLY (~$50+/mo): SageMaker inference endpoint (ml.m5.large always-on)"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      enable_sagemaker_training:
+        description: "COSTLY (~$1–10+/run): Real SageMaker training jobs in pipeline"
+        type: choice
+        options: ["false", "true"]
+        default: "false"
+      sagemaker_instance_type:
+        description: SageMaker endpoint instance type (only when endpoint enabled)
+        type: choice
+        options:
+          - ml.m5.large
+          - ml.m5.xlarge
+          - ml.c5.large
+          - ml.t3.medium
+        default: ml.m5.large
+      enable_eventbridge_monitoring:
+        description: "LOW COST: Hourly monitoring + daily retrain-check schedules"
+        type: choice
+        options: ["true", "false"]
+        default: "true"
+
+      cost_acknowledgement:
+        description: 'Required when SageMaker is enabled — type exactly: I-ACCEPT-SAGEMAKER-COST'
+        required: false
+        default: ""
+
+      domain_name:
+        description: Root domain (minhhuy.me)
+        required: false
+        default: "minhhuy.me"
+      enable_custom_domain:
+        description: Enable ACM + CloudFront + api custom domain
+        type: boolean
+        default: true
+      api_subdomain:
+        description: API subdomain prefix
+        required: false
+        default: "api"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absa-mlops-runtime
+  cancel-in-progress: false
+
+jobs:
+  cost-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block SageMaker without explicit acknowledgement
+        shell: bash
+        run: |
+          ENDPOINT="${{ inputs.enable_sagemaker_endpoint }}"
+          TRAINING="${{ inputs.enable_sagemaker_training }}"
+          ACK="${{ inputs.cost_acknowledgement }}"
+
+          echo "## Cost control summary" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Service | Enabled | Est. cost |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SageMaker endpoint (${{ inputs.sagemaker_instance_type }}) | ${ENDPOINT} | ~\$50+/month if always on |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SageMaker training | ${TRAINING} | ~\$1–10+ per job |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| EventBridge monitoring | ${{ inputs.enable_eventbridge_monitoring }} | ~\$0–1/month |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Lambda + API Gateway | always | pay per request (demo: ~\$0) |" >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ "$ENDPOINT" == "true" || "$TRAINING" == "true" ]]; then
+            if [[ "$ACK" != "I-ACCEPT-SAGEMAKER-COST" ]]; then
+              echo "::error::SageMaker is enabled but cost_acknowledgement is missing."
+              echo "Type I-ACCEPT-SAGEMAKER-COST in the cost_acknowledgement field to proceed."
+              exit 1
+            fi
+            echo "::warning::SageMaker costly services are ENABLED for this deploy."
+          else
+            echo "Demo-safe mode: SageMaker endpoint and training are disabled." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  apply:
+    needs: cost-guard
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ap-southeast-1
+      TF_STATE_BUCKET: absa-mlops-demo-tf-state
+      TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
+      TF_STATE_KEY: runtime/terraform.tfstate
+      TF_VAR_core_state_bucket: absa-mlops-demo-tf-state
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: runtime
+          command: apply
+          auto_approve: ${{ inputs.auto_approve }}
+          enable_sagemaker_endpoint: ${{ inputs.enable_sagemaker_endpoint }}
+          enable_sagemaker_training: ${{ inputs.enable_sagemaker_training }}
+          enable_eventbridge_monitoring: ${{ inputs.enable_eventbridge_monitoring }}
+          sagemaker_instance_type: ${{ inputs.sagemaker_instance_type }}
+          domain_name: ${{ inputs.domain_name }}
+          enable_custom_domain: ${{ inputs.enable_custom_domain }}
+          api_subdomain: ${{ inputs.api_subdomain }}
+
+      - name: Smoke test /health
+        working-directory: infrastructure/terraform/runtime
+        shell: bash
+        env:
+          TF_STATE_BUCKET: absa-mlops-demo-tf-state
+          TF_STATE_LOCK_TABLE: absa-mlops-demo-tf-locks
+          AWS_REGION: ap-southeast-1
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=runtime/terraform.tfstate" \
+            -backend-config="region=${AWS_REGION}" \
+            -backend-config="encrypt=true" \
+            -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}"
+          API_URL=$(terraform output -raw api_url)
+          echo "API URL: $API_URL"
+          echo "## Runtime deployed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **api_url**: $API_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **step_functions_arn**: $(terraform output -raw step_functions_arn)" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **sagemaker_endpoint_enabled**: $(terraform output -raw sagemaker_endpoint_enabled)" >> "$GITHUB_STEP_SUMMARY"
+          curl -fsS "$API_URL/health" | tee /tmp/health.json
+          echo "- **health**: $(cat /tmp/health.json)" >> "$GITHUB_STEP_SUMMARY"
+          API_CUSTOM=$(terraform output -raw api_custom_domain_url 2>/dev/null || true)
+          FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || true)
+          if [[ -n "$API_CUSTOM" ]]; then
+            echo "- **api_custom_domain_url**: $API_CUSTOM" >> "$GITHUB_STEP_SUMMARY"
+            curl -fsS "$API_CUSTOM/health" | tee /tmp/health-custom.json || true
+            echo "- **health (custom domain)**: $(cat /tmp/health-custom.json 2>/dev/null || echo skipped)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ -n "$FRONTEND_URL" ]]; then
+            echo "- **frontend_url**: $FRONTEND_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          NS=$(terraform output -json route53_name_servers 2>/dev/null || echo "[]")
+          echo "- **route53_name_servers**: $NS" >> "$GITHUB_STEP_SUMMARY"

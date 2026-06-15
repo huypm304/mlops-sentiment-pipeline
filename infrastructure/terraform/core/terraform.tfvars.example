@@ -1,0 +1,11 @@
+# Copy to terraform.tfvars
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region  = "ap-southeast-1"
+project     = "absa-mlops"
+environment = "demo"
+owner       = "minh-huy"
+
+# Route53 — set domain to create hosted zone (change NS at registrar once)
+domain_name          = "minhhuy.me"
+create_hosted_zone   = true

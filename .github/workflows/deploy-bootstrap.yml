@@ -1,0 +1,51 @@
+# One-time per AWS account: creates tf state bucket, lock table, optional budget.
+name: Deploy Bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      auto_approve:
+        description: Auto-approve apply
+        type: boolean
+        default: true
+      budget_alert_email:
+        description: Email for AWS budget alerts (leave empty to skip)
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: absa-mlops-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: demo
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ap-southeast-1
+      TF_VAR_budget_alert_email: ${{ inputs.budget_alert_email }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/terraform-stack
+        with:
+          stack: bootstrap
+          command: apply
+          auto_approve: ${{ inputs.auto_approve }}
+
+      - name: Print outputs
+        working-directory: infrastructure/terraform/bootstrap
+        shell: bash
+        run: |
+          terraform init -input=false
+          echo "## Bootstrap outputs" >> "$GITHUB_STEP_SUMMARY"
+          terraform output -json | python3 -c "
+          import json, sys
+          for k, v in json.load(sys.stdin).items():
+              print(f'- **{k}**: {v.get(\"value\", v)}')
+          " >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || terraform output >> "$GITHUB_STEP_SUMMARY"

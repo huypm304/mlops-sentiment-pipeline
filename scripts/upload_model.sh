@@ -1,21 +1,22 @@
 #!/usr/bin/env bash
-# Upload model artifacts to S3 (models/ prefix).
+# Upload model artifacts to S3 (production baseline under models/v1/).
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODEL_DIR="${1:-$ROOT_DIR/model}"
-ENVIRONMENT="${ENVIRONMENT:-dev}"
-PROJECT_NAME="${PROJECT_NAME:-absa-mlops-platform}"
+PREFIX="${2:-models/v1}"
+PROJECT="${PROJECT:-absa-mlops}"
+ENVIRONMENT="${ENVIRONMENT:-demo}"
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
-BUCKET="${ARTIFACTS_BUCKET:-${PROJECT_NAME}-${ENVIRONMENT}}"
+BUCKET="${ARTIFACTS_BUCKET:-${PROJECT}-${ENVIRONMENT}-artifacts}"
 
 echo "Uploading model from: $MODEL_DIR"
-echo "Target: s3://${BUCKET}/models/latest/"
+echo "Target: s3://${BUCKET}/${PREFIX}/"
 
-aws s3 sync "$MODEL_DIR" "s3://${BUCKET}/models/latest/" \
+aws s3 sync "$MODEL_DIR" "s3://${BUCKET}/${PREFIX}/" \
   --region "$AWS_REGION" \
   --exclude "*.pyc" \
   --exclude "__pycache__/*" \
   --exclude ".git/*"
 
-echo "Done. Model artifacts available at s3://${BUCKET}/models/latest/"
+echo "Done. Model artifacts available at s3://${BUCKET}/${PREFIX}/"

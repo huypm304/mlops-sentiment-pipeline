@@ -1,4 +1,4 @@
-export type BenchmarkStatus = "pass" | "fail"
+export type BenchmarkStatus = "pass" | "fail" | "warn"
 
 export interface AuditBenchmark {
   id: string
@@ -11,6 +11,7 @@ export interface AuditBenchmark {
   status: BenchmarkStatus
   display_value: string
   display_threshold: string
+  module_status?: string
 }
 
 export interface AuditIssue {
@@ -29,17 +30,22 @@ export interface AuditSummary {
   records_with_opinions: number
   total_opinions: number
   avg_opinions_per_record: number
+  train_rows?: number
+  dev_rows?: number
 }
 
 export interface AuditReport {
   report_id: string
   generated_at: string
+  dataset_id?: string
   dataset_key: string
   source_label: string
   schema: string
   passed: boolean
+  data_level_status?: string
   summary: AuditSummary
   benchmarks: AuditBenchmark[]
+  modules?: Record<string, unknown>
   distributions: {
     aspects: Record<string, number>
     opinion_sentiments: Record<string, number>
@@ -52,8 +58,14 @@ export interface AuditReport {
 export interface AuditReportListItem {
   report_id: string
   generated_at: string
+  dataset_id?: string
   dataset_key: string
   source_label: string
   passed: boolean
+  data_level_status?: string
   summary: AuditSummary
+}
+
+export type AuditTarget = {
+  datasetId: string
 }

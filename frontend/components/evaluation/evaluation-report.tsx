@@ -20,14 +20,17 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart"
+import { metricLabel } from "@/lib/constants/metrics"
 import type { TrainingHistoryPoint } from "@/lib/api/metrics"
 import type { ModelEvaluation } from "@/types/evaluation"
 
 const f1ChartConfig = {
-  composite: { label: "Composite", color: "var(--chart-1)" },
-  span_f1: { label: "Span F1", color: "var(--chart-2)" },
-  sent_f1: { label: "Sentiment F1", color: "var(--chart-3)" },
-  glob_f1: { label: "Global F1", color: "var(--chart-4)" },
+  tas_relaxed_f1: { label: metricLabel("tas_relaxed_f1"), color: "var(--chart-1)" },
+  tas_strict_f1: { label: metricLabel("tas_strict_f1"), color: "var(--chart-5)" },
+  span_f1: { label: metricLabel("span_f1"), color: "var(--chart-2)" },
+  sent_matched_f1: { label: metricLabel("sent_matched_f1"), color: "var(--chart-3)" },
+  sent_goldspan_f1: { label: metricLabel("sent_goldspan_f1"), color: "var(--chart-6)" },
+  global_f1: { label: metricLabel("global_f1"), color: "var(--chart-4)" },
 } satisfies ChartConfig
 
 type EvaluationReportProps = {
@@ -37,16 +40,19 @@ type EvaluationReportProps = {
 
 export function EvaluationReport({ evaluation, history }: EvaluationReportProps) {
   const bestEpoch = evaluation.epoch
+  const scores = evaluation.scores
 
   return (
     <div className="space-y-6">
-      {evaluation.scores ? (
-        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {scores ? (
+        <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
           <ScoreCard label="Best epoch" value={String(bestEpoch ?? "—")} raw />
-          <ScoreCard label="Composite" value={evaluation.scores.composite} />
-          <ScoreCard label="Span F1" value={evaluation.scores.span_f1} />
-          <ScoreCard label="Sentiment F1" value={evaluation.scores.sent_f1} />
-          <ScoreCard label="Global F1" value={evaluation.scores.glob_f1} />
+          <ScoreCard label={metricLabel("tas_relaxed_f1")} value={scores.tas_relaxed_f1} />
+          <ScoreCard label={metricLabel("tas_strict_f1")} value={scores.tas_strict_f1} />
+          <ScoreCard label={metricLabel("span_f1")} value={scores.span_f1} />
+          <ScoreCard label={metricLabel("sent_matched_f1")} value={scores.sent_matched_f1} />
+          <ScoreCard label={metricLabel("sent_goldspan_f1")} value={scores.sent_goldspan_f1} />
+          <ScoreCard label={metricLabel("global_f1")} value={scores.global_f1} />
         </dl>
       ) : null}
 
@@ -58,7 +64,7 @@ export function EvaluationReport({ evaluation, history }: EvaluationReportProps)
       </ChartPanel>
 
       <ChartPanel title="Training curves" description="Validation F1 per epoch (train_log.csv)">
-        <ChartContainer config={f1ChartConfig} className="h-[260px] w-full">
+        <ChartContainer config={f1ChartConfig} className="h-[280px] w-full">
           <LineChart data={history}>
             <CartesianGrid vertical={false} strokeDasharray="3 3" />
             <XAxis dataKey="epoch" tick={{ fontSize: 10 }} />
@@ -70,34 +76,12 @@ export function EvaluationReport({ evaluation, history }: EvaluationReportProps)
             />
             <ChartTooltip content={<ChartTooltipContent />} />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey="composite"
-              stroke="var(--color-composite)"
-              strokeWidth={2}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="span_f1"
-              stroke="var(--color-span_f1)"
-              strokeWidth={1.5}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="sent_f1"
-              stroke="var(--color-sent_f1)"
-              strokeWidth={1.5}
-              dot={false}
-            />
-            <Line
-              type="monotone"
-              dataKey="glob_f1"
-              stroke="var(--color-glob_f1)"
-              strokeWidth={1.5}
-              dot={false}
-            />
+            <Line type="monotone" dataKey="tas_relaxed_f1" stroke="var(--color-tas_relaxed_f1)" strokeWidth={2} dot={false} />
+            <Line type="monotone" dataKey="tas_strict_f1" stroke="var(--color-tas_strict_f1)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="span_f1" stroke="var(--color-span_f1)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sent_matched_f1" stroke="var(--color-sent_matched_f1)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="sent_goldspan_f1" stroke="var(--color-sent_goldspan_f1)" strokeWidth={1.5} dot={false} />
+            <Line type="monotone" dataKey="global_f1" stroke="var(--color-global_f1)" strokeWidth={1.5} dot={false} />
           </LineChart>
         </ChartContainer>
       </ChartPanel>
@@ -124,7 +108,7 @@ export function EvaluationReport({ evaluation, history }: EvaluationReportProps)
       </ChartPanel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartPanel title="Span sentiment metrics" description="Precision · recall · F1">
+        <ChartPanel title="Span sentiment metrics" description="Sent@Matched confusion matrix">
           <MetricsOverview title="" metrics={evaluation.sentiment} />
         </ChartPanel>
         <ChartPanel title="Global sentiment metrics" description="Document-level head">

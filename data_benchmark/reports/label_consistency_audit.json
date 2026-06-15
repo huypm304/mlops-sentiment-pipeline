@@ -1,0 +1,1447 @@
+{
+  "train": {
+    "file": "data_stratified/train_aug500_boundary200.jsonl",
+    "rows": 7234,
+    "opinions": 12434,
+    "metrics": {
+      "aspect_suspicious_count": 148,
+      "aspect_suspicious_rate_pct": 1.1903,
+      "sentiment_suspicious_count": 2222,
+      "sentiment_suspicious_rate_pct": 17.8704,
+      "general_overuse_count": 55,
+      "general_overuse_rate_pct": 0.4423,
+      "price_general_confusion_count": 6,
+      "price_general_confusion_rate_pct": 0.0483,
+      "service_ship_confusion_count": 7,
+      "service_ship_confusion_rate_pct": 0.0563,
+      "contrast_rows_count": 3117,
+      "contrast_rows_without_polarity_split_count": 840,
+      "contrast_rows_without_polarity_split_pct": 26.949
+    },
+    "thresholds": {
+      "aspect_suspicious_good_lt_pct": 3.0,
+      "aspect_suspicious_review_3_to_7_pct": [
+        3.0,
+        7.0
+      ],
+      "sentiment_suspicious_good_lt_pct": 5.0,
+      "sentiment_suspicious_review_5_to_10_pct": [
+        5.0,
+        10.0
+      ],
+      "aspect_quality_band": "good",
+      "sentiment_quality_band": "high-risk"
+    },
+    "samples": {
+      "aspect_suspicious": [
+        {
+          "line": 28,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 50,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 56,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 126,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 128,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 345,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 357,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 365,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 419,
+          "target": "ung dung",
+          "aspect": "Electronics",
+          "expected_candidates": [
+            "App"
+          ]
+        },
+        {
+          "line": 435,
+          "target": "mau da",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 488,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 495,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 528,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 581,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 615,
+          "target": "nhan vien",
+          "aspect": "Ship",
+          "expected_candidates": [
+            "Service"
+          ]
+        },
+        {
+          "line": 634,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 714,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 735,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 800,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 801,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 805,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 820,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 832,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 957,
+          "target": "tab voucher",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        },
+        {
+          "line": 1077,
+          "target": "muc đanh gia",
+          "aspect": "App",
+          "expected_candidates": [
+            "Price"
+          ]
+        }
+      ],
+      "sentiment_suspicious": [
+        {
+          "line": 4,
+          "target": "muc gia",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "mua dung hang ngay muc gia vua phai khong khien minh bat ngo xet mat"
+        },
+        {
+          "line": 8,
+          "target": "tien",
+          "sentiment": 1,
+          "inferred": 0,
+          "confidence": 2,
+          "context": "thanh toan tien mua hang qua vi em va the atm rat tien loi"
+        },
+        {
+          "line": 10,
+          "target": "gia",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "oai thai duong nay ket ban co hieu qua k chu gia thi cung k co re chut nao đuoc tang them xa"
+        },
+        {
+          "line": 20,
+          "target": "man hinh",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "man hinh đe qua đem tut pin kha sau ma đon giao đung"
+        },
+        {
+          "line": 21,
+          "target": "camera",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "5 sao cho hang viet nhung loa nho camera chup khong đuoc đep nho mong co them vai ca"
+        },
+        {
+          "line": 26,
+          "target": "vien man cam ung",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "c khe thi may rat ok co mot so khuyet điem vien man cam ung khong nhay cho lam nhung khong quan trong vi"
+        },
+        {
+          "line": 32,
+          "target": "tu van",
+          "sentiment": 1,
+          "inferred": 0,
+          "confidence": 2,
+          "context": "giao hang hop toi noi mop goc chu tu van giai thich chinh sach khong long vong"
+        },
+        {
+          "line": 35,
+          "target": "giao hang",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "giao hang rat khong đung hen ma shop phuc vu on"
+        },
+        {
+          "line": 37,
+          "target": "tam gia",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "cha hieu kieu gi tam gia nay roi ma o cung con k trang bi chong nuoc"
+        },
+        {
+          "line": 37,
+          "target": "o cung",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "cha hieu kieu gi tam gia nay roi ma o cung con k trang bi chong nuoc chong bui"
+        },
+        {
+          "line": 41,
+          "target": "ung dung",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "1 ngay tu 00 gio đen 5 gio sang tat het moi ung dung ca wif ma van het 4 pin la sao a co nen đoi"
+        },
+        {
+          "line": 41,
+          "target": "pin",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "ng tat het moi ung dung ca wif ma van het 4 pin la sao a co nen đoi may k"
+        },
+        {
+          "line": 45,
+          "target": "tien",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "khong hai long nhung đung la tien nao cua lay"
+        },
+        {
+          "line": 46,
+          "target": "muc theo doi đon",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "trai nghiem gan đay thi muc theo doi đon phan hoi cham va thinh thoang bi đung nen m"
+        },
+        {
+          "line": 53,
+          "target": "pin",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "cau hinh on ngoai hinh đep pin tam on camera net luot wed ok nhin chung"
+        },
+        {
+          "line": 54,
+          "target": "may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "that su la rat che nhe tieng thi nhu cai may cay to kinh khung co 2 chieu nong lanh n"
+        },
+        {
+          "line": 55,
+          "target": "hang",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "nhan hang qua chan luon 1 hop sua đong cai thung ro t"
+        },
+        {
+          "line": 59,
+          "target": "app",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "no bi gi vay a đa so app đeu bi vay game tai ve vao cap nhat no cung"
+        },
+        {
+          "line": 65,
+          "target": "lung nhua",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "to qua ngon cho 1 cuoc tinh chi moi toi la lung nhua nen khong sang trong"
+        },
+        {
+          "line": 67,
+          "target": "ung dung",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "quang cao it thoi khong xoa me bo ung dung đay"
+        },
+        {
+          "line": 70,
+          "target": "gia",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "chot đon vi can gap gia đung tam thi truong khong hon khong kem kh"
+        },
+        {
+          "line": 73,
+          "target": "gia",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "gam 6gb choi game lien quan no giat đung noi gia gan 10tr chi đe xem youtube hay nghe goi noi"
+        },
+        {
+          "line": 75,
+          "target": "hang",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "moi đat toi qua sang hom sau đa nhan đuoc hang nay moi dung thuc su bat ngo vi hieu qua t"
+        },
+        {
+          "line": 76,
+          "target": "gia",
+          "sentiment": 1,
+          "inferred": 0,
+          "confidence": 2,
+          "context": "vu te giao dien lag thoi gian giao loi song gia re"
+        },
+        {
+          "line": 78,
+          "target": "may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "e v ma bao kinh cuong luclau lau lai bi đung may pin con 15 tuot nhanh nhu nuocmua gia cao"
+        }
+      ],
+      "general_overuse": [
+        {
+          "line": 28,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 56,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 126,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 345,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 435,
+          "target": "mau da",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 488,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 528,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 634,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 805,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 820,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 832,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1198,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1221,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1258,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1311,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1441,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1445,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1828,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1848,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1881,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 1970,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 2036,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 2058,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 2354,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 2442,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        }
+      ],
+      "price_general_confusion": [
+        {
+          "line": 1151,
+          "target": "xiaomi redmi note 9s",
+          "aspect": "General"
+        },
+        {
+          "line": 2316,
+          "target": "gian hang",
+          "aspect": "General"
+        },
+        {
+          "line": 2745,
+          "target": "đth realme c3",
+          "aspect": "General"
+        },
+        {
+          "line": 2812,
+          "target": "oppo reno2 f",
+          "aspect": "General"
+        },
+        {
+          "line": 4997,
+          "target": "oppo reno4",
+          "aspect": "General"
+        },
+        {
+          "line": 6222,
+          "target": "giay",
+          "aspect": "General"
+        }
+      ],
+      "service_ship_confusion": [
+        {
+          "line": 23,
+          "target": "nhan vien giao hang",
+          "aspect": "Ship"
+        },
+        {
+          "line": 615,
+          "target": "nhan vien",
+          "aspect": "Ship"
+        },
+        {
+          "line": 2621,
+          "target": "nhan vien",
+          "aspect": "Ship"
+        },
+        {
+          "line": 3274,
+          "target": "nhan vien giao hang",
+          "aspect": "Ship"
+        },
+        {
+          "line": 3768,
+          "target": "ban giao hang",
+          "aspect": "Service"
+        },
+        {
+          "line": 3944,
+          "target": "giao hang",
+          "aspect": "Service"
+        },
+        {
+          "line": 5516,
+          "target": "nhan vien",
+          "aspect": "Ship"
+        }
+      ],
+      "contrast_without_split": [
+        {
+          "line": 10,
+          "sentiments": [
+            1,
+            2,
+            2
+          ],
+          "text": "Giao hàng tương đối nhanh, shiper nhiệt tình. Lần đầu mua loại Thái Dương này kết bạn có hiệu quả k chứ giá thì cũng k có rẻ chút nào. được tặng thêm xầu xả nha. Chai dd với dầu Cl"
+        },
+        {
+          "line": 13,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "ứng dụng mua hàng nhiều voucher tin cậy nhất việt nam uy tín"
+        },
+        {
+          "line": 17,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "chăm sóc khách hàng kém , hàng gửi về chả cod tem dán niêm phong gig, gửi caia chai như là bị mở ra dùng rồi đúng tệ"
+        },
+        {
+          "line": 30,
+          "sentiments": [
+            1,
+            1,
+            1
+          ],
+          "text": "Đúng với mô tả:đúng Màu sắc:trắng kem Chất liệu:su duc  Mua của shop nhiều rồi ,săn được giá sale nên hời lắm ạ còn ủng hộ shop tiếp"
+        },
+        {
+          "line": 31,
+          "sentiments": [
+            1,
+            1,
+            1
+          ],
+          "text": "vivo y11.pin trâu mọi thứ ok.giá cả phải chăng hợp lý..lần đầu tiên dùng được một sản phẩm ngon bổ rẻ.."
+        },
+        {
+          "line": 41,
+          "sentiments": [
+            2,
+            2
+          ],
+          "text": "Cho hỏi máy vừa mua được 1 ngày từ 00 giờ đên 5 giờ sáng tắt hết mọi ứng dụng cả wif mà vấn hết 4% pin là sao ạ có nên đổi máy k"
+        },
+        {
+          "line": 48,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "nhờ gỡ khóa vĩnh viễn số điện thoại mà nhân viên trả lời hời hợt chung chung giờ chính người dùng không biết lí do đằng sau tại sao bị khóa cũng chả thèm trả lời làm ăn kiểu vậy à "
+        },
+        {
+          "line": 50,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "Vải mặc mát và sờ rất êm. Tuy nhiên, Phí ship đắt làm mình chùn tay."
+        },
+        {
+          "line": 63,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "cảm ứng vuốt cảm ứng bắt tay dù thời gian giao đúng khung giờ, phết."
+        },
+        {
+          "line": 66,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Bao bì/Mẫu mã:ok Chất lượng sản phẩm:ok Độ tuổi sử dụng:from 1 years old  Đóng gói và vận chuyển ok, bao bì mẫu mã ok, chất lượng ok, có thiết kế muỗng múc sữa quá ngắn, mỗi lần mú"
+        },
+        {
+          "line": 73,
+          "sentiments": [
+            0,
+            0,
+            0
+          ],
+          "text": "Ss nói thẳng được cái thương hiệu.mua máy sài chưa hết bảo hành mà ta nói nó tệ.dò tài khoảng thì báo không liên kết.bắt wifi thì yếu.gam 6gb chơi game liên quan nó giật đừng nói.g"
+        },
+        {
+          "line": 75,
+          "sentiments": [
+            1,
+            1,
+            2
+          ],
+          "text": "Shop chuẩn bị và giao hàng rất nhanh. Mới đặt tối qua, sáng hôm sau đã nhận được hàng. Nay mới dùng thực sự bất ngờ vì hiệu quả. Tóc mềm mượt và rất thơm. Cảm ơn shop ❤️"
+        },
+        {
+          "line": 85,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "dùng máy rất tốt, hệ điều hành mượt mà. camera đẹp chụp rất tốt, pin khỏe 1 ngày dùng mới cần sac"
+        },
+        {
+          "line": 94,
+          "sentiments": [
+            1,
+            1,
+            1
+          ],
+          "text": "Dầu gội thơm dịu. Mới dùng thấy đỡ gàu. Shop gói hàng cẩn thận. Giao hàng nhanh. Mua sale giá tốt."
+        },
+        {
+          "line": 134,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "Sau khi sử dụng 2 ngày mọi thứ đều ok chỉ riêng camera thì quá tệ so với giá tiền"
+        },
+        {
+          "line": 139,
+          "sentiments": [
+            2,
+            2
+          ],
+          "text": "Mẹo:khong Kinh nghiệm sử dụng:15’ Bao bì:dep  Hàng chuẩn ạ. Đóng gói kỹ. Dùng máy êm, săn sale 139 còn được kèm lược"
+        },
+        {
+          "line": 161,
+          "sentiments": [
+            2,
+            0,
+            2
+          ],
+          "text": "Giao hàng nhanh chóng, đóng gói chưa được cẩn thận, sản phẩm chưa sử dụng nên kết bạn chất lượng"
+        },
+        {
+          "line": 173,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "lỗi thẻ sim dùng 4g bị không dịch vụ, tự sập nguồn sạc không vào pin. hơi thất vọng điện thoại này"
+        },
+        {
+          "line": 179,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "mình mua máy sử dụng được 1 tháng rồi mà cấu hình chơi game mượt, pin trâu sử mượt, game lâu không bị nóng máy. tóm lại dùng cực kỳ thích luôn"
+        },
+        {
+          "line": 210,
+          "sentiments": [
+            0,
+            2,
+            0
+          ],
+          "text": "Chất lượng ch biết thế nào mà cách shop đóng gói  quá ư là cẩu thả , nắp chai thì trầy hết như đã qua sử dụng . Lần đầu trải nghiệm mà shop làm thất vọng quá 🥲"
+        },
+        {
+          "line": 212,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "sản phẩm mau tuột pin, sử dụng gọi zalo video thì nói chuyện không rỏ. thất vọng về sản phẩm a92"
+        },
+        {
+          "line": 215,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Công dụng:dung cụ an toàn  giao hàng nhanh , giá cả hợp lý shipper thân thiện"
+        },
+        {
+          "line": 218,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "Cá nhân mình thì mình thấy ứng dụng này khá tiện lợi và rất đa dạng vật dụng. Còn Tiki gian dối trong việc giao hàng giao thiếu không đúng mẫu"
+        },
+        {
+          "line": 233,
+          "sentiments": [
+            0,
+            0,
+            0
+          ],
+          "text": "Nếu nhìn kỹ thì viền máy bị hở bên cạnh nên bụi rất dễ bám vào. Độ khớp giữ khung hợp kim nhôm magie và mặt kính chưa thật sự khít. Khi dùng tay bẻ nhẹ máy thi phát ra tiếng kêu kẹ"
+        },
+        {
+          "line": 241,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "pin đẩy game giữ fps khá đều tuy đóng gói mở hộp ra gọn gàng."
+        }
+      ]
+    }
+  },
+  "dev": {
+    "file": "data_stratified/dev_clean.jsonl",
+    "rows": 765,
+    "opinions": 1280,
+    "metrics": {
+      "aspect_suspicious_count": 7,
+      "aspect_suspicious_rate_pct": 0.5469,
+      "sentiment_suspicious_count": 204,
+      "sentiment_suspicious_rate_pct": 15.9375,
+      "general_overuse_count": 4,
+      "general_overuse_rate_pct": 0.3125,
+      "price_general_confusion_count": 0,
+      "price_general_confusion_rate_pct": 0.0,
+      "service_ship_confusion_count": 2,
+      "service_ship_confusion_rate_pct": 0.1562,
+      "contrast_rows_count": 336,
+      "contrast_rows_without_polarity_split_count": 89,
+      "contrast_rows_without_polarity_split_pct": 26.4881
+    },
+    "thresholds": {
+      "aspect_suspicious_good_lt_pct": 3.0,
+      "aspect_suspicious_review_3_to_7_pct": [
+        3.0,
+        7.0
+      ],
+      "sentiment_suspicious_good_lt_pct": 5.0,
+      "sentiment_suspicious_review_5_to_10_pct": [
+        5.0,
+        10.0
+      ],
+      "aspect_quality_band": "good",
+      "sentiment_quality_band": "high-risk"
+    },
+    "samples": {
+      "aspect_suspicious": [
+        {
+          "line": 306,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 307,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 499,
+          "target": "bo sac nhan",
+          "aspect": "Service",
+          "expected_candidates": [
+            "Electronics"
+          ]
+        },
+        {
+          "line": 504,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 582,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 664,
+          "target": "phi ship",
+          "aspect": "Price",
+          "expected_candidates": [
+            "Ship"
+          ]
+        },
+        {
+          "line": 695,
+          "target": "mau",
+          "aspect": "General",
+          "expected_candidates": [
+            "Fashion"
+          ]
+        }
+      ],
+      "sentiment_suspicious": [
+        {
+          "line": 4,
+          "target": "checkout",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "checkout thong bao mat tieu du rep chat giai thich ch"
+        },
+        {
+          "line": 9,
+          "target": "đuong may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "đuong may size nhay so nen hoi ren chu chat luong mau"
+        },
+        {
+          "line": 16,
+          "target": "app",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "trai nghiem gan đay thi app dung khong on chuyen man hinh hay bi đo ch"
+        },
+        {
+          "line": 19,
+          "target": "cap nhat",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "bay gio nghe hung tin huawei se khong đuoc cap nhat he đieu hanh moi nhat nua nghe nan long"
+        },
+        {
+          "line": 22,
+          "target": "size",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "nhan hang mau đung nhu hinh nhung size hoi rong"
+        },
+        {
+          "line": 23,
+          "target": "ung dung",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "quang cao qua nhiu tren cac ung dung khac"
+        },
+        {
+          "line": 27,
+          "target": "mau",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "dung đuoc quan jean đep song phai mau nhanh"
+        },
+        {
+          "line": 34,
+          "target": "sac",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "binh thuong la ngon camera popup qua chan sac vao binh thuong nhung đuoc cai pin trau m"
+        },
+        {
+          "line": 34,
+          "target": "may nay",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "c vao binh thuong nhung đuoc cai pin trau may nay k nen choi game"
+        },
+        {
+          "line": 36,
+          "target": "pin",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "dung đuoc gia re trong tam nay tuy nhien pin nong nhanh khi choi game"
+        },
+        {
+          "line": 42,
+          "target": "cap",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "dung đuoc sac nhanh tien chi tiec cap ngan qua"
+        },
+        {
+          "line": 53,
+          "target": "app",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "app rat kho dung tuy ship kha khong tre"
+        },
+        {
+          "line": 54,
+          "target": "ao",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "ao khong đung size mac chat"
+        },
+        {
+          "line": 55,
+          "target": "muc tim kiem",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "muc tim kiem hoi de dung song pin yeu"
+        },
+        {
+          "line": 55,
+          "target": "pin",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "muc tim kiem hoi de dung song pin yeu"
+        },
+        {
+          "line": 56,
+          "target": "may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "iu nhe diu nhe khong kich ung lam sach giat may kha sach giat tay khong sach bang dnee con"
+        },
+        {
+          "line": 62,
+          "target": "quan",
+          "sentiment": 2,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "cung binh thuong quan dai rong qua"
+        },
+        {
+          "line": 64,
+          "target": "may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "1 trong nhung con may lam ra voi muc đich la đe xuat chip p22 cua"
+        },
+        {
+          "line": 69,
+          "target": "muc gia",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "muc gia hoi khong hop ly nhung giao dien kha on đinh"
+        },
+        {
+          "line": 70,
+          "target": "pin",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "dung đuoc gia re trong tam nay chi tiec pin nong nhanh khi choi game nha"
+        },
+        {
+          "line": 71,
+          "target": "đuong may",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "đuong may can tay ma cam ung pin tru đuoc gan ca ngay"
+        },
+        {
+          "line": 72,
+          "target": "muc gia",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "muc gia hoi chat song dich vu rat phan hoi nhanh"
+        },
+        {
+          "line": 73,
+          "target": "nut theo doi",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "noi chung nut theo doi nhin chung đu dung khong qua muot cung khon"
+        },
+        {
+          "line": 74,
+          "target": "đong goi",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "nhan hang thanh toan tren app nhanh nhung đong goi hoi so sai"
+        },
+        {
+          "line": 78,
+          "target": "thong bao",
+          "sentiment": 0,
+          "inferred": 1,
+          "confidence": 2,
+          "context": "thong bao mat tieu nhung bill chot đon khong bi đoi gi"
+        }
+      ],
+      "general_overuse": [
+        {
+          "line": 306,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 307,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 504,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        },
+        {
+          "line": 695,
+          "target": "mau",
+          "expected": [
+            "Fashion"
+          ]
+        }
+      ],
+      "price_general_confusion": [],
+      "service_ship_confusion": [
+        {
+          "line": 130,
+          "target": "nhan vien giao hang",
+          "aspect": "Service"
+        },
+        {
+          "line": 640,
+          "target": "nhan vien giao hang",
+          "aspect": "Ship"
+        }
+      ],
+      "contrast_without_split": [
+        {
+          "line": 12,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Sản phẩm rất tốt, vô đối trong tầm giá, chơi game xem phim sử dùng hàng ngày đều ngon. Nhân viên phục vụ rất chu đáo, nhiệt tình đặc biệt rất xinh nha. Yêu."
+        },
+        {
+          "line": 17,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "mới mua được 20 ngày máy dùng tệ quá wifi kém mất sóng liên tục đang chơi game mất kết nối liên tục ,chán"
+        },
+        {
+          "line": 28,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "Máy hút bụi sài tháng cảm thấy thất vọng , hiện tượng đơ yếu dựt từ , màn lúc tự tối tự sáng , vào coi youtube không được nữa đã cập nhật test các kiểu, chán k nói tới L"
+        },
+        {
+          "line": 35,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Máy đẹp, hiệu năng tốt, chụp ảnh tuyệt vời, tốt trong tầm giá, cụm 3 camera nhìn rất đẹp"
+        },
+        {
+          "line": 38,
+          "sentiments": [
+            1,
+            1,
+            2,
+            1
+          ],
+          "text": "Kinh nghiệm sử dụng:moi Bao bì:dep  Shop giao hàng nhanh . Đúng sản phẩm . Máy nhìn sang lém . Phù hợp với giá tiền"
+        },
+        {
+          "line": 55,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "mục tìm kiếm hơi dễ dùng song pin yếu"
+        },
+        {
+          "line": 64,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "1 trong những con máy làm ra với mục đích là để xuất chip p22 của mediatek tồn kho Máy giật lag không hề xứng với giá 3 triệu"
+        },
+        {
+          "line": 80,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "ứng dụng rất hay bán hàng độ bền giao hàng nhanh người bán tư vấn rất nhiệt tình nữa rất đáng sử dụng"
+        },
+        {
+          "line": 102,
+          "sentiments": [
+            2,
+            0
+          ],
+          "text": "Mới mua được 2 ngày ,theo đánh giá của mình máy này mọi chức năng đều ở mức trung bình khá,độ sáng trưng bình,loa,màn hình.vui vẻ chỉ duy nhất không chấp nhận được viên pin 5020 mà"
+        },
+        {
+          "line": 107,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Mấy ảnh chị nhân viên tư vấn tốt lắm luôn í. Máy dùng rất ok ,cam đẹp,sạc nhanh lắm luôn,."
+        },
+        {
+          "line": 153,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Sau 1 tuần sử dụng thì mình đánh giá như này :máy tốt cấu hình mạnh chơi cái gì cũng tốt chỉ có wifi là bắt yếu quá"
+        },
+        {
+          "line": 154,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "sau 2 ngày dùng mình cảm thấy thực sự xứng đáng đến từng xu,pin khỏe,camera tốt,máy dùng mượt,màn hình quá đẹp và nhất là android 10 dùng quá phê,chỉ dùng 1 nút home dùng quá tuyệt"
+        },
+        {
+          "line": 159,
+          "sentiments": [
+            1,
+            2
+          ],
+          "text": "Khá lá đep, dùng ổn, trong tầm giá như vậy là được rồi, có thương hiệu, mong các sp nokia về sau cải thiện hơn về chip, ram, pin, và tai nghe"
+        },
+        {
+          "line": 166,
+          "sentiments": [
+            2,
+            2
+          ],
+          "text": "Công dụng:tẩy trang  Sản phẩm chất lượng. Săn sale nên được giá hời còn được tặng bông tẩy trang. Shop đóng gói chắc chắn k bị chảy đổ"
+        },
+        {
+          "line": 174,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Độ tuổi sử dụng:1-3 tuổi Bao bì/Mẫu mã:đúng mô tả Chất lượng sản phẩm:tốt  Shop ship nhanh. Mua 1 hộp thì đóng gói cẩn thận, mua 2 hộp đóng gói sơ sài, móp méo cả hai. Hình ảnh man"
+        },
+        {
+          "line": 180,
+          "sentiments": [
+            2,
+            1
+          ],
+          "text": "Máy dùng rất tôt trong tầm giá. Còn vấn đề pin thì các bạn khi sạc nên để sạc ở dưới nền đá hoa, đảm bảo máy không nóng tý nào luôn"
+        },
+        {
+          "line": 186,
+          "sentiments": [
+            2,
+            1
+          ],
+          "text": "Cực kỳ tốt, hàng Trung Quốc chất lượng cao.mua dùng đi anh chị em , ở nhà cầy game . tầm giá này chả có linh kiện điện tử nào theo kịp."
+        },
+        {
+          "line": 187,
+          "sentiments": [
+            0,
+            0,
+            0
+          ],
+          "text": "nhân viên hỗ trợ chậm giao diện lỗi thời gian giao chậm tuy chi phí rẻ"
+        },
+        {
+          "line": 189,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "Moi mua duoc vài bữa thì sụp nguồn mở hoài không lên. Đội mưa đi ra bảo hành thì mở lên. Xin kiểm tra đổi máy khác thi nhân viên bảo là camera có 1 vết xước nhỏ nên không đổi máy đ"
+        },
+        {
+          "line": 209,
+          "sentiments": [
+            0,
+            2
+          ],
+          "text": "Ứng dụng văn phòng rất chán đặc biệt người sử dunbj email làm việc như mình. Còn chơi game với lướt web thì chấp nhận được. Pin khoẻ"
+        },
+        {
+          "line": 217,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "một app uy tín hàng chất lượng mà ít người dùng hơn shopee m n nên ung hộ tiki trước giờ mua hàng mắc tiền chỉ mua tiki uy tín"
+        },
+        {
+          "line": 223,
+          "sentiments": [
+            1,
+            2
+          ],
+          "text": "Tính năng nổi bật:chạm cảm biến Chất lượng sản phẩm:tốt  âm lượng ổn, mới mua về cái hư luôn. shop không  hỗ trợ. trường hợp của mình là bị mất nút ở dưới nên không sạc điện được"
+        },
+        {
+          "line": 233,
+          "sentiments": [
+            0,
+            0
+          ],
+          "text": "app vừa update xong force close liên tục dù pin để qua đêm tụt pin khá sâu, delay."
+        },
+        {
+          "line": 239,
+          "sentiments": [
+            2,
+            0
+          ],
+          "text": "pin cầm cự vừa tầm trong ngày dù size đường may cấn tay."
+        },
+        {
+          "line": 240,
+          "sentiments": [
+            1,
+            1
+          ],
+          "text": "Sử dụng 5 tháng nay, ok, phù hợp với mục đích cá nhân chạy các ứng dụng như mail, ngân hàng.mượt nhạy, nhanh .6/64 gb là vừa, pin ok."
+        }
+      ]
+    }
+  },
+  "combined": {
+    "rows": 7999,
+    "opinions": 13714
+  }
+}
