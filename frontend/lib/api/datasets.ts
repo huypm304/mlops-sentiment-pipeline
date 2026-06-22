@@ -154,3 +154,20 @@ export async function auditDataset(datasetId: string): Promise<DatasetAuditRespo
   if (!res.ok) throw new Error(await parseError(res))
   return res.json() as Promise<DatasetAuditResponse>
 }
+
+export async function deleteDataset(datasetId: string): Promise<{
+  dataset_id: string
+  deleted: boolean
+  s3_objects_deleted?: number
+}> {
+  const res = await fetchOrThrow(`${API_BASE}/datasets/${encodeURIComponent(datasetId)}`, {
+    method: "DELETE",
+  })
+  if (!res.ok) throw new Error(await parseError(res))
+  assertJson(res)
+  return res.json() as Promise<{
+    dataset_id: string
+    deleted: boolean
+    s3_objects_deleted?: number
+  }>
+}

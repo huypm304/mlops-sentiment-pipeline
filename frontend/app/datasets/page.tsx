@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Loader2, Upload, X } from "lucide-react"
+import { Loader2, Trash2, Upload, X } from "lucide-react"
 
 import { ConsoleShell } from "@/components/layout/console-shell"
 import {
@@ -19,8 +19,8 @@ import {
   RegistryTr,
 } from "@/components/console/registry"
 import { Button } from "@/components/ui/button"
-import { fetchDatasets, uploadDatasetBundle, auditDataset } from "@/lib/api/datasets"
-import { datasetAuditLabel } from "@/lib/console/format"
+import { fetchDatasets, uploadDatasetBundle, auditDataset, deleteDataset } from "@/lib/api/datasets"
+import { canDeleteDataset, datasetAuditLabel } from "@/lib/console/format"
 import { datasetDetailPath } from "@/lib/console/paths"
 import type { DatasetListItem } from "@/types/dataset"
 
@@ -32,6 +32,7 @@ export default function DatasetsPage() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [auditFilter, setAuditFilter] = useState("all")
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   function reload() {
     setLoading(true)
@@ -53,6 +54,26 @@ export default function DatasetsPage() {
   useEffect(() => {
     reload()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleDeleteRow(row: DatasetListItem) {
+    if (!canDeleteDataset(row.status)) return
+    const warn =
+      row.status === "audited" || row.audit_passed
+        ? `Dataset "${row.name}" đã audit pass. Xóa metadata và file S3?`
+        : `Xóa dataset "${row.name}"? Không hoàn tác.`
+    if (!window.confirm(warn)) return
+
+    setDeletingId(row.dataset_id)
+    setNotice(null)
+    try {
+      await deleteDataset(row.dataset_id)
+      reload()
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : "Không xóa được dataset.")
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -148,12 +169,14 @@ export default function DatasetsPage() {
                     <RegistryTh align="right">Samples</RegistryTh>
                     <RegistryTh>Audit</RegistryTh>
                     <RegistryTh>Splits</RegistryTh>
+                    <RegistryTh align="right">Actions</RegistryTh>
                   </tr>
                 </RegistryThead>
                 <tbody>
                   {filtered.map((row) => {
                     const auditStatus = row.audit_status ?? (row.audit_passed ? "pass" : "pending")
                     const auditLabel = datasetAuditLabel(auditStatus, row.audit_passed)
+                    const deletable = canDeleteDataset(row.status)
                     return (
                       <RegistryTr key={row.dataset_id}>
                         <RegistryTd>
@@ -171,6 +194,27 @@ export default function DatasetsPage() {
                           <AuditPill label={auditLabel} />
                         </RegistryTd>
                         <RegistryTd muted>{row.splits.join(", ")}</RegistryTd>
+                        <RegistryTd align="right">
+                          {deletable ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 px-2 text-red-600 hover:bg-red-500/10 hover:text-red-600 dark:text-red-400"
+                              disabled={deletingId === row.dataset_id}
+                              onClick={() => handleDeleteRow(row)}
+                              title="Delete dataset"
+                            >
+                              {deletingId === row.dataset_id ? (
+                                <Loader2 className="size-3.5 animate-spin" />
+                              ) : (
+                                <Trash2 className="size-3.5" />
+                              )}
+                            </Button>
+                          ) : (
+                            <span className="text-muted-foreground/40">—</span>
+                          )}
+                        </RegistryTd>
                       </RegistryTr>
                     )
                   })}

@@ -100,3 +100,14 @@ async def audit_dataset(dataset_id: str) -> DatasetAuditResponse:
     ]
 
     return DatasetAuditResponse(dataset_id=dataset_id, passed=bool(report.get("passed")), results=results)
+
+
+@router.delete("/{dataset_id}")
+async def delete_dataset_route(dataset_id: str) -> dict[str, object]:
+    try:
+        datasets_service.delete_dataset(dataset_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return {"dataset_id": dataset_id, "deleted": True}

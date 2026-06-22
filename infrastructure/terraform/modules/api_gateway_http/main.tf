@@ -43,6 +43,11 @@ locals {
       invoke_arn    = var.audit_lambda_invoke_arn
       function_name = var.audit_lambda_function_name
     }
+    dataset_delete = {
+      route_key     = "DELETE /datasets/{dataset_id}"
+      invoke_arn    = var.audit_lambda_invoke_arn
+      function_name = var.audit_lambda_function_name
+    }
     pipeline_trigger = {
       route_key     = "POST /pipeline/trigger"
       invoke_arn    = var.pipeline_lambda_invoke_arn

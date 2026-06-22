@@ -51,6 +51,12 @@ export function datasetAuditLabel(status: string | undefined, auditPassed?: bool
   return "Pending"
 }
 
+/** Datasets that are not approved for training may be discarded from the registry. */
+export function canDeleteDataset(status: string | undefined): boolean {
+  const key = (status ?? "").toLowerCase().trim()
+  return key !== "approved"
+}
+
 export function runDotColor(status: string): string {
   const key = status.toLowerCase()
   if (key === "succeeded" || key === "success") return "bg-emerald-500"

@@ -79,6 +79,15 @@ class RegistryStore:
             ExpressionAttributeValues=to_dynamo(expr_values),
         )
 
+    def delete_dataset(self, dataset_id: str) -> bool:
+        record = self.get_dataset(dataset_id)
+        if record is None:
+            return False
+        self._table(self.config.datasets_table).delete_item(
+            Key={"dataset_id": dataset_id, "created_at": record["created_at"]},
+        )
+        return True
+
     def list_datasets(self, *, limit: int = 50, status: str | None = None) -> list[dict[str, Any]]:
         table = self._table(self.config.datasets_table)
         if status:

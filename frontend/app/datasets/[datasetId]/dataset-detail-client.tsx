@@ -1,10 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 import { appPath } from "@/lib/console/paths"
 import { useEffect, useMemo, useState } from "react"
-import { Loader2, PlayCircle } from "lucide-react"
+import { Loader2, PlayCircle, Trash2 } from "lucide-react"
 
 import { AuditReportPanel } from "@/components/console/audit-report-panel"
 import { ConsoleShell } from "@/components/layout/console-shell"
@@ -12,7 +13,8 @@ import { SectionHeader } from "@/components/console/section-header"
 import { StatusBadge } from "@/components/console/status-badge"
 import { TableCard, ConsoleTable, ConsoleThead, ConsoleTh, ConsoleTr, ConsoleTd } from "@/components/console/table-card"
 import { Button } from "@/components/ui/button"
-import { fetchDataset, auditDataset } from "@/lib/api/datasets"
+import { fetchDataset, auditDataset, deleteDataset } from "@/lib/api/datasets"
+import { canDeleteDataset } from "@/lib/console/format"
 import type { DatasetAuditResponse, DatasetManifest, SplitAuditInfo } from "@/types/dataset"
 
 function auditFromResponse(response: DatasetAuditResponse): SplitAuditInfo {
@@ -43,11 +45,14 @@ function auditFromResponse(response: DatasetAuditResponse): SplitAuditInfo {
 }
 
 export function DatasetDetailClient({ datasetId }: { datasetId: string }) {
+  const router = useRouter()
   const [dataset, setDataset] = useState<DatasetManifest | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [auditing, setAuditing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [auditError, setAuditError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   function reload() {
     setLoading(true)
@@ -84,12 +89,33 @@ export function DatasetDetailClient({ datasetId }: { datasetId: string }) {
     }
   }
 
+  async function handleDelete() {
+    if (!dataset || !canDeleteDataset(dataset.status)) return
+    const warn =
+      dataset.status === "audited"
+        ? "Dataset đã audit pass. Xóa sẽ gỡ metadata và file trên S3. Tiếp tục?"
+        : `Xóa dataset "${dataset.name}" và toàn bộ file upload? Không hoàn tác.`
+    if (!window.confirm(warn)) return
+
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await deleteDataset(datasetId)
+      router.push(appPath("/datasets"))
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Delete failed")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const splitRows = useMemo(() => {
     if (!dataset) return []
     return Object.entries(dataset.splits)
   }, [dataset])
 
   const bundleAudit = dataset?.audits?.bundle
+  const deletable = dataset ? canDeleteDataset(dataset.status) : false
 
   return (
     <ConsoleShell>
@@ -100,14 +126,33 @@ export function DatasetDetailClient({ datasetId }: { datasetId: string }) {
               Back to datasets
             </Link>
             {dataset && dataset.status !== "approved" && (
-              <Button size="sm" onClick={handleAudit} disabled={auditing}>
+              <Button size="sm" onClick={handleAudit} disabled={auditing || deleting}>
                 {auditing
                   ? <><Loader2 className="mr-1.5 size-3.5 animate-spin" />Running…</>
                   : <><PlayCircle className="mr-1.5 size-3.5" />Run audit</>}
               </Button>
             )}
+            {deletable ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-red-500/40 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+                onClick={handleDelete}
+                disabled={deleting || auditing}
+              >
+                {deleting
+                  ? <><Loader2 className="mr-1.5 size-3.5 animate-spin" />Deleting…</>
+                  : <><Trash2 className="mr-1.5 size-3.5" />Delete</>}
+              </Button>
+            ) : null}
           </div>
         </SectionHeader>
+
+        {deleteError && (
+          <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            {deleteError}
+          </p>
+        )}
 
         {auditError && (
           <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">

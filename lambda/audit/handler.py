@@ -304,6 +304,60 @@ def _normalize_dataset_status(raw: str) -> str:
     return status
 
 
+def _is_dataset_deletable(record: dict[str, Any]) -> bool:
+    status = str(record.get("status", "")).upper()
+    if status == "APPROVED":
+        return False
+    return _normalize_dataset_status(status) != "approved"
+
+
+def _delete_s3_prefix(prefix: str) -> int:
+    if not _BUCKET:
+        return 0
+    normalized = prefix.strip("/")
+    if not normalized:
+        return 0
+    deleted = 0
+    paginator = _s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=_BUCKET, Prefix=f"{normalized}/"):
+        for obj in page.get("Contents") or []:
+            _s3.delete_object(Bucket=_BUCKET, Key=obj["Key"])
+            deleted += 1
+    return deleted
+
+
+def _delete_s3_uri(uri: str) -> None:
+    if not uri.startswith("s3://") or not _BUCKET:
+        return
+    key = urlparse(uri).path.lstrip("/")
+    if key:
+        _s3.delete_object(Bucket=_BUCKET, Key=key)
+
+
+def _handle_delete_dataset(dataset_id: str) -> dict[str, Any]:
+    store = _get_store()
+    if not store.config.datasets_table:
+        raise RuntimeError("Datasets table is not configured")
+    record = store.get_dataset(dataset_id)
+    if record is None:
+        raise KeyError(f"Dataset '{dataset_id}' not found")
+    if not _is_dataset_deletable(record):
+        raise PermissionError(f"Dataset '{dataset_id}' is approved and cannot be deleted")
+
+    prefix = str(record.get("s3_prefix") or f"datasets/pending/{dataset_id}").strip("/")
+    files_deleted = _delete_s3_prefix(prefix)
+    report_uri = str(record.get("audit_report_uri") or "")
+    if report_uri:
+        try:
+            _delete_s3_uri(report_uri)
+            files_deleted += 1
+        except ClientError:
+            pass
+
+    store.delete_dataset(dataset_id)
+    return {"dataset_id": dataset_id, "deleted": True, "s3_objects_deleted": files_deleted}
+
+
 def _audit_status_from_row(row: dict[str, Any]) -> str:
     if row.get("audit_passed"):
         return "pass"
@@ -555,6 +609,19 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
             return _response(404, {"detail": str(exc)})
         except Exception as exc:  # noqa: BLE001
             return _response(500, {"detail": str(exc)})
+
+    if "/datasets/" in path and method == "DELETE":
+        parts = path.split("/datasets/")[1].split("/")
+        if len(parts) == 1 or (len(parts) == 2 and parts[1] == ""):
+            dataset_id = parts[0]
+            try:
+                return _response(200, _handle_delete_dataset(dataset_id))
+            except KeyError as exc:
+                return _response(404, {"detail": str(exc)})
+            except PermissionError as exc:
+                return _response(403, {"detail": str(exc)})
+            except Exception as exc:  # noqa: BLE001
+                return _response(500, {"detail": str(exc)})
 
     return _response(404, {"detail": f"No route for {method} {path}"})
 

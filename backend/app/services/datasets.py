@@ -230,3 +230,20 @@ def record_audit_result(dataset_id: str, split: str, report: dict[str, Any]) -> 
     manifest["updated_at"] = _now_iso()
     save_manifest(manifest)
     return manifest
+
+
+def delete_dataset(dataset_id: str) -> None:
+    manifest = _load_manifest_raw(dataset_id)
+    status = str(manifest.get("status", "pending")).lower()
+    if status == "approved":
+        raise PermissionError(f"Dataset '{dataset_id}' is approved and cannot be deleted")
+
+    dataset_path = _dataset_dir(dataset_id)
+    if dataset_path.exists():
+        import shutil
+
+        shutil.rmtree(dataset_path)
+
+    store = registry_db.get_store()
+    if store is not None and store.config.datasets_table:
+        store.delete_dataset(dataset_id)
