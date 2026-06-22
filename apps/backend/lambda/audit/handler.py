@@ -579,7 +579,10 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
             return _response(500, {"detail": str(exc)})
 
     if path.endswith("/datasets") and method == "GET":
-        return _response(200, _handle_list_datasets())
+        try:
+            return _response(200, _handle_list_datasets())
+        except Exception as exc:  # noqa: BLE001
+            return _response(500, {"detail": str(exc)})
 
     if "/datasets/" in path and method == "GET":
         dataset_id = path.split("/datasets/")[1].split("/")[0]

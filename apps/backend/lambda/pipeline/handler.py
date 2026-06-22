@@ -71,6 +71,54 @@ def _build_execution_input(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _format_run_row(row: dict[str, Any]) -> dict[str, Any]:
+    execution_arn = (
+        row.get("step_function_execution_arn")
+        or row.get("execution_arn")
+        or f"run://{row.get('run_id', '')}"
+    )
+    return {
+        "execution_arn": execution_arn,
+        "name": row.get("run_id") or row.get("name", ""),
+        "status": row.get("status", "UNKNOWN"),
+        "start_date": row.get("started_at") or row.get("start_date") or row.get("created_at", ""),
+        "stop_date": row.get("finished_at") or row.get("stop_date"),
+        "dataset_key": row.get("dataset_key"),
+        "dataset_id": row.get("dataset_id"),
+        "run_id": row.get("run_id"),
+        "base_model_id": row.get("base_model_id"),
+        "candidate_model_id": row.get("candidate_model_id"),
+        "best_f1": row.get("best_f1"),
+        "artifact_uri": row.get("artifact_uri"),
+        "approval_id": row.get("approval_id"),
+        "training_config": row.get("training_config"),
+        "stages": row.get("stages") or [],
+    }
+
+
+def _list_sfn_runs(limit: int = 15) -> list[dict[str, Any]]:
+    if not _STATE_MACHINE_ARN:
+        return []
+    try:
+        resp = _sfn.list_executions(stateMachineArn=_STATE_MACHINE_ARN, maxResults=limit)
+    except Exception:  # noqa: BLE001 — missing IAM or SFN unavailable
+        return []
+    runs: list[dict[str, Any]] = []
+    for item in resp.get("executions", []):
+        runs.append(
+            {
+                "execution_arn": item["executionArn"],
+                "name": item["name"],
+                "status": item["status"],
+                "start_date": item["startDate"].isoformat(),
+                "stop_date": item.get("stopDate").isoformat() if item.get("stopDate") else None,
+                "dataset_key": None,
+                "stages": [],
+            }
+        )
+    return runs
+
+
 def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
     method, path = _route(event)
 
@@ -186,24 +234,13 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         return _response(200, run)
 
     if path.endswith("/pipeline/runs") and method == "GET":
-        runs = list_training_runs(limit=15)
-        if runs:
-            return _response(200, {"runs": runs})
-        if not _STATE_MACHINE_ARN:
-            return _response(200, {"runs": []})
-        resp = _sfn.list_executions(stateMachineArn=_STATE_MACHINE_ARN, maxResults=15)
-        sfn_runs = []
-        for item in resp.get("executions", []):
-            sfn_runs.append(
-                {
-                    "execution_arn": item["executionArn"],
-                    "name": item["name"],
-                    "status": item["status"],
-                    "start_date": item["startDate"].isoformat(),
-                    "stop_date": item.get("stopDate").isoformat() if item.get("stopDate") else None,
-                }
-            )
-        return _response(200, {"runs": sfn_runs})
+        try:
+            runs = list_training_runs(limit=15)
+            if runs:
+                return _response(200, {"runs": [_format_run_row(row) for row in runs]})
+            return _response(200, {"runs": _list_sfn_runs(limit=15)})
+        except Exception as exc:  # noqa: BLE001
+            return _response(500, {"detail": str(exc)})
 
     if path.endswith("/models") and method == "GET":
         from storage import list_model_records
