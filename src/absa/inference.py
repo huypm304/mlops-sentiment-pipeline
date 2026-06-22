@@ -1,8 +1,9 @@
 """Inference pipeline for ABSA — 2-pass (BIO → spans → sentiment/global).
 
-Follows the same forward logic as evaluate() in evaluation.py:
-  Pass 1: encode → BIO decode
-  Pass 2: predicted spans → sent_logits + global_logits
+Load flow (no HF base weights):
+  1. Read run_config.json from model_dir
+  2. Build empty backbone via AutoModel.from_config()
+  3. Load all weights from best_model.pt (or pointer.txt)
 
 load_model() uses strict=True; architecture mismatch raises RuntimeError.
 """
@@ -15,23 +16,68 @@ from pathlib import Path
 from typing import Any
 
 import torch
-from transformers import AutoTokenizer
 
-from .dataset import build_predicted_span_inputs, extract_spans
-from .labels import ASPECTS, SENT_ID2LABEL
+from .dataset import build_predicted_span_inputs
+from .labels import SENT_ID2LABEL
 from .model import ABSAModel
 from .postprocess import PostprocessConfig, postprocess_predictions
-from .utils import autocast_context, nfc
+from .utils import (
+    autocast_context,
+    build_offsets_from_tokens,
+    load_tokenizer,
+    nfc,
+    resolve_checkpoint,
+    resolve_config_source,
+    resolve_tokenizer_source,
+)
+
+__all__ = [
+    "MODEL_VERSION",
+    "load_tokenizer",
+    "load_model",
+    "predict_one",
+    "predict_batch",
+    "encode_text",
+]
 
 MODEL_VERSION = "absa-v2b"
 
 
-# ---------------------------------------------------------------------------
-# Load helpers
-# ---------------------------------------------------------------------------
+def encode_text(text, tokenizer, max_len, device):
+    text = nfc(text)
 
-def load_tokenizer(model_name: str) -> Any:
-    return AutoTokenizer.from_pretrained(model_name)
+    if getattr(tokenizer, "is_fast", False):
+        enc = tokenizer(
+            text,
+            max_length=max_len,
+            padding="max_length",
+            truncation=True,
+            return_offsets_mapping=True,
+            return_special_tokens_mask=True,
+            return_tensors="pt",
+        )
+        offsets = enc["offset_mapping"][0]
+    else:
+        enc = tokenizer(
+            text,
+            max_length=max_len,
+            padding="max_length",
+            truncation=True,
+            return_special_tokens_mask=True,
+            return_tensors="pt",
+        )
+        toks = tokenizer.convert_ids_to_tokens(enc["input_ids"][0].tolist())
+        spec_list = enc["special_tokens_mask"][0].tolist()
+        offsets = build_offsets_from_tokens(text, toks, spec_list)
+
+    ids = enc["input_ids"].to(device)
+    mask = enc["attention_mask"].to(device)
+    if isinstance(offsets, torch.Tensor):
+        offsets_t = offsets.to(device)
+    else:
+        offsets_t = torch.tensor(offsets, device=device)
+    spec_mask_t = enc["special_tokens_mask"][0].bool().to(device)
+    return text, ids, mask, offsets_t, spec_mask_t
 
 
 def load_model(
@@ -41,11 +87,7 @@ def load_model(
     max_ops: int | None = None,
     strict: bool = True,
 ) -> dict[str, Any]:
-    """Load checkpoint and return a bundle dict.
-
-    Raises RuntimeError on architecture mismatch when strict=True.
-    Never use strict=False to hide key mismatches.
-    """
+    """Load trained checkpoint from model_dir."""
     model_dir = Path(model_dir)
     config: dict = {}
     for cfg_name in ("run_config.json", "config.json"):
@@ -55,24 +97,27 @@ def load_model(
                 config = json.load(f)
             break
 
-    _model_name = model_name or config.get("model_name", "Fsoft-AIC/videberta-base")
+    if not config and model_name is None:
+        raise FileNotFoundError(f"Missing run_config.json in {model_dir}")
+
+    if model_name:
+        config = {**config, "model_name": model_name}
+
     _max_len = int(config.get("max_len", 192))
     _max_ops = max_ops if max_ops is not None else int(config.get("max_ops", 6))
     _max_context_window = int(config.get("max_context_window", 25))
+    config_source = resolve_config_source(model_dir, config)
+    tokenizer_source = resolve_tokenizer_source(model_dir, config)
 
     dev = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    tokenizer = AutoTokenizer.from_pretrained(_model_name)
-    model = ABSAModel(_model_name, _max_ops).to(dev)
-
-    checkpoint = model_dir / "best_model.pt"
-    if not checkpoint.is_file():
-        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
+    tokenizer = load_tokenizer(tokenizer_source)
+    model = ABSAModel(config_source, _max_ops).to(dev)
+    checkpoint = resolve_checkpoint(model_dir)
 
     state = torch.load(checkpoint, map_location=dev)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]
 
-    # Strip DataParallel prefix if present
     cleaned = {}
     for k, v in state.items():
         cleaned[k[len("module."):] if k.startswith("module.") else k] = v
@@ -81,12 +126,10 @@ def load_model(
         model.load_state_dict(cleaned, strict=strict)
     except RuntimeError as exc:
         raise RuntimeError(
-            f"Checkpoint architecture mismatch (strict=True). "
+            f"Checkpoint architecture mismatch (strict={strict}). "
             f"Ensure model class matches the saved checkpoint.\n{exc}"
         ) from exc
 
-    # Match train/train.py: model = ABSAModel(...).to(device).float()
-    # Required to avoid LSTM dtype mismatch when backbone emits lower precision.
     model.float()
     model.eval()
 
@@ -105,13 +148,9 @@ def load_model(
         "max_context_window": _max_context_window,
         "postprocess_config": pp_cfg,
         "model_version": MODEL_VERSION,
-        "model_name": _model_name,
+        "model_name": config.get("model_name"),
     }
 
-
-# ---------------------------------------------------------------------------
-# Single-text inference
-# ---------------------------------------------------------------------------
 
 @torch.inference_mode()
 def _raw_infer(
@@ -123,23 +162,7 @@ def _raw_infer(
     max_ops: int = 6,
     max_context_window: int = 25,
 ) -> dict[str, Any]:
-    """Run 2-pass inference; return raw (pre-postprocess) outputs."""
-    text = nfc(text)
-
-    enc = tokenizer(
-        text,
-        max_length=max_len,
-        padding="max_length",
-        truncation=True,
-        return_offsets_mapping=True,
-        return_special_tokens_mask=True,
-        return_tensors="pt",
-    )
-
-    ids = enc["input_ids"].to(device)
-    mask = enc["attention_mask"].to(device)
-    offsets = enc["offset_mapping"][0].to(device)
-    spec_mask = enc["special_tokens_mask"][0].bool().to(device)
+    text, ids, mask, offsets, spec_mask = encode_text(text, tokenizer, max_len, device)
 
     with autocast_context(device):
         _, emiss, _, _, cached, _ = model(ids, mask)
@@ -158,7 +181,6 @@ def _raw_infer(
         device=device,
     )
 
-    offsets_b = offsets.unsqueeze(0)
     with autocast_context(device):
         _, _, sent_logits, global_logits, _, _ = model(
             ids,
@@ -167,7 +189,7 @@ def _raw_infer(
             cached_seq=cached,
             span_aspect=pred_span_aspect.unsqueeze(0),
             span_clause_pos=pred_clause_pos.unsqueeze(0),
-            offsets=offsets_b,
+            offsets=offsets.unsqueeze(0),
             texts=[text],
         )
 
@@ -214,7 +236,6 @@ def predict_one(
     text: str,
     bundle: dict[str, Any],
 ) -> dict[str, Any]:
-    """Predict a single text; returns full response schema."""
     started = time.perf_counter()
 
     raw = _raw_infer(
@@ -243,5 +264,4 @@ def predict_batch(
     texts: list[str],
     bundle: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Predict a list of texts sequentially."""
     return [predict_one(t, bundle) for t in texts]

@@ -3,6 +3,7 @@ locals {
 
   # Full MLOps prefix layout — markers ensure prefixes appear in the console
   artifact_prefixes = [
+    "dvc-store/",
     "datasets/pending/",
     "datasets/approved/",
     "datasets/rejected/",
@@ -11,6 +12,7 @@ locals {
     "models/candidates/",
     "models/production/",
     "models/archived/",
+    "training-runs/",
     "reports/audit/",
     "reports/evaluation/",
     "reports/calibration/",
@@ -57,6 +59,19 @@ resource "aws_s3_bucket_public_access_block" "artifacts" {
   block_public_policy     = true
   ignore_public_acls      = true
   restrict_public_buckets = true
+}
+
+# Required for browser presigned PUT uploads from the admin UI (train/dev/test JSONL).
+resource "aws_s3_bucket_cors_configuration" "artifacts" {
+  bucket = aws_s3_bucket.artifacts.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "PUT", "HEAD"]
+    allowed_origins = var.cors_allowed_origins
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3600
+  }
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "artifacts" {

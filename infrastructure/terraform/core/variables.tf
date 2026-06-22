@@ -29,3 +29,14 @@ variable "create_hosted_zone" {
   type        = bool
   default     = true
 }
+
+variable "cors_allowed_origins" {
+  description = "Browser origins allowed for presigned dataset uploads to the artifact bucket."
+  type        = list(string)
+  default = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://minhhuy.me",
+    "https://www.minhhuy.me",
+  ]
+}

@@ -12,6 +12,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import boto3
+from botocore.exceptions import ClientError
 
 from dataset_audit import run_dataset_audit
 from registry.store import RegistryStore, now_iso
@@ -100,6 +101,34 @@ def _download_dataset(dataset_key: str) -> Path:
     return Path(tmp.name)
 
 
+def _count_s3_lines(key: str) -> int:
+    resp = _s3.get_object(Bucket=_BUCKET, Key=key)
+    body = resp["Body"].read()
+    return sum(1 for line in body.splitlines() if line.strip())
+
+
+def _normalize_dataset_status(raw: str) -> str:
+    status = raw.strip().lower()
+    if status in {"pending_upload", "pending"}:
+        return "pending"
+    if status == "audit_passed":
+        return "audited"
+    if status == "audit_failed":
+        return "failed"
+    return status
+
+
+def _audit_status_from_row(row: dict[str, Any]) -> str:
+    if row.get("audit_passed"):
+        return "pass"
+    status = str(row.get("status", "")).upper()
+    if status == "AUDIT_FAILED":
+        return "fail"
+    if status == "AUDIT_PASSED":
+        return "pass"
+    return "pending"
+
+
 def _audit_score(report: dict[str, Any]) -> float:
     benchmarks = report.get("benchmarks") or []
     if not benchmarks:
@@ -112,6 +141,13 @@ def _audit_result(payload: dict[str, Any]) -> dict[str, Any]:
     dataset_key = _resolve_dataset_key(payload)
     if not _BUCKET:
         raise RuntimeError("ARTIFACTS_BUCKET is not configured")
+
+    dataset_id = str(payload.get("dataset_id") or Path(dataset_key).parent.name)
+    store = _get_store()
+    if store.config.datasets_table:
+        existing = store.get_dataset(dataset_id)
+        if existing and str(existing.get("status", "")).upper() == "PENDING_UPLOAD":
+            _handle_complete_upload(dataset_id)
 
     train_key, dev_key = _split_keys(dataset_key)
     train_path = _download_dataset(train_key)
@@ -133,25 +169,27 @@ def _audit_result(payload: dict[str, Any]) -> dict[str, Any]:
     report_key = _upload_report(report)
     score = _audit_score(report)
     status = "AUDIT_PASSED" if report["passed"] else "AUDIT_FAILED"
-    store = _get_store()
     if store.config.datasets_table:
         existing = store.get_dataset(dataset_id)
-        record = {
-            "dataset_id": dataset_id,
-            "created_at": existing["created_at"] if existing else now_iso(),
-            "name": payload.get("name") or dataset_id,
+        updates = {
+            "name": (existing or {}).get("name") or payload.get("name") or dataset_id,
             "status": status,
             "s3_uri": f"s3://{_BUCKET}/{Path(train_key).parent}/",
             "s3_prefix": str(Path(train_key).parent),
             "audit_report_uri": f"s3://{_BUCKET}/{report_key}",
             "audit_passed": bool(report["passed"]),
             "audit_score": score,
-            "updated_at": now_iso(),
         }
         if existing:
-            store.update_dataset(dataset_id, str(existing["created_at"]), record)
+            store.update_dataset(dataset_id, str(existing["created_at"]), updates)
         else:
-            store.put_dataset(record)
+            store.put_dataset(
+                {
+                    "dataset_id": dataset_id,
+                    "created_at": now_iso(),
+                    **updates,
+                }
+            )
 
     return {
         "passed": bool(report["passed"]),
@@ -202,6 +240,51 @@ def _handle_presign(payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _handle_complete_upload(dataset_id: str) -> dict[str, Any]:
+    store = _get_store()
+    record = store.get_dataset(dataset_id)
+    if record is None:
+        raise KeyError(f"Dataset '{dataset_id}' not found")
+    if not _BUCKET:
+        raise RuntimeError("ARTIFACTS_BUCKET is not configured")
+
+    prefix = str(record.get("s3_prefix") or f"datasets/pending/{dataset_id}").strip("/")
+    splits: list[str] = []
+    total_rows = 0
+    for split in ("train", "dev", "test"):
+        key = f"{prefix}/{split}.jsonl"
+        try:
+            _s3.head_object(Bucket=_BUCKET, Key=key)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in {"404", "NoSuchKey", "NotFound", "403"}:
+                continue
+            raise
+        splits.append(split)
+        total_rows += _count_s3_lines(key)
+
+    if not splits:
+        raise FileNotFoundError(f"No uploaded splits found under s3://{_BUCKET}/{prefix}/")
+
+    store.update_dataset(
+        dataset_id,
+        str(record["created_at"]),
+        {
+            "status": "PENDING",
+            "s3_uri": f"s3://{_BUCKET}/{prefix}/",
+            "s3_prefix": prefix,
+            "splits": splits,
+            "num_records": total_rows,
+        },
+    )
+    return {
+        "dataset_id": dataset_id,
+        "status": "pending",
+        "splits": splits,
+        "total_rows": total_rows,
+    }
+
+
 def _handle_approve(dataset_id: str, payload: dict[str, Any]) -> dict[str, Any]:
     store = _get_store()
     record = store.get_dataset(dataset_id)
@@ -228,9 +311,7 @@ def _handle_list_datasets() -> dict[str, Any]:
     rows = store.list_datasets(limit=50)
     datasets = []
     for row in rows:
-        status = str(row.get("status", "pending")).lower()
-        if status == "audit_passed":
-            status = "audited"
+        status = _normalize_dataset_status(str(row.get("status", "pending")))
         datasets.append(
             {
                 "dataset_id": row.get("dataset_id"),
@@ -239,6 +320,7 @@ def _handle_list_datasets() -> dict[str, Any]:
                 "created_at": row.get("created_at"),
                 "splits": row.get("splits") or ["train", "dev"],
                 "audit_passed": bool(row.get("audit_passed")),
+                "audit_status": _audit_status_from_row(row),
                 "audit_score": row.get("audit_score"),
                 "total_rows": int(row.get("num_records", 0)),
             }

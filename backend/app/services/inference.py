@@ -24,10 +24,13 @@ def get_model_bundle() -> dict[str, Any]:
 
 
 def init_model(device: str | None = None) -> None:
-    """Load checkpoint once at application startup."""
+    """Load checkpoint once at application startup. Gracefully skips if checkpoint is missing."""
     global _bundle
-    _bundle = load_model(MODEL_DIR, device=device or "cpu")
-    print(f"ABSA model loaded from {MODEL_DIR} on {_bundle['device']}")
+    try:
+        _bundle = load_model(MODEL_DIR, device=device or "cpu")
+        print(f"ABSA model loaded from {MODEL_DIR} on {_bundle['device']}")
+    except FileNotFoundError as exc:
+        print(f"[WARN] Model checkpoint not found ({exc}); /predict will be unavailable.")
 
 
 def run_predict(text: str) -> dict[str, Any]:

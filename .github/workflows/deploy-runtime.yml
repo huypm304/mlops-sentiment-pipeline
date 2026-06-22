@@ -1,5 +1,4 @@
 # Deploy runtime services: Lambda, API Gateway, Step Functions, EventBridge, CloudWatch.
-# Costly SageMaker services are OFF by default — enable only for specific demos.
 name: Deploy Runtime
 
 on:
@@ -9,20 +8,16 @@ on:
         description: Auto-approve apply
         type: boolean
         default: true
-
-      # --- Cost control: expensive services (default OFF) ---
       enable_sagemaker_endpoint:
-        description: "COSTLY (~$50+/mo): SageMaker inference endpoint (ml.m5.large always-on)"
-        type: choice
-        options: ["false", "true"]
-        default: "false"
+        description: Enable SageMaker inference endpoint
+        type: boolean
+        default: false
       enable_sagemaker_training:
-        description: "COSTLY (~$1–10+/run): Real SageMaker training jobs in pipeline"
-        type: choice
-        options: ["false", "true"]
-        default: "false"
+        description: Enable SageMaker training jobs in pipeline
+        type: boolean
+        default: false
       sagemaker_instance_type:
-        description: SageMaker endpoint instance type (only when endpoint enabled)
+        description: SageMaker endpoint instance type
         type: choice
         options:
           - ml.m5.large
@@ -30,23 +25,20 @@ on:
           - ml.c5.large
           - ml.t3.medium
         default: ml.m5.large
-      enable_eventbridge_monitoring:
-        description: "LOW COST: Hourly monitoring + daily retrain-check schedules"
-        type: choice
-        options: ["true", "false"]
-        default: "true"
-
-      cost_acknowledgement:
-        description: 'Required when SageMaker is enabled — type exactly: I-ACCEPT-SAGEMAKER-COST'
+      model_package_version:
+        description: Bump when models/production/model.tar.gz changes (forces SageMaker redeploy)
         required: false
-        default: ""
-
+        default: "v3"
+      enable_eventbridge_monitoring:
+        description: Enable EventBridge monitoring schedules
+        type: boolean
+        default: true
       domain_name:
-        description: Root domain (minhhuy.me)
+        description: Root domain
         required: false
         default: "minhhuy.me"
       enable_custom_domain:
-        description: Enable ACM + CloudFront + api custom domain
+        description: Enable custom domain (ACM + CloudFront + API)
         type: boolean
         default: true
       api_subdomain:
@@ -62,37 +54,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cost-guard:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Block SageMaker without explicit acknowledgement
-        shell: bash
-        run: |
-          ENDPOINT="${{ inputs.enable_sagemaker_endpoint }}"
-          TRAINING="${{ inputs.enable_sagemaker_training }}"
-          ACK="${{ inputs.cost_acknowledgement }}"
-
-          echo "## Cost control summary" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Service | Enabled | Est. cost |" >> "$GITHUB_STEP_SUMMARY"
-          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
-          echo "| SageMaker endpoint (${{ inputs.sagemaker_instance_type }}) | ${ENDPOINT} | ~\$50+/month if always on |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| SageMaker training | ${TRAINING} | ~\$1–10+ per job |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| EventBridge monitoring | ${{ inputs.enable_eventbridge_monitoring }} | ~\$0–1/month |" >> "$GITHUB_STEP_SUMMARY"
-          echo "| Lambda + API Gateway | always | pay per request (demo: ~\$0) |" >> "$GITHUB_STEP_SUMMARY"
-
-          if [[ "$ENDPOINT" == "true" || "$TRAINING" == "true" ]]; then
-            if [[ "$ACK" != "I-ACCEPT-SAGEMAKER-COST" ]]; then
-              echo "::error::SageMaker is enabled but cost_acknowledgement is missing."
-              echo "Type I-ACCEPT-SAGEMAKER-COST in the cost_acknowledgement field to proceed."
-              exit 1
-            fi
-            echo "::warning::SageMaker costly services are ENABLED for this deploy."
-          else
-            echo "Demo-safe mode: SageMaker endpoint and training are disabled." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
-  apply:
-    needs: cost-guard
+  deploy:
     runs-on: ubuntu-latest
     environment: demo
     env:
@@ -106,6 +68,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Deploy options
+        shell: bash
+        run: |
+          echo "## Deploy Runtime" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Option | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SageMaker endpoint | ${{ inputs.enable_sagemaker_endpoint }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SageMaker training | ${{ inputs.enable_sagemaker_training }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Instance type | ${{ inputs.sagemaker_instance_type }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Model package | ${{ inputs.model_package_version }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| EventBridge monitoring | ${{ inputs.enable_eventbridge_monitoring }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Domain | ${{ inputs.domain_name }} |" >> "$GITHUB_STEP_SUMMARY"
+
       - uses: ./.github/actions/terraform-stack
         with:
           stack: runtime
@@ -115,6 +90,7 @@ jobs:
           enable_sagemaker_training: ${{ inputs.enable_sagemaker_training }}
           enable_eventbridge_monitoring: ${{ inputs.enable_eventbridge_monitoring }}
           sagemaker_instance_type: ${{ inputs.sagemaker_instance_type }}
+          model_package_version: ${{ inputs.model_package_version }}
           domain_name: ${{ inputs.domain_name }}
           enable_custom_domain: ${{ inputs.enable_custom_domain }}
           api_subdomain: ${{ inputs.api_subdomain }}
@@ -135,7 +111,6 @@ jobs:
             -backend-config="dynamodb_table=${TF_STATE_LOCK_TABLE}"
           API_URL=$(terraform output -raw api_url)
           echo "API URL: $API_URL"
-          echo "## Runtime deployed" >> "$GITHUB_STEP_SUMMARY"
           echo "- **api_url**: $API_URL" >> "$GITHUB_STEP_SUMMARY"
           echo "- **step_functions_arn**: $(terraform output -raw step_functions_arn)" >> "$GITHUB_STEP_SUMMARY"
           echo "- **sagemaker_endpoint_enabled**: $(terraform output -raw sagemaker_endpoint_enabled)" >> "$GITHUB_STEP_SUMMARY"
@@ -150,6 +125,15 @@ jobs:
           fi
           if [[ -n "$FRONTEND_URL" ]]; then
             echo "- **frontend_url**: $FRONTEND_URL" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if [[ "${{ inputs.enable_sagemaker_endpoint }}" == "true" ]]; then
+            ENDPOINT=$(terraform output -raw sagemaker_endpoint_name)
+            echo "Warming SageMaker endpoint: $ENDPOINT"
+            bash ../../scripts/warmup_sagemaker_endpoint.sh "$ENDPOINT" || true
+            curl -fsS -X POST "$API_URL/predict" \
+              -H 'Content-Type: application/json' \
+              -d '{"text":"Gia tot nhung giao cham"}' | tee /tmp/predict.json || true
+            echo "- **predict smoke**: $(cat /tmp/predict.json 2>/dev/null || echo failed)" >> "$GITHUB_STEP_SUMMARY"
           fi
           NS=$(terraform output -json route53_name_servers 2>/dev/null || echo "[]")
           echo "- **route53_name_servers**: $NS" >> "$GITHUB_STEP_SUMMARY"

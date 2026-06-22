@@ -1,60 +1,65 @@
 #!/usr/bin/env python3
-"""Seed DynamoDB registry with baseline production model absa-v1."""
+"""Seed DynamoDB registry from local or S3 training artifacts."""
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+from registry.model_artifacts import (  # noqa: E402
+    load_model_evaluation_from_s3,
+    metrics_summary_from_train_log,
+    resolve_artifact_prefixes,
+)
 from registry.store import RegistryStore, now_iso  # noqa: E402
 
 
-def _load_metrics() -> dict[str, float]:
-    log_path = ROOT / "model" / "train_log.csv"
-    if not log_path.is_file():
-        return {
-            "tas_f1": 0.72,
-            "span_f1": 0.68,
-            "sentiment_f1": 0.75,
-            "global_f1": 0.73,
-        }
+def _load_local_artifacts(model_dir: Path) -> tuple[str | None, dict]:
+    train_log_path = model_dir / "train_log.csv"
+    config_path = model_dir / "run_config.json"
+    if not config_path.is_file():
+        config_path = model_dir / "config.json"
 
-    import csv
+    train_log_text = train_log_path.read_text(encoding="utf-8") if train_log_path.is_file() else None
+    config: dict = {}
+    if config_path.is_file():
+        config = json.loads(config_path.read_text(encoding="utf-8"))
+    return train_log_text, config
 
-    best: dict[str, str] | None = None
-    best_global = -1.0
-    with log_path.open(encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        for row in reader:
-            try:
-                global_f1 = float(row.get("global_f1", 0) or 0)
-            except ValueError:
-                continue
-            if global_f1 > best_global:
-                best_global = global_f1
-                best = row
 
-    if not best:
-        return {"tas_f1": 0.72, "span_f1": 0.68, "sentiment_f1": 0.75, "global_f1": 0.73}
-
-    return {
-        "tas_f1": float(best.get("tas_relaxed_f1", best.get("tas_f1", 0)) or 0),
-        "span_f1": float(best.get("span_f1", 0) or 0),
-        "sentiment_f1": float(best.get("sent_matched_f1", best.get("sentiment_f1", 0)) or 0),
-        "global_f1": float(best.get("global_f1", 0) or 0),
-    }
+def _demote_other_production(store: RegistryStore, keep_model_id: str) -> None:
+    for row in store.list_models(limit=50, status="PRODUCTION"):
+        if row.get("model_id") == keep_model_id:
+            continue
+        store._table(store.config.models_table).update_item(
+            Key={"model_id": row["model_id"], "version": row["version"]},
+            UpdateExpression="SET #status = :archived",
+            ExpressionAttributeNames={"#status": "status"},
+            ExpressionAttributeValues={":archived": "ARCHIVED"},
+        )
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed absa-v1 production model in DynamoDB")
-    parser.add_argument("--model-id", default="absa-v1")
+    parser = argparse.ArgumentParser(description="Seed production model metadata in DynamoDB")
+    parser.add_argument("--model-id", default="absa-v2b")
     parser.add_argument("--dataset-id", default="dataset-v1")
+    parser.add_argument(
+        "--artifact-prefix",
+        default="",
+        help="S3 prefix for train_log.csv (default: models/v1 for absa-v2b)",
+    )
+    parser.add_argument(
+        "--model-dir",
+        default=str(ROOT / "model"),
+        help="Local model dir when seeding metrics without S3",
+    )
+    parser.add_argument("--from-s3", action="store_true", help="Load metrics from S3 artifacts")
+    parser.add_argument("--no-demote-others", action="store_true", help="Keep other PRODUCTION rows unchanged")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
@@ -63,15 +68,47 @@ def main() -> int:
         print("MODELS_TABLE is not configured", file=sys.stderr)
         return 1
 
-    metrics = _load_metrics()
+    artifact_prefix = args.artifact_prefix.strip("/") or resolve_artifact_prefixes(args.model_id)[0]
+    encoder = "unknown"
+    metrics: dict[str, float] = {}
+
+    if args.from_s3 and store.config.artifacts_bucket:
+        payload = load_model_evaluation_from_s3(
+            store._s3,
+            store.config.artifacts_bucket,
+            args.model_id,
+            {"artifact_prefix": artifact_prefix},
+        )
+        if payload:
+            encoder = payload["training"]["encoder"]
+            scores = payload["scores"]
+            metrics = {
+                "tas_f1": scores["tas_relaxed_f1"],
+                "span_f1": scores["span_f1"],
+                "sentiment_f1": scores["sent_matched_f1"],
+                "global_f1": scores["global_f1"],
+            }
+    else:
+        model_dir = Path(args.model_dir)
+        train_log_text, config = _load_local_artifacts(model_dir)
+        if train_log_text:
+            metrics = metrics_summary_from_train_log(train_log_text)
+        encoder = config.get("model_name", encoder)
+
+    if not metrics:
+        print("Could not load metrics from artifacts", file=sys.stderr)
+        return 1
+
     version = now_iso()
+    bucket = store.config.artifacts_bucket
     record = {
         "model_id": args.model_id,
         "version": version,
         "status": "PRODUCTION",
-        "source": "local_training",
-        "artifact_uri": f"s3://{store.config.artifacts_bucket}/models/production/" if store.config.artifacts_bucket else "models/production/",
-        "artifact_prefix": "models/production",
+        "source": "s3_artifacts",
+        "encoder": encoder,
+        "artifact_uri": f"s3://{bucket}/{artifact_prefix}/" if bucket else artifact_prefix,
+        "artifact_prefix": artifact_prefix,
         "dataset_id": args.dataset_id,
         "metrics": metrics,
         "registered_at": version,
@@ -81,8 +118,14 @@ def main() -> int:
         print(json.dumps(record, indent=2, ensure_ascii=False))
         return 0
 
+    if not args.no_demote_others:
+        _demote_other_production(store, args.model_id)
+
     store.put_model(record)
     print(f"Seeded production model {args.model_id} @ {version}")
+    print(f"  encoder: {encoder}")
+    print(f"  artifacts: s3://{bucket}/{artifact_prefix}/")
+    print(f"  global_f1: {metrics.get('global_f1', 0):.4f}")
     return 0
 
 

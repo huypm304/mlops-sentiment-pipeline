@@ -11,6 +11,7 @@ from backend.app.services import analytics as analytics_service
 from backend.app.services import drift as drift_service
 from backend.app.services import inference as inference_service
 from backend.app.services import metrics as metrics_service
+from backend.app.services import platform_context as platform_context_service
 from backend.app.services import runtime as runtime_service
 
 router = APIRouter(tags=["metrics"])
@@ -54,6 +55,16 @@ async def review_queue(limit: int = 50):
     return analytics_service.get_review_queue(limit=limit)
 
 
+@router.get("/metrics/platform/context")
+async def platform_context():
+    try:
+        inference_service.get_model_bundle()
+        model_ready = True
+    except RuntimeError:
+        model_ready = False
+    return platform_context_service.get_platform_context(model_ready=model_ready)
+
+
 @router.get("/metrics/platform")
 async def platform_settings():
     try:
@@ -62,10 +73,11 @@ async def platform_settings():
     except RuntimeError:
         model_ready = False
     stats = runtime_service.get_runtime_stats(model_ready)
+    models = metrics_service.list_models()
     return {
         "environment": "demo",
         "model_dir": str(MODEL_DIR),
-        "production_model": "absa-v1",
+        "production_model": models[0]["version"] if models else None,
         "endpoint_status": "ready" if model_ready else "disabled",
         "artifacts_bucket": ARTIFACTS_BUCKET or None,
         "retrain_state_machine": RETRAIN_STATE_MACHINE_ARN or None,

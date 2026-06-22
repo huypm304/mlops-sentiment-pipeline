@@ -9,7 +9,19 @@ from torch.utils.data import Dataset
 from transformers import PreTrainedTokenizerBase
 
 from .labels import ASPECTS, BIO_L2I, BIO_I2L
-from .utils import nfc
+from .utils import build_offsets_from_tokens, compute_clause_position, nfc
+
+__all__ = [
+    "ABSADataset",
+    "TOKENIZE_BATCH_SIZE",
+    "extract_spans",
+    "compute_clause_aware_window",
+    "compute_clause_position",
+    "collect_valid_ops",
+    "build_gold_span_targets",
+    "build_predicted_span_inputs",
+    "build_predicted_span_labels",
+]
 
 TOKENIZE_BATCH_SIZE = 512
 
@@ -61,22 +73,6 @@ def compute_clause_aware_window(tmin, tmax, op_idx, span_token_lists, offsets, t
                 break
 
     return low, high
-
-
-def compute_clause_position(span_start, span_end, offsets_row, text, seq_len):
-    contrast_words = {"nhưng", "tuy", "dù", "mà", "song", "còn", "tuy_nhiên", "thế_nhưng"}
-    contrast_pos = None
-    for idx in range(seq_len):
-        cs = int(offsets_row[idx][0])
-        ce = int(offsets_row[idx][1])
-        token = text[cs:ce].lower().strip()
-        if token in contrast_words:
-            contrast_pos = idx
-            break
-    if contrast_pos is None:
-        return 0
-    center = 0.5 * (span_start + span_end)
-    return 1 if center < contrast_pos else 2
 
 
 def collect_valid_ops(opinions, offsets, spec_mask):
@@ -196,21 +192,39 @@ class ABSADataset(Dataset):
         for start_idx in range(0, len(records), TOKENIZE_BATCH_SIZE):
             batch_records = records[start_idx:start_idx + TOKENIZE_BATCH_SIZE]
             batch_texts = [nfc(record["text"]) for record in batch_records]
-            enc = tokenizer(
-                batch_texts,
-                max_length=max_len,
-                padding="max_length",
-                truncation=True,
-                return_offsets_mapping=True,
-                return_special_tokens_mask=True,
-            )
+            if getattr(tokenizer, "is_fast", False):
+                enc = tokenizer(
+                    batch_texts,
+                    max_length=max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+                batch_offsets = enc["offset_mapping"]
+            else:
+                enc = tokenizer(
+                    batch_texts,
+                    max_length=max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_special_tokens_mask=True,
+                )
+                batch_offsets = []
+                for text, input_ids, spec_mask in zip(
+                    batch_texts,
+                    enc["input_ids"],
+                    enc["special_tokens_mask"],
+                ):
+                    toks = tokenizer.convert_ids_to_tokens(input_ids)
+                    batch_offsets.append(build_offsets_from_tokens(text, toks, spec_mask))
 
             for record, text, input_ids, attention_mask, offsets, spec_mask in zip(
                 batch_records,
                 batch_texts,
                 enc["input_ids"],
                 enc["attention_mask"],
-                enc["offset_mapping"],
+                batch_offsets,
                 enc["special_tokens_mask"],
             ):
                 seq_len = len(input_ids)

@@ -439,18 +439,74 @@ def _attach_run_artifacts(run: dict[str, Any]) -> dict[str, Any]:
     if not run_id:
         return run
 
+    enriched = dict(run)
+    metrics = (run.get("metrics") or {}) if isinstance(run.get("metrics"), dict) else {}
+    training_config = run.get("training_config")
+
+    if run.get("artifact_uri"):
+        enriched["artifact_uri"] = run["artifact_uri"]
+    elif ARTIFACTS_BUCKET:
+        enriched["artifact_uri"] = f"s3://{ARTIFACTS_BUCKET}/training-runs/{run_id}/"
+
+    if metrics:
+        enriched["best_f1"] = metrics.get("tas_relaxed_f1") or metrics.get("global_f1")
+        enriched["evaluation"] = {
+            "run_id": run_id,
+            "candidate_model_id": run.get("candidate_model_id"),
+            "metrics": metrics,
+            "evaluated_at": run.get("finished_at") or run.get("updated_at"),
+            "mode": "training_run",
+        }
+        enriched["comparison"] = _build_comparison(metrics)
+        if training_config:
+            enriched["training_config"] = training_config
+        return enriched
+
     evaluation = _load_eval_report(str(run_id))
     if not evaluation:
-        return run
+        summary = _load_run_summary(str(run_id))
+        if summary:
+            metrics = summary.get("metrics") or {}
+            enriched["evaluation"] = {
+                "run_id": run_id,
+                "metrics": metrics,
+                "evaluated_at": summary.get("generated_at"),
+                "mode": "training_run",
+            }
+            enriched["best_f1"] = metrics.get("tas_relaxed_f1") or metrics.get("global_f1")
+            if summary.get("config"):
+                enriched["training_config"] = summary["config"]
+            if metrics:
+                enriched["comparison"] = _build_comparison(metrics)
+        return enriched
 
     metrics = evaluation.get("metrics") or {}
     if not metrics:
-        return run
+        return enriched
     return {
-        **run,
+        **enriched,
         "evaluation": evaluation,
         "comparison": _build_comparison(metrics),
+        "best_f1": metrics.get("tas_relaxed_f1") or metrics.get("global_f1"),
     }
+
+
+def _load_run_summary(run_id: str) -> dict[str, Any] | None:
+    local_path = REPO_ROOT / "experiments" / "training-runs" / run_id / "summary.json"
+    if local_path.is_file():
+        return json.loads(local_path.read_text(encoding="utf-8"))
+
+    if not ARTIFACTS_BUCKET:
+        return None
+
+    try:
+        obj = _s3_client().get_object(
+            Bucket=ARTIFACTS_BUCKET,
+            Key=f"training-runs/{run_id}/summary.json",
+        )
+        return json.loads(obj["Body"].read().decode("utf-8"))
+    except Exception:
+        return None
 
 
 def get_run_evaluation(run_id: str) -> dict[str, Any] | None:
@@ -540,9 +596,69 @@ def start_execution(
     return _normalize_execution(run, include_stages=True, include_sfn_timeline=True)
 
 
+def _local_run_item(row: dict[str, Any]) -> dict[str, Any]:
+    run_id = str(row.get("run_id", ""))
+    status = str(row.get("status", "COMPLETED")).upper()
+    if status == "COMPLETED":
+        status = "SUCCEEDED"
+    return {
+        "execution_arn": f"local://training-runs/{run_id}",
+        "name": run_id,
+        "status": status if status in {"RUNNING", "FAILED", "SUCCEEDED"} else "SUCCEEDED",
+        "start_date": row.get("created_at") or row.get("started_at") or _now_iso(),
+        "stop_date": row.get("finished_at") or row.get("created_at"),
+        "dataset_key": row.get("dataset_id"),
+        "dataset_id": row.get("dataset_id"),
+        "run_id": run_id,
+        "artifact_uri": row.get("artifact_uri"),
+        "training_config": row.get("training_config"),
+        "metrics": row.get("metrics"),
+        "best_f1": row.get("best_f1"),
+        "demo": False,
+    }
+
+
+def _list_local_experiment_runs(*, max_results: int = 15) -> list[dict[str, Any]]:
+    from registry.experiment import load_local_runs
+
+    rows = load_local_runs(limit=max_results)
+    return [
+        _attach_run_artifacts(
+            _normalize_execution(_local_run_item(row), include_stages=True, include_sfn_timeline=False)
+        )
+        for row in rows
+    ]
+
+
+def _get_local_experiment_run(run_id: str) -> dict[str, Any] | None:
+    from registry.experiment import load_local_runs
+
+    for row in load_local_runs(limit=100):
+        if row.get("run_id") == run_id:
+            return _attach_run_artifacts(
+                _normalize_execution(_local_run_item(row), include_stages=True, include_sfn_timeline=False)
+            )
+    summary = _load_run_summary(run_id)
+    if not summary:
+        return None
+    row = {
+        "run_id": run_id,
+        "created_at": summary.get("generated_at"),
+        "finished_at": summary.get("generated_at"),
+        "status": summary.get("status", "COMPLETED"),
+        "dataset_id": summary.get("dataset_id"),
+        "training_config": summary.get("config"),
+        "metrics": summary.get("metrics"),
+        "artifact_uri": str(REPO_ROOT / "experiments" / "training-runs" / run_id),
+    }
+    return _attach_run_artifacts(
+        _normalize_execution(_local_run_item(row), include_stages=True, include_sfn_timeline=False)
+    )
+
+
 def list_runs(*, max_results: int = 15) -> list[dict[str, Any]]:
     if not is_configured():
-        return []
+        return _list_local_experiment_runs(max_results=max_results)
 
     store = registry_db.get_store()
     if store is not None and store.config.training_runs_table:
@@ -554,7 +670,7 @@ def list_runs(*, max_results: int = 15) -> list[dict[str, Any]]:
             if status in {"COMPLETED", "REGISTERED", "APPROVED", "REJECTED"}:
                 status = "SUCCEEDED"
             item = {
-                "execution_arn": execution_arn,
+                "execution_arn": execution_arn or f"local://training-runs/{row.get('run_id')}",
                 "name": row.get("run_id", ""),
                 "status": status if status in {"RUNNING", "FAILED", "SUCCEEDED"} else "RUNNING",
                 "start_date": row.get("started_at") or row.get("created_at"),
@@ -562,6 +678,11 @@ def list_runs(*, max_results: int = 15) -> list[dict[str, Any]]:
                 "dataset_key": row.get("dataset_key"),
                 "run_id": row.get("run_id"),
                 "dataset_id": row.get("dataset_id"),
+                "artifact_uri": row.get("artifact_uri"),
+                "training_config": row.get("training_config"),
+                "metrics": row.get("metrics"),
+                "candidate_model_id": row.get("candidate_model_id"),
+                "best_f1": row.get("best_f1"),
                 "demo": False,
             }
             if execution_arn:
@@ -622,8 +743,12 @@ def get_run(execution_arn: str) -> dict[str, Any] | None:
                 return _attach_run_artifacts(_normalize_execution(r, include_stages=True, include_sfn_timeline=True))
         return None
 
+    if execution_arn.startswith("local://training-runs/"):
+        run_id = execution_arn.rsplit("/", 1)[-1]
+        return _get_local_experiment_run(run_id)
+
     if not is_configured():
-        return None
+        return _get_local_experiment_run(execution_arn)
 
     try:
         detail = _sfn_client().describe_execution(executionArn=execution_arn)

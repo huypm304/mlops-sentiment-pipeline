@@ -158,6 +158,15 @@ def get_dataset(dataset_id: str) -> dict[str, Any]:
     return _load_manifest_raw(dataset_id)
 
 
+def _audit_status(manifest: dict[str, Any]) -> str:
+    if manifest.get("audit_passed"):
+        return "pass"
+    audits = manifest.get("audits") or {}
+    if audits:
+        return "running"
+    return "pending"
+
+
 def list_datasets() -> list[dict[str, Any]]:
     store = registry_db.get_store()
     if store is not None and store.config.datasets_table:
@@ -184,6 +193,7 @@ def list_datasets() -> list[dict[str, Any]]:
                 "created_at": manifest.get("created_at", ""),
                 "splits": list(splits.keys()),
                 "audit_passed": bool(manifest.get("audit_passed")),
+                "audit_status": _audit_status(manifest),
                 "audit_score": round(sum(scores) / len(scores), 4) if scores else None,
                 "total_rows": sum(int(s.get("rows", 0)) for s in splits.values()),
             }

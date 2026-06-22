@@ -18,9 +18,10 @@ locals {
 module "s3_artifacts" {
   source = "../modules/s3_artifacts"
 
-  project     = var.project
-  environment = var.environment
-  common_tags = local.common_tags
+  project              = var.project
+  environment          = var.environment
+  common_tags          = local.common_tags
+  cors_allowed_origins = var.cors_allowed_origins
 }
 
 # ---------------------------------------------------------------------------

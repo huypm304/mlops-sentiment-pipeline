@@ -55,7 +55,7 @@ def _dataset_key_from_event(event: dict[str, Any]) -> str:
 
 
 def _output_prefix(run_id: str) -> str:
-    return f"models/candidates/{run_id}"
+    return f"training-runs/{run_id}"
 
 
 def handle_estimate_cost(event: dict[str, Any]) -> dict[str, Any]:

@@ -20,19 +20,23 @@ MINI_DEV  = Path(__file__).resolve().parent / "fixtures" / "dev_mini.jsonl"
 
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_evaluate_runs():
-    from transformers import AutoTokenizer
+    import json
 
     from src.absa.dataset import ABSADataset
     from src.absa.evaluation import evaluate
     from src.absa.model import ABSAModel
+    from src.absa.utils import load_tokenizer
+
+    run_config = json.loads((MODEL_DIR / "run_config.json").read_text(encoding="utf-8"))
+    config_source = run_config.get("model_name", "vinai/phobert-base")
 
     device = torch.device("cpu")
-    tokenizer = AutoTokenizer.from_pretrained("Fsoft-AIC/videberta-base")
+    tokenizer = load_tokenizer(config_source)
 
     ds = ABSADataset(MINI_DEV, tokenizer, max_len=192, max_ops=6, max_context_window=25)
     dl = DataLoader(ds, batch_size=2, shuffle=False)
 
-    model = ABSAModel("Fsoft-AIC/videberta-base", max_ops=6).to(device)
+    model = ABSAModel(config_source, max_ops=6).to(device)
     state = torch.load(CHECKPOINT, map_location=device)
     if isinstance(state, dict) and "state_dict" in state:
         state = state["state_dict"]

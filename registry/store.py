@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -57,15 +58,20 @@ class RegistryStore:
         return from_dynamo(items[0]) if items else None
 
     def update_dataset(self, dataset_id: str, created_at: str, updates: dict[str, Any]) -> None:
+        reserved = {"dataset_id", "created_at", "updated_at"}
         expr_names: dict[str, str] = {"#updated_at": "updated_at"}
         expr_values: dict[str, Any] = {":updated_at": now_iso()}
         parts = ["#updated_at = :updated_at"]
-        for idx, (key, value) in enumerate(updates.items()):
+        idx = 0
+        for key, value in updates.items():
+            if key in reserved:
+                continue
             name_key = f"#k{idx}"
             value_key = f":v{idx}"
             expr_names[name_key] = key
             expr_values[value_key] = value
             parts.append(f"{name_key} = {value_key}")
+            idx += 1
         self._table(self.config.datasets_table).update_item(
             Key={"dataset_id": dataset_id, "created_at": created_at},
             UpdateExpression="SET " + ", ".join(parts),
@@ -110,15 +116,20 @@ class RegistryStore:
         return from_dynamo(items[0]) if items else None
 
     def update_training_run(self, run_id: str, created_at: str, updates: dict[str, Any]) -> None:
+        reserved = {"run_id", "created_at", "updated_at"}
         expr_names: dict[str, str] = {"#updated_at": "updated_at"}
         expr_values: dict[str, Any] = {":updated_at": now_iso()}
         parts = ["#updated_at = :updated_at"]
-        for idx, (key, value) in enumerate(updates.items()):
+        idx = 0
+        for key, value in updates.items():
+            if key in reserved:
+                continue
             name_key = f"#k{idx}"
             value_key = f":v{idx}"
             expr_names[name_key] = key
             expr_values[value_key] = value
             parts.append(f"{name_key} = {value_key}")
+            idx += 1
         self._table(self.config.training_runs_table).update_item(
             Key={"run_id": run_id, "created_at": created_at},
             UpdateExpression="SET " + ", ".join(parts),
@@ -347,11 +358,36 @@ class RegistryStore:
         )
         return f"s3://{self.config.artifacts_bucket}/{key}"
 
+    def put_file_s3(
+        self,
+        key: str,
+        local_path: Path | str,
+        *,
+        content_type: str = "application/octet-stream",
+    ) -> str:
+        path = Path(local_path)
+        if not path.is_file():
+            raise FileNotFoundError(path)
+        if not self.config.artifacts_bucket:
+            raise RuntimeError("ARTIFACTS_BUCKET is not configured")
+        self._s3.upload_file(
+            str(path),
+            self.config.artifacts_bucket,
+            key,
+            ExtraArgs={"ContentType": content_type},
+        )
+        return f"s3://{self.config.artifacts_bucket}/{key}"
+
     def dataset_record_from_manifest(self, manifest: dict[str, Any]) -> dict[str, Any]:
         splits = manifest.get("splits") or {}
         total_rows = sum(int(info.get("rows", 0)) for info in splits.values())
         dataset_id = manifest["dataset_id"]
-        prefix = f"datasets/pending/{dataset_id}"
+        approved_prefix = manifest.get("s3_approved_prefix", "").rstrip("/")
+        pending_prefix = f"datasets/pending/{dataset_id}"
+        if approved_prefix and manifest.get("status", "").lower() in {"approved", "audited"}:
+            prefix = approved_prefix
+        else:
+            prefix = pending_prefix
         return {
             "dataset_id": dataset_id,
             "created_at": manifest.get("created_at", now_iso()),

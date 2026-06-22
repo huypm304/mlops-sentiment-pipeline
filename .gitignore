@@ -124,6 +124,11 @@ reports/monitoring/*.json
 reports/monitoring/*.jsonl
 datasets/local/
 
+# --- DVC (local cache; .dvc/config is committed) ---
+.dvc/cache/
+.dvc/tmp/
+.dvc/config.local
+
 # --- Logs & temp ---
 *.log
 logs/

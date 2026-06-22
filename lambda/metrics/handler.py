@@ -8,10 +8,12 @@ from collections import Counter
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
+from registry.model_artifacts import load_model_evaluation_from_s3, load_training_history_from_s3
 from registry.store import RegistryStore, now_iso
 
 _BUCKET = os.getenv("ARTIFACTS_BUCKET", "")
 _STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN", "")
+_PRODUCTION_MODEL_ID = os.getenv("PRODUCTION_MODEL_ID", "absa-v2b").strip() or "absa-v2b"
 _store: RegistryStore | None = None
 
 PRODUCTION_BASELINE = {
@@ -62,7 +64,19 @@ def _query_params(event: dict[str, Any]) -> dict[str, str]:
     return {}
 
 
-def _compute_snapshot(model_id: str = "absa-v1") -> dict[str, Any]:
+def _registry_row_for_model(model_id: str) -> dict[str, Any] | None:
+    store = _get_store()
+    if not store.config.models_table:
+        return None
+    matches = [row for row in store.list_models(limit=50) if row.get("model_id") == model_id]
+    if not matches:
+        return None
+    matches.sort(key=lambda row: row.get("version", ""), reverse=True)
+    return matches[0]
+
+
+def _compute_snapshot(model_id: str | None = None) -> dict[str, Any]:
+    model_id = model_id or _PRODUCTION_MODEL_ID
     store = _get_store()
     predictions = store.list_predictions(limit=200, model_version=model_id)
     count = len(predictions)
@@ -84,32 +98,52 @@ def _compute_snapshot(model_id: str = "absa-v1") -> dict[str, Any]:
     )
 
 
+def _summary_from_evaluation(evaluation: dict[str, Any]) -> dict[str, Any]:
+    scores = evaluation.get("scores") or {}
+    training = evaluation.get("training") or {}
+    return {
+        "version": evaluation["version"],
+        "status": evaluation.get("status", "production"),
+        "epoch": evaluation.get("epoch", 0),
+        "primary_metric": evaluation.get("primary_metric", "global_f1"),
+        "tas_strict_f1": float(scores.get("tas_strict_f1", 0)),
+        "tas_relaxed_f1": float(scores.get("tas_relaxed_f1", 0)),
+        "span_f1": float(scores.get("span_f1", 0)),
+        "sent_matched_f1": float(scores.get("sent_matched_f1", 0)),
+        "sent_goldspan_f1": float(scores.get("sent_goldspan_f1", 0)),
+        "global_f1": float(scores.get("global_f1", 0)),
+        "encoder": training.get("encoder", "unknown"),
+        "checkpoint": training.get("checkpoint", ""),
+    }
+
+
 def _model_summaries() -> list[dict[str, Any]]:
     store = _get_store()
     rows = store.list_models(limit=20) if store.config.models_table else []
-    if not rows:
-        return [
-            {
-                "version": "absa-v1",
-                "status": "production",
-                "epoch": 0,
-                "primary_metric": "global_f1",
-                "tas_strict_f1": PRODUCTION_BASELINE["tas_f1"],
-                "tas_relaxed_f1": PRODUCTION_BASELINE["tas_f1"],
-                "span_f1": PRODUCTION_BASELINE["span_f1"],
-                "sent_matched_f1": PRODUCTION_BASELINE["sentiment_f1"],
-                "sent_goldspan_f1": PRODUCTION_BASELINE["sentiment_f1"],
-                "global_f1": PRODUCTION_BASELINE["global_f1"],
-                "encoder": "Fsoft-AIC/videberta-base",
-                "checkpoint": "models/v1/best_model.pt",
-            }
-        ]
-    summaries = []
+    if not rows and _BUCKET:
+        payload = load_model_evaluation_from_s3(
+            store._s3,
+            _BUCKET,
+            _PRODUCTION_MODEL_ID,
+        )
+        if payload:
+            return [_summary_from_evaluation(payload)]
+
+    summaries: list[dict[str, Any]] = []
+    seen: set[str] = set()
     for row in rows:
+        model_id = str(row.get("model_id", ""))
+        if not model_id or model_id in seen:
+            continue
+        seen.add(model_id)
+        evaluation = _model_evaluation(model_id)
+        if evaluation:
+            summaries.append(_summary_from_evaluation(evaluation))
+            continue
         metrics = row.get("metrics") or {}
         summaries.append(
             {
-                "version": row.get("model_id", "absa-v1"),
+                "version": model_id,
                 "status": str(row.get("status", "production")).lower(),
                 "epoch": 0,
                 "primary_metric": "global_f1",
@@ -119,7 +153,7 @@ def _model_summaries() -> list[dict[str, Any]]:
                 "sent_matched_f1": float(metrics.get("sentiment_f1", 0)),
                 "sent_goldspan_f1": float(metrics.get("sentiment_f1", 0)),
                 "global_f1": float(metrics.get("global_f1", 0)),
-                "encoder": row.get("source", "sagemaker_training"),
+                "encoder": row.get("encoder", row.get("source", "unknown")),
                 "checkpoint": row.get("artifact_prefix", ""),
             }
         )
@@ -128,121 +162,26 @@ def _model_summaries() -> list[dict[str, Any]]:
 
 def _model_evaluation(version: str) -> dict[str, Any] | None:
     store = _get_store()
-    if store.config.models_table:
-        for row in store.list_models(limit=50):
-            if row.get("model_id") == version:
-                metrics = row.get("metrics") or PRODUCTION_BASELINE
-                f1 = float(metrics.get("global_f1", PRODUCTION_BASELINE["global_f1"]))
-                span = float(metrics.get("span_f1", PRODUCTION_BASELINE["span_f1"]))
-                return {
-                    "version": version,
-                    "status": str(row.get("status", "production")).lower(),
-                    "epoch": 0,
-                    "phase": "production",
-                    "primary_metric": "global_f1",
-                    "registered_at": row.get("registered_at", now_iso()),
-                    "evaluated_at": row.get("registered_at", now_iso()),
-                    "inference_latency_ms": 0,
-                    "dataset": {
-                        "version": row.get("dataset_id", "dataset-v1"),
-                        "train_samples": 0,
-                        "val_samples": 0,
-                        "test_samples": 0,
-                    },
-                    "training": {
-                        "encoder": "Fsoft-AIC/videberta-base",
-                        "epochs": 50,
-                        "batch_size": 24,
-                        "learning_rate": 3e-5,
-                        "trained_at": row.get("registered_at", now_iso()),
-                        "checkpoint": row.get("artifact_prefix", "models/v1"),
-                    },
-                    "scores": {
-                        "tas_strict_f1": float(metrics.get("tas_f1", 0)),
-                        "tas_relaxed_f1": float(metrics.get("tas_f1", 0)),
-                        "span_f1": span,
-                        "sent_matched_f1": float(metrics.get("sentiment_f1", 0)),
-                        "sent_goldspan_f1": float(metrics.get("sentiment_f1", 0)),
-                        "global_f1": f1,
-                    },
-                    "sentiment": {"accuracy": span, "precision": span, "recall": span, "f1": span},
-                    "global_sentiment": {"accuracy": f1, "precision": f1, "recall": f1, "f1": f1},
-                    "aspect_polarity": {"accuracy": span, "precision": span, "recall": span, "f1": span},
-                    "aspect_extraction": {"accuracy": span, "precision": span, "recall": span, "f1": span},
-                    "confusion_matrix": {
-                        "labels": ["negative", "neutral", "positive"],
-                        "matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-                    },
-                    "global_confusion_matrix": {
-                        "labels": ["negative", "neutral", "positive"],
-                        "matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-                    },
-                    "per_aspect": [],
-                    "confusion_labels": ["negative", "neutral", "positive"],
-                }
-    if version == "absa-v1":
-        return {
-            "version": "absa-v1",
-            "status": "production",
-            "epoch": 0,
-            "phase": "baseline",
-            "primary_metric": "global_f1",
-            "registered_at": now_iso(),
-            "evaluated_at": now_iso(),
-            "inference_latency_ms": 0,
-            "dataset": {"version": "dataset-v1", "train_samples": 0, "val_samples": 0, "test_samples": 0},
-            "training": {
-                "encoder": "Fsoft-AIC/videberta-base",
-                "epochs": 50,
-                "batch_size": 24,
-                "learning_rate": 3e-5,
-                "trained_at": now_iso(),
-                "checkpoint": "models/v1/best_model.pt",
-            },
-            "scores": {
-                "tas_strict_f1": PRODUCTION_BASELINE["tas_f1"],
-                "tas_relaxed_f1": PRODUCTION_BASELINE["tas_f1"],
-                "span_f1": PRODUCTION_BASELINE["span_f1"],
-                "sent_matched_f1": PRODUCTION_BASELINE["sentiment_f1"],
-                "sent_goldspan_f1": PRODUCTION_BASELINE["sentiment_f1"],
-                "global_f1": PRODUCTION_BASELINE["global_f1"],
-            },
-            "sentiment": {
-                "accuracy": PRODUCTION_BASELINE["span_f1"],
-                "precision": PRODUCTION_BASELINE["span_f1"],
-                "recall": PRODUCTION_BASELINE["span_f1"],
-                "f1": PRODUCTION_BASELINE["span_f1"],
-            },
-            "global_sentiment": {
-                "accuracy": PRODUCTION_BASELINE["global_f1"],
-                "precision": PRODUCTION_BASELINE["global_f1"],
-                "recall": PRODUCTION_BASELINE["global_f1"],
-                "f1": PRODUCTION_BASELINE["global_f1"],
-            },
-            "aspect_polarity": {
-                "accuracy": PRODUCTION_BASELINE["span_f1"],
-                "precision": PRODUCTION_BASELINE["span_f1"],
-                "recall": PRODUCTION_BASELINE["span_f1"],
-                "f1": PRODUCTION_BASELINE["span_f1"],
-            },
-            "aspect_extraction": {
-                "accuracy": PRODUCTION_BASELINE["span_f1"],
-                "precision": PRODUCTION_BASELINE["span_f1"],
-                "recall": PRODUCTION_BASELINE["span_f1"],
-                "f1": PRODUCTION_BASELINE["span_f1"],
-            },
-            "confusion_matrix": {
-                "labels": ["negative", "neutral", "positive"],
-                "matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-            },
-            "global_confusion_matrix": {
-                "labels": ["negative", "neutral", "positive"],
-                "matrix": [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
-            },
-            "per_aspect": [],
-            "confusion_labels": ["negative", "neutral", "positive"],
-        }
+    registry_row = _registry_row_for_model(version)
+    if _BUCKET:
+        payload = load_model_evaluation_from_s3(
+            store._s3,
+            _BUCKET,
+            version,
+            registry_row,
+        )
+        if payload:
+            return payload
     return None
+
+
+def _training_history(model_id: str | None = None) -> list[dict[str, Any]]:
+    store = _get_store()
+    target = model_id or _PRODUCTION_MODEL_ID
+    registry_row = _registry_row_for_model(target)
+    if not _BUCKET:
+        return []
+    return load_training_history_from_s3(store._s3, _BUCKET, target, registry_row)
 
 
 def _normalize_sentiment(label: str) -> str:
@@ -462,7 +401,7 @@ def _analytics_payload(params: dict[str, str]) -> dict[str, Any]:
             "status": drift.get("status", "insufficient_data"),
         },
         "recent_predictions": predictions[:10],
-        "models": ["absa-v1"],
+        "models": [_PRODUCTION_MODEL_ID],
     }
 
 
@@ -519,7 +458,7 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
             200,
             {
                 "environment": os.getenv("ENVIRONMENT", "demo"),
-                "production_model": "absa-v1",
+                "production_model": _PRODUCTION_MODEL_ID,
                 "endpoint_status": "ready",
                 "artifacts_bucket": _BUCKET or None,
                 "retrain_state_machine": _STATE_MACHINE_ARN or None,
@@ -540,7 +479,8 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         return _response(200, _runtime_stats(predictions))
 
     if route.endswith("/metrics/training/history"):
-        return _response(200, {"history": []})
+        model_id = params.get("model_id") or _PRODUCTION_MODEL_ID
+        return _response(200, {"history": _training_history(model_id)})
 
     if route.endswith("/review-queue") and not route.endswith("/submit"):
         try:

@@ -1,9 +1,5 @@
-import { CustomerShell } from "@/components/layout/customer-shell"
+import { redirect } from "next/navigation"
 
-export default function CustomerLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return <CustomerShell>{children}</CustomerShell>
+export default function CustomerLayout() {
+  redirect("/")
 }

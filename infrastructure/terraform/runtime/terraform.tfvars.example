@@ -51,6 +51,8 @@ enable_sagemaker_training     = false
 enable_sagemaker_endpoint     = false
 enable_eventbridge_monitoring = true
 sagemaker_instance_type       = "ml.m5.large"
+# Bump after uploading models/production/model.tar.gz (PhoBERT run1a → v3)
+model_package_version         = "v3"
 
 # ---------------------------------------------------------------------------
 # Custom domain — zone lives in core stack; runtime reads zone_id via remote state

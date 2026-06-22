@@ -59,6 +59,7 @@ locals {
     PROJECT             = var.project
     ENVIRONMENT         = var.environment
     ARTIFACTS_BUCKET    = local.artifact_bucket_name
+    PRODUCTION_MODEL_ID = "absa-v2b"
     DATASETS_TABLE      = local.datasets_table_name
     TRAINING_RUNS_TABLE = local.training_runs_table_name
     MODELS_TABLE        = local.models_table_name
@@ -120,7 +121,7 @@ module "lambda_predict" {
   environment_variables = merge(local.lambda_env, {
     SAGEMAKER_ENDPOINT_NAME   = module.sagemaker_optional.endpoint_name
     ENABLE_SAGEMAKER_ENDPOINT = tostring(var.enable_sagemaker_endpoint)
-    PRODUCTION_MODEL_ID       = "absa-v1"
+    PRODUCTION_MODEL_ID       = "absa-v2b"
   })
 }
 
@@ -284,6 +285,7 @@ module "sagemaker_optional" {
   sagemaker_execution_role_arn = module.iam_runtime.sagemaker_role_arn
   enable_endpoint              = var.enable_sagemaker_endpoint
   instance_type                = var.sagemaker_instance_type
+  model_package_version        = var.model_package_version
   aws_region                   = var.aws_region
   common_tags                  = local.common_tags
 }

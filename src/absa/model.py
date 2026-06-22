@@ -1,4 +1,4 @@
-"""ABSAModel — extracted verbatim from train/train.py.
+"""ABSAModel — aligned with train/train.py (PhoBERT).
 
 Layer names, forward signature, and architecture are frozen.
 Do NOT rename layers; doing so breaks checkpoint compatibility.
@@ -10,89 +10,61 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchcrf import CRF
-from transformers import AutoModel
+from transformers import AutoConfig, AutoModel
 
 from .labels import ASPECTS, N_BIO, N_SENT
-
-
-# ---------------------------------------------------------------------------
-# Contrast feature helper — verbatim from train/train.py
-# ---------------------------------------------------------------------------
-
-CONTRAST_WORDS = {"nhưng", "tuy", "dù", "mà", "song", "còn"}
+from .utils import compute_clause_position, find_contrast_char_spans, overlaps
 
 
 def extract_contrast_feature(sequence, offsets_batch, text_batch, mask):
-    """
-    Tìm hidden state của contrast words dựa trên char offsets thay vì subword tokens.
-    Tránh bug khi ViBERTa split "nhưng" thành nhiều piece.
-    Tránh inplace ops trên tensors có grad_fn để không phá autograd graph.
-    """
     B, L, H = sequence.shape
     per_batch = []
 
     for b in range(B):
-        text    = text_batch[b].lower()
+        text = text_batch[b]
         offsets = offsets_batch[b]
-        found   = []
+        contrast_spans = find_contrast_char_spans(text)
+        found = []
         for i in range(L):
             if mask[b, i]:
                 continue
-            cs  = int(offsets[i, 0])
-            ce  = int(offsets[i, 1])
-            tok = text[cs:ce].strip()
-            if tok in CONTRAST_WORDS:
+            cs = int(offsets[i, 0])
+            ce = int(offsets[i, 1])
+            if cs == ce:
+                continue
+            if any(overlaps(cs, ce, ss, se) for ss, se in contrast_spans):
                 found.append(sequence[b, i])
         if found:
-            summed = torch.stack(found, dim=0).sum(0)   # no inplace
+            summed = torch.stack(found, dim=0).sum(0)
             per_batch.append(F.normalize(summed, dim=0))
         else:
             per_batch.append(sequence.new_zeros(H))
 
-    return torch.stack(per_batch, dim=0)  # (B, H)
+    return torch.stack(per_batch, dim=0)
 
-
-def compute_clause_position(span_start, span_end, offsets_row, text, seq_len):
-    contrast_words = {"nhưng", "tuy", "dù", "mà", "song", "còn", "tuy_nhiên", "thế_nhưng"}
-    contrast_pos = None
-    for idx in range(seq_len):
-        cs = int(offsets_row[idx][0])
-        ce = int(offsets_row[idx][1])
-        token = text[cs:ce].lower().strip()
-        if token in contrast_words:
-            contrast_pos = idx
-            break
-    if contrast_pos is None:
-        return 0
-    center = 0.5 * (span_start + span_end)
-    return 1 if center < contrast_pos else 2
-
-
-# ---------------------------------------------------------------------------
-# Model — verbatim from train/train.py
-# ---------------------------------------------------------------------------
 
 class ABSAModel(nn.Module):
-    def __init__(self, model_name: str, max_ops: int):
+    def __init__(self, config_source, max_ops: int):
         super().__init__()
-        self.max_ops  = max_ops
-        self.backbone = AutoModel.from_pretrained(model_name)
-        h             = self.backbone.config.hidden_size
-        self.dropout      = nn.Dropout(0.3)
-        self.bio_lstm     = nn.LSTM(h, h // 2, num_layers=1, batch_first=True, bidirectional=True)
-        self.bio_head     = nn.Linear(h, N_BIO)
-        self.crf          = CRF(N_BIO, batch_first=True)
-        self.fc_pool      = nn.Linear(h, 1)
-        self.span_proj    = nn.Linear(h * 4, h)
-        self.cross_attn   = nn.MultiheadAttention(h, num_heads=8, dropout=0.1, batch_first=True)
+        self.max_ops = max_ops
+        config = AutoConfig.from_pretrained(str(config_source))
+        self.backbone = AutoModel.from_config(config)
+        h = self.backbone.config.hidden_size
+        self.dropout = nn.Dropout(0.3)
+        self.bio_lstm = nn.LSTM(h, h // 2, num_layers=1, batch_first=True, bidirectional=True)
+        self.bio_head = nn.Linear(h, N_BIO)
+        self.crf = CRF(N_BIO, batch_first=True)
+        self.fc_pool = nn.Linear(h, 1)
+        self.span_proj = nn.Linear(h * 4, h)
+        self.cross_attn = nn.MultiheadAttention(h, num_heads=8, dropout=0.1, batch_first=True)
         self.cross_attn_scale = nn.Parameter(torch.tensor(0.5))
-        self.cross_attn_norm  = nn.LayerNorm(h)
+        self.cross_attn_norm = nn.LayerNorm(h)
         self.span_self_attn = nn.MultiheadAttention(h, num_heads=4, dropout=0.1, batch_first=True)
         self.aspect_embed = nn.Embedding(len(ASPECTS) + 1, h, padding_idx=len(ASPECTS))
         self.aspect_scale = nn.Parameter(torch.tensor(0.8))
         self.clause_pos_embed = nn.Embedding(3, h)
         self.clause_pos_scale = nn.Parameter(torch.tensor(0.5))
-        self.sent_head    = nn.Sequential(
+        self.sent_head = nn.Sequential(
             nn.Linear(h, h),
             nn.GELU(),
             nn.Dropout(0.2),
@@ -101,36 +73,43 @@ class ABSAModel(nn.Module):
             nn.Dropout(0.15),
             nn.Linear(h // 2, N_SENT),
         )
-        # Polarity-aware global head: [cls, neg_pool, pos_pool, contra_vec] → h → N_SENT
         self.global_polarity_fusion = nn.Linear(h * 4, h)
-        self.global_head  = nn.Sequential(nn.Dropout(0.2), nn.Linear(h, N_SENT))
+        self.global_head = nn.Sequential(nn.Dropout(0.2), nn.Linear(h, N_SENT))
 
-    def forward(self, ids, mask, span_mask=None, bio=None, cached_seq=None,
-                span_aspect=None, span_clause_pos=None, offsets=None, texts=None):
-        seq      = self.dropout(self.backbone(ids, attention_mask=mask).last_hidden_state) \
-                   if cached_seq is None else cached_seq
-        B        = seq.shape[0]
+    def forward(
+        self,
+        ids,
+        mask,
+        span_mask=None,
+        bio=None,
+        cached_seq=None,
+        span_aspect=None,
+        span_clause_pos=None,
+        offsets=None,
+        texts=None,
+    ):
+        seq = self.dropout(self.backbone(ids, attention_mask=mask).last_hidden_state) \
+            if cached_seq is None else cached_seq
+        B = seq.shape[0]
         bio_feat, _ = self.bio_lstm(seq)
-        emiss    = self.bio_head(bio_feat)
+        emiss = self.bio_head(bio_feat)
         crf_loss = -self.crf(emiss.float(), bio, mask=mask.bool(), reduction="mean") \
-                   if bio is not None else None
+            if bio is not None else None
 
         sent_logits = None
         span_features = None
         if span_mask is not None:
             B2, L, H = seq.shape
-            M        = span_mask.shape[1]
-            exp_seq  = seq.unsqueeze(1).expand(B2, M, L, H)
-            scores   = self.fc_pool(exp_seq).squeeze(-1).masked_fill(span_mask == 0, -1e4)
-            attn     = torch.softmax(scores, dim=-1).unsqueeze(-1)
-            pooled   = (exp_seq * attn).sum(dim=2)          # (B, M, H)
+            M = span_mask.shape[1]
+            exp_seq = seq.unsqueeze(1).expand(B2, M, L, H)
+            scores = self.fc_pool(exp_seq).squeeze(-1).masked_fill(span_mask == 0, -1e4)
+            attn = torch.softmax(scores, dim=-1).unsqueeze(-1)
+            pooled = (exp_seq * attn).sum(dim=2)
 
-            # Contrast feature — Fix: dùng char offsets
             if offsets is not None and texts is not None:
-                c_vec  = extract_contrast_feature(seq, offsets, texts, ~mask.bool())
+                c_vec = extract_contrast_feature(seq, offsets, texts, ~mask.bool())
                 pooled = pooled + 0.3 * c_vec.unsqueeze(1)
 
-            # CLS residual
             pooled = pooled + seq[:, 0].unsqueeze(1)
 
             if span_aspect is not None:
@@ -191,23 +170,18 @@ class ABSAModel(nn.Module):
             )
             pooled = pooled + span_interact * valid_span_slots
             span_features = pooled
+            sent_logits = self.sent_head(pooled)
 
-            sent_logits = self.sent_head(pooled)            # (B, M, N_SENT)
-
-        # Global head — polarity-aware pooling over span_features
-        # For mixed reviews: neg_pool and pos_pool carry distinct signal;
-        # contra_vec = neg_pool − pos_pool is the contradiction-aware direction.
         cls_repr = seq[:, 0]
         h_dim = seq.shape[-1]
         if sent_logits is not None and span_features is not None:
-            valid_spans = (span_mask.sum(dim=-1) > 0).float()      # (B, M)
-            # Prevent global loss from directly pulling sentiment logits.
-            span_probs  = sent_logits.detach().softmax(-1)          # (B, M, 3)
-            neg_w = span_probs[:, :, 0] * valid_spans              # (B, M)
+            valid_spans = (span_mask.sum(dim=-1) > 0).float()
+            span_probs = sent_logits.detach().softmax(-1)
+            neg_w = span_probs[:, :, 0] * valid_spans
             pos_w = span_probs[:, :, 1] * valid_spans
             neg_pool = (span_features * neg_w.unsqueeze(-1)).sum(1) / neg_w.sum(1, keepdim=True).clamp(min=1e-4)
             pos_pool = (span_features * pos_w.unsqueeze(-1)).sum(1) / pos_w.sum(1, keepdim=True).clamp(min=1e-4)
-            contra_vec = neg_pool - pos_pool                        # explicit contradiction signal
+            contra_vec = neg_pool - pos_pool
         else:
             neg_pool = pos_pool = contra_vec = seq.new_zeros(B, h_dim)
 

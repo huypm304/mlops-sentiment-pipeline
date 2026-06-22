@@ -449,6 +449,10 @@ Scripts:
 ./scripts/runtime_destroy.sh     # safe — keeps core data
 ./scripts/upload_model.sh
 ./scripts/upload_dataset.sh
+
+# Official benchmark dataset (DVC → S3 approved); see docs/data-management.md
+./scripts/dvc_setup.sh
+python scripts/publish_approved_dataset.py --dataset-id dataset-v1
 ```
 
 ---
@@ -460,17 +464,12 @@ Scripts:
 | `pr-validate.yml` | Validate Terraform + frontend trên PR |
 | `deploy-bootstrap.yml` | Bootstrap (1 lần/account) |
 | `deploy-core.yml` | Deploy core/stateful |
-| `plan-runtime.yml` | Xem plan + cost flags (không apply) |
-| `deploy-runtime.yml` | Deploy runtime — SageMaker **tắt mặc định** |
+| `plan-runtime.yml` | Xem Terraform plan (không apply) |
+| `deploy-runtime.yml` | Deploy runtime — SageMaker tắt mặc định |
 | `destroy-runtime.yml` | Hủy runtime (giữ artifacts + registry) |
 | `destroy-all-danger.yml` | Hủy runtime + core (nguy hiểm) |
 
-**Kiểm soát chi phí khi Deploy Runtime:**
-
-- `enable_sagemaker_endpoint` = `false` (mặc định) — tránh ~$50+/tháng
-- `enable_sagemaker_training` = `false` (mặc định) — tránh ~$1–10+/job
-- Bật SageMaker → phải gõ `I-ACCEPT-SAGEMAKER-COST` vào `cost_acknowledgement`
-- Dùng **Plan Runtime** trước khi apply để xem thay đổi
+**Deploy Runtime** (workflow_dispatch): bật/tắt SageMaker endpoint, training, EventBridge monitoring qua checkbox — mặc định SageMaker **tắt**. Dùng **Plan Runtime** trước khi apply nếu cần xem thay đổi.
 
 Cần cấu hình GitHub Secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`  
 Variables: `AWS_REGION`, `TF_STATE_BUCKET`, `TF_STATE_LOCK_TABLE`
