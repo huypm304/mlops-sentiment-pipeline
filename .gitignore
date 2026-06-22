@@ -40,6 +40,21 @@ env/
 ENV/
 backend/venv/
 backend/env/
+apps/backend/venv/
+apps/backend/env/
+apps/frontend/node_modules/
+apps/frontend/.next/
+apps/frontend/out/
+apps/frontend/build/
+apps/frontend/dist/
+apps/frontend/.turbo/
+apps/frontend/.vercel/
+apps/frontend/.npm/
+apps/frontend/.eslintcache
+apps/frontend/.vite/
+apps/frontend/coverage/
+apps/frontend/*.tsbuildinfo
+apps/frontend/next-env.d.ts
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -58,20 +73,18 @@ pip-wheel-metadata/
 *.safetensors
 model/*.pt
 model/checkpoints/
-model/train_log.csv
-model/confusion_matrices.jsonl
-training/runs/
-training/outputs/
-wandb/
+artifacts/*.pt
+artifacts/model/*.pt
+artifacts/model/checkpoints/
 mlruns/
 lightning_logs/
 *.ckpt
 
 # Regenerate with scripts/export_model_artifacts.py and upload to S3
-final_artifacts/
-!final_artifacts/.gitkeep
+artifacts/
+!artifacts/.gitkeep
 
-# --- Frontend (Next.js) ---
+# --- Frontend (Next.js) — legacy paths ---
 frontend/node_modules/
 frontend/.next/
 frontend/out/
@@ -104,13 +117,13 @@ terraform.tfvars
 !terraform.tfvars.example
 !**/terraform.tfvars.example
 # Lambda zip artifacts from terraform archive / deploy
-infrastructure/terraform/modules/lambda/build/
-infrastructure/terraform/modules/lambda_function/build/
+infra/modules/lambda/build/
+infra/modules/lambda_function/build/
 *.zip
 
 # --- Deploy / CI build output ---
 .build/
-lambda/.build/
+apps/backend/lambda/.build/
 
 # --- Archives & dumps ---
 *.tar.gz
@@ -119,10 +132,9 @@ lambda/.build/
 !infrastructure/**/*.zip.example
 
 # --- Audit reports (generated locally; optional commit for demo) ---
-reports/audit/*.json
-reports/monitoring/*.json
-reports/monitoring/*.jsonl
-datasets/local/
+artifacts/examples/audit/*.json
+artifacts/examples/monitoring/*.json
+artifacts/examples/monitoring/*.jsonl
 
 # --- DVC (local cache; .dvc/config is committed) ---
 .dvc/cache/

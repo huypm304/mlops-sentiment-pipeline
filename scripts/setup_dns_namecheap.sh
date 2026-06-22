@@ -3,7 +3,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TF_DIR="${ROOT_DIR}/infrastructure/terraform/runtime"
+TF_DIR="${ROOT_DIR}/infra/runtime"
 
 cd "$TF_DIR"
 

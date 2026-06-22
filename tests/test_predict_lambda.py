@@ -11,7 +11,7 @@ from unittest.mock import patch
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "lambda" / "predict"))
+sys.path.insert(0, str(ROOT / "apps" / "backend" / "lambda" / "predict"))
 sys.path.insert(0, str(ROOT))
 
 handler = importlib.import_module("handler")

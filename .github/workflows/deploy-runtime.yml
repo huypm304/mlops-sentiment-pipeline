@@ -96,7 +96,7 @@ jobs:
           api_subdomain: ${{ inputs.api_subdomain }}
 
       - name: Smoke test /health
-        working-directory: infrastructure/terraform/runtime
+        working-directory: infra/runtime
         shell: bash
         env:
           TF_STATE_BUCKET: absa-mlops-demo-tf-state

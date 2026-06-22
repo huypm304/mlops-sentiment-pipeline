@@ -39,7 +39,7 @@ jobs:
           auto_approve: ${{ inputs.auto_approve }}
 
       - name: Print outputs
-        working-directory: infrastructure/terraform/bootstrap
+        working-directory: infra/bootstrap
         shell: bash
         run: |
           terraform init -input=false

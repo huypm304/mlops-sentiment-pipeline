@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "backend"))
 
 from registry.model_artifacts import (
     build_evaluation_payload,
@@ -12,6 +15,7 @@ from registry.model_artifacts import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_DIR = ROOT / "model"
+CONFIG_DIR = ROOT / "ml" / "configs"
 
 
 def test_metrics_summary_from_local_train_log():
@@ -23,7 +27,7 @@ def test_metrics_summary_from_local_train_log():
 
 def test_build_evaluation_from_local_artifacts():
     train_log = (MODEL_DIR / "train_log.csv").read_text(encoding="utf-8")
-    run_config = (MODEL_DIR / "run_config.json").read_text(encoding="utf-8")
+    run_config = (CONFIG_DIR / "run_config.json").read_text(encoding="utf-8")
     confusion = (MODEL_DIR / "confusion_matrices.jsonl").read_text(encoding="utf-8")
 
     payload = build_evaluation_payload(

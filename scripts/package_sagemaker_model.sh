@@ -4,14 +4,14 @@
 # Usage:
 #   ./scripts/package_sagemaker_model.sh
 #   ./scripts/package_sagemaker_model.sh --upload --bucket absa-mlops-demo-artifacts
-#   ./scripts/package_sagemaker_model.sh --model-dir final_artifacts/model --upload
+#   ./scripts/package_sagemaker_model.sh --model-dir artifacts/model --upload
 #
 # Upload target (matches Terraform default):
 #   s3://<bucket>/models/production/model.tar.gz
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-MODEL_DIR="${ROOT}/final_artifacts/model"
+MODEL_DIR="${ROOT}/artifacts/model"
 OUTPUT="${ROOT}/dist/model.tar.gz"
 S3_KEY="models/production/model.tar.gz"
 UPLOAD=0
@@ -78,10 +78,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "${STAGING}/code/src"
-rsync -a --exclude '__pycache__/' --exclude '*.pyc' "${ROOT}/src/absa/" "${STAGING}/code/src/absa/"
-cp "${ROOT}/serving/inference.py" "${STAGING}/code/inference.py"
-cp "${ROOT}/serving/requirements.txt" "${STAGING}/code/requirements.txt"
+mkdir -p "${STAGING}/code/ml"
+rsync -a --exclude '__pycache__/' --exclude '*.pyc' "${ROOT}/ml/inference/" "${STAGING}/code/ml/inference/"
+touch "${STAGING}/code/ml/__init__.py"
+cp "${ROOT}/ml/inference/serving.py" "${STAGING}/code/inference.py"
+if [[ -f "${ROOT}/ml/configs/requirements.txt" ]]; then
+  cp "${ROOT}/ml/configs/requirements.txt" "${STAGING}/code/requirements.txt"
+elif [[ -f "${MODEL_DIR}/requirements.txt" ]]; then
+  cp "${MODEL_DIR}/requirements.txt" "${STAGING}/code/requirements.txt"
+fi
 
 for file in best_model.pt run_config.json postprocess_config.json label_mapping.json; do
   if [[ -f "${MODEL_DIR}/${file}" ]]; then

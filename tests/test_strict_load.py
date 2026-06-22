@@ -11,9 +11,9 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-MODEL_DIR = Path(__file__).resolve().parents[1] / "model"
+MODEL_DIR = Path(__file__).resolve().parents[1] / "artifacts" / "model"
 CHECKPOINT = MODEL_DIR / "best_model.pt"
-RUN_CONFIG = MODEL_DIR / "run_config.json"
+RUN_CONFIG = Path(__file__).resolve().parents[1] / "ml" / "configs" / "run_config.json"
 
 
 def _config_source():
@@ -25,7 +25,7 @@ def _config_source():
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_strict_load():
     import torch
-    from src.absa.model import ABSAModel
+    from ml.inference.model import ABSAModel
 
     device = torch.device("cpu")
     model = ABSAModel(_config_source(), max_ops=6)
@@ -44,7 +44,7 @@ def test_strict_load():
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_state_dict_key_count():
     import torch
-    from src.absa.model import ABSAModel
+    from ml.inference.model import ABSAModel
 
     model = ABSAModel(_config_source(), max_ops=6)
     model_keys = set(model.state_dict().keys())

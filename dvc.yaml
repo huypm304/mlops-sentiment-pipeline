@@ -2,7 +2,7 @@
 # Run after `dvc pull`:  dvc repro publish
 
 params:
-  - datasets/processed/params.yaml
+  - data/processed/params.yaml
 
 stages:
   publish:
@@ -11,7 +11,7 @@ stages:
       --dataset-id ${dataset_id}
       --name "${dataset_name}"
     deps:
-      - datasets/processed/train.jsonl
-      - datasets/processed/dev.jsonl
-      - datasets/processed/test.jsonl
+      - data/processed/train.jsonl
+      - data/processed/dev.jsonl
+      - data/processed/test.jsonl
       - scripts/publish_approved_dataset.py

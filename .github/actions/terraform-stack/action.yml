@@ -75,7 +75,7 @@ runs:
       if: inputs.command == 'fmt-check'
       shell: bash
       run: terraform fmt -check -recursive
-      working-directory: infrastructure/terraform
+      working-directory: infra
 
     - name: Build Lambda bundles
       if: inputs.stack == 'runtime' && inputs.command != 'fmt-check'
@@ -85,7 +85,7 @@ runs:
     - name: Terraform init
       if: inputs.command != 'fmt-check'
       shell: bash
-      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      working-directory: infra/${{ inputs.stack }}
       run: |
         set -euo pipefail
         if [[ "${{ inputs.stack }}" == "bootstrap" ]]; then
@@ -106,13 +106,13 @@ runs:
     - name: Terraform validate
       if: inputs.command == 'validate' || inputs.command == 'plan' || inputs.command == 'apply' || inputs.command == 'destroy'
       shell: bash
-      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      working-directory: infra/${{ inputs.stack }}
       run: terraform validate
 
     - name: Terraform plan
       if: inputs.command == 'plan'
       shell: bash
-      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      working-directory: infra/${{ inputs.stack }}
       run: |
         EXTRA_ARGS=()
         if [[ "${{ inputs.stack }}" == "runtime" ]]; then
@@ -138,7 +138,7 @@ runs:
     - name: Terraform apply
       if: inputs.command == 'apply'
       shell: bash
-      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      working-directory: infra/${{ inputs.stack }}
       run: |
         EXTRA_ARGS=()
         if [[ "${{ inputs.stack }}" == "runtime" ]]; then
@@ -168,7 +168,7 @@ runs:
     - name: Terraform destroy
       if: inputs.command == 'destroy'
       shell: bash
-      working-directory: infrastructure/terraform/${{ inputs.stack }}
+      working-directory: infra/${{ inputs.stack }}
       run: |
         if [[ "${{ inputs.auto_approve }}" == "true" ]]; then
           terraform destroy -input=false -auto-approve

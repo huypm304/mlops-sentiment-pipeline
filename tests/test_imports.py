@@ -1,4 +1,4 @@
-"""Test that all src.absa modules import correctly."""
+"""Test that all ml.inference modules import correctly."""
 
 import sys
 from pathlib import Path
@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 def test_labels_import():
-    from src.absa.labels import (
+    from ml.inference.labels import (
         ASPECTS, N_SENT, N_BIO,
         SENT_ID2LABEL, SENT_LABEL2ID,
         BIO_LABELS, BIO_L2I, BIO_I2L,
@@ -23,7 +23,7 @@ def test_labels_import():
 
 
 def test_utils_import():
-    from src.absa.utils import (
+    from ml.inference.utils import (
         nfc, set_seed, is_gold_contrast, autocast_context,
         get_device, ensure_dir, md5_file, load_json, save_json,
         load_jsonl, save_jsonl, REPO_ROOT,
@@ -32,7 +32,7 @@ def test_utils_import():
 
 
 def test_dataset_import():
-    from src.absa.dataset import (
+    from ml.inference.dataset import (
         ABSADataset,
         extract_spans,
         build_gold_span_targets,
@@ -47,13 +47,13 @@ def test_dataset_import():
 
 
 def test_model_import():
-    from src.absa.model import ABSAModel, extract_contrast_feature
-    from src.absa.utils import CONTRAST_WORDS
+    from ml.inference.model import ABSAModel, extract_contrast_feature
+    from ml.inference.utils import CONTRAST_WORDS
     assert "nhưng" in CONTRAST_WORDS
 
 
 def test_losses_import():
-    from src.absa.losses import (
+    from ml.inference.losses import (
         focal_loss, smoothed_cross_entropy, smoothed_ce_per_sample,
         smooth_values_for_targets, symmetric_kl_loss,
         contrast_loss_fn, LBTWWeighter,
@@ -61,7 +61,7 @@ def test_losses_import():
 
 
 def test_metrics_import():
-    from src.absa.metrics import (
+    from ml.inference.metrics import (
         confusion_payload, label_names_for_sentiment,
         prf_macro, prf_per_class, span_prf, tas_prf,
         per_aspect_sent_f1, per_aspect_span_f1,
@@ -70,14 +70,14 @@ def test_metrics_import():
 
 
 def test_evaluation_import():
-    from src.absa.evaluation import (
+    from ml.inference.evaluation import (
         evaluate, format_eval_metrics,
         print_eval_metrics_line, save_eval_report,
     )
 
 
 def test_postprocess_import():
-    from src.absa.postprocess import (
+    from ml.inference.postprocess import (
         PostprocessConfig, postprocess_predictions,
         dedupe_overlapping_spans, reconcile_global_sentiment,
     )
@@ -87,7 +87,7 @@ def test_postprocess_import():
 
 
 def test_inference_import():
-    from src.absa.inference import (
+    from ml.inference.inference import (
         load_tokenizer, load_model, predict_one, predict_batch,
         MODEL_VERSION,
     )
@@ -95,7 +95,7 @@ def test_inference_import():
 
 
 def test_schemas_import():
-    from src.absa.schemas import (
+    from ml.inference.schemas import (
         PredictRequest, BatchPredictRequest,
         OpinionPrediction, PredictResponse,
         ModelInfoResponse, HealthResponse,
