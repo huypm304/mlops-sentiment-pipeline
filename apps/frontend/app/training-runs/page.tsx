@@ -1,10 +1,10 @@
 "use client"
 
-import Link from "next/link"
-import { useEffect, useMemo, useState } from "react"
-import { Loader2, Plus } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Loader2 } from "lucide-react"
 
 import { ConsoleShell } from "@/components/layout/console-shell"
+import { NewTrainingRunSheet } from "@/components/console/new-training-run-sheet"
 import {
   PlatformMetadataLine,
   RegistryEmpty,
@@ -19,7 +19,6 @@ import {
   RunNameCell,
   RunStatusCell,
 } from "@/components/console/registry"
-import { Button } from "@/components/ui/button"
 import { fetchPipelineRuns } from "@/lib/api/pipeline"
 import { formatDuration, formatF1 } from "@/lib/console/format"
 import type { PipelineRun } from "@/types/pipeline"
@@ -47,13 +46,16 @@ export default function TrainingRunsPage() {
   const [datasetFilter, setDatasetFilter] = useState("all")
   const [sort, setSort] = useState("newest")
 
-  useEffect(() => {
+  const loadRuns = useCallback(() => {
+    setLoading(true)
     fetchPipelineRuns(25)
       .then((res) => {
         setRuns(res.runs)
-        if (res.runs.length === 0) {
-          setNotice("Chưa có training run nào. Kết nối Step Functions hoặc trigger pipeline để bắt đầu.")
-        }
+        setNotice(
+          res.runs.length === 0
+            ? "Chưa có training run nào. Bấm New run để trigger pipeline."
+            : null,
+        )
       })
       .catch((err) => {
         setRuns([])
@@ -61,6 +63,21 @@ export default function TrainingRunsPage() {
       })
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    loadRuns()
+  }, [loadRuns])
+
+  const onRunStarted = useCallback(
+    (run: PipelineRun) => {
+      setRuns((prev) => [run, ...prev.filter((r) => r.execution_arn !== run.execution_arn)])
+      setNotice(null)
+      fetchPipelineRuns(25)
+        .then((res) => setRuns(res.runs))
+        .catch(() => undefined)
+    },
+    [],
+  )
 
   const datasetOptions = useMemo(() => {
     const ids = [...new Set(runs.map(runDataset).filter((v) => v !== "—"))]
@@ -95,12 +112,7 @@ export default function TrainingRunsPage() {
         <RegistryPageHeader
           title="Training Runs"
           metadata={<PlatformMetadataLine />}
-          actions={
-            <Button size="sm" disabled>
-              <Plus className="size-3.5" />
-              New run
-            </Button>
-          }
+          actions={<NewTrainingRunSheet onStarted={onRunStarted} />}
         />
 
         {loading ? (
