@@ -40,7 +40,8 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ value, className }: StatusBadgeProps) {
-  const key = value.toLowerCase().trim().replace(/\s+/g, "_")
+  const safe = (value || "unknown").toString()
+  const key = safe.toLowerCase().trim().replace(/\s+/g, "_")
   const colors = statusVariants[key] ?? DEFAULT_VARIANT
   return (
     <span
@@ -50,7 +51,7 @@ export function StatusBadge({ value, className }: StatusBadgeProps) {
         className,
       )}
     >
-      {value.replace(/_/g, " ")}
+      {safe.replace(/_/g, " ")}
     </span>
   )
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from collections import Counter
+from datetime import datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
@@ -373,6 +374,106 @@ def _monitoring_summary() -> dict[str, Any]:
     return payload
 
 
+def _parse_ts(ts: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _guardrail_label(raw: str) -> str:
+    key = raw.upper().strip()
+    if key in {"OK", "PASS"}:
+        return "PASS"
+    if key in {"WARN", "WARNING"}:
+        return "WARN"
+    if key == "REVIEW":
+        return "REVIEW"
+    if key == "REJECT":
+        return "REJECT"
+    return "PASS"
+
+
+def _normalize_recent_predictions(predictions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    recent: list[dict[str, Any]] = []
+    for row in predictions[:10]:
+        ts = _parse_ts(str(row.get("created_at", "")))
+        guardrail = _guardrail_label(str(row.get("guardrail_status", row.get("guardrail", "PASS"))))
+        recent.append(
+            {
+                "time": ts.strftime("%H:%M:%S") if ts else "—",
+                "text": row.get("text_preview") or row.get("text") or "—",
+                "aspects": row.get("aspects") or [],
+                "sentiment": row.get("global_sentiment") or row.get("sentiment") or "neutral",
+                "confidence": float(row.get("confidence") or row.get("global_confidence") or 0),
+                "guardrail": guardrail,
+                "model_version": row.get("model_version") or row.get("model_id") or _PRODUCTION_MODEL_ID,
+            }
+        )
+    return recent
+
+
+def _review_queue_payload(*, limit: int = 50) -> dict[str, Any]:
+    store = _get_store()
+    items = store.list_review_queue(limit=limit, status="PENDING") if store.config.review_queue_table else []
+    rows = [
+        {
+            "id": row.get("review_id", ""),
+            "time": str(row.get("created_at", ""))[:16].replace("T", " "),
+            "text": row.get("text_preview") or "—",
+            "reason": row.get("guardrail_status", "WARN"),
+            "model_version": row.get("model_id", _PRODUCTION_MODEL_ID),
+            "confidence": f"{float(row.get('confidence', 0)) * 100:.0f}%",
+            "status": "Pending",
+            "assigned_to": "—",
+            "guardrail": row.get("guardrail_status", "WARN"),
+        }
+        for row in items
+    ]
+    return {"items": rows, "open_count": len(rows)}
+
+
+def _platform_context() -> dict[str, Any]:
+    store = _get_store()
+    models = store.list_models(limit=50) if store.config.models_table else []
+    champion = next(
+        (m for m in models if str(m.get("status", "")).lower() == "production"),
+        models[0] if models else None,
+    )
+
+    datasets = store.list_datasets(limit=50) if store.config.datasets_table else []
+    active = next(
+        (
+            d
+            for d in datasets
+            if d.get("status") in {"approved", "audited"} or d.get("audit_passed")
+        ),
+        datasets[0] if datasets else None,
+    )
+
+    runs = store.list_training_runs(limit=5) if store.config.training_runs_table else []
+    last_run = runs[0] if runs else None
+    last_training_at = None
+    if last_run:
+        last_training_at = last_run.get("stop_date") or last_run.get("start_date")
+    if not last_training_at and champion:
+        last_training_at = champion.get("promoted_at")
+
+    predictions = store.list_predictions(limit=500) if store.config.predictions_table else []
+    stats = _runtime_stats(predictions, model_ready=True)
+    endpoint = stats.get("endpoint_health", "unknown")
+
+    return {
+        "environment": os.getenv("ENVIRONMENT", "demo"),
+        "champion_model": champion.get("model_id") if champion else _PRODUCTION_MODEL_ID,
+        "active_dataset": active.get("dataset_id") if active else None,
+        "active_dataset_name": active.get("name") if active else None,
+        "api_status": "healthy" if endpoint == "healthy" else endpoint,
+        "last_training_at": last_training_at,
+        "pipeline_demo_mode": not bool(_STATE_MACHINE_ARN),
+    }
+
+
 def _analytics_payload(params: dict[str, str]) -> dict[str, Any]:
     store = _get_store()
     predictions = store.list_predictions(limit=200) if store.config.predictions_table else []
@@ -400,8 +501,14 @@ def _analytics_payload(params: dict[str, str]) -> dict[str, Any]:
             "threshold": drift.get("threshold", 0.18),
             "status": drift.get("status", "insufficient_data"),
         },
-        "recent_predictions": predictions[:10],
-        "models": [_PRODUCTION_MODEL_ID],
+        "recent_predictions": _normalize_recent_predictions(predictions),
+        "models": sorted(
+            {
+                str(row.get("model_version") or row.get("model_id") or _PRODUCTION_MODEL_ID)
+                for row in predictions
+            }
+        )
+        or [_PRODUCTION_MODEL_ID],
     }
 
 
@@ -453,6 +560,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     if route.endswith("/metrics/analytics"):
         return _response(200, _analytics_payload(params))
 
+    if route.endswith("/metrics/platform/context"):
+        try:
+            return _response(200, _platform_context())
+        except Exception as exc:  # noqa: BLE001
+            return _response(500, {"detail": str(exc)})
+
     if route.endswith("/metrics/platform"):
         return _response(
             200,
@@ -482,24 +595,12 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
         model_id = params.get("model_id") or _PRODUCTION_MODEL_ID
         return _response(200, {"history": _training_history(model_id)})
 
-    if route.endswith("/review-queue") and not route.endswith("/submit"):
+    if route.endswith("/metrics/review-queue") or (
+        route.endswith("/review-queue") and not route.endswith("/submit")
+    ):
         try:
-            items = store.list_review_queue(limit=50, status="PENDING")
-            rows = [
-                {
-                    "id": row.get("review_id", ""),
-                    "time": str(row.get("created_at", ""))[:16].replace("T", " "),
-                    "text": row.get("text_preview") or "—",
-                    "reason": row.get("guardrail_status", "WARN"),
-                    "model_version": row.get("model_id", "absa-v1"),
-                    "confidence": f"{float(row.get('confidence', 0)) * 100:.0f}%",
-                    "status": "Pending",
-                    "assigned_to": "—",
-                    "guardrail": row.get("guardrail_status", "WARN"),
-                }
-                for row in items
-            ]
-            return _response(200, {"items": rows, "open_count": len(rows)})
+            limit = int(params.get("limit", "50"))
+            return _response(200, _review_queue_payload(limit=limit))
         except Exception as exc:  # noqa: BLE001
             return _response(500, {"detail": str(exc)})
 

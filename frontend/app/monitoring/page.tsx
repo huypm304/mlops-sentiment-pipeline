@@ -15,6 +15,7 @@ import {
   TableCard,
 } from "@/components/console/table-card"
 import { ConsoleShell } from "@/components/layout/console-shell"
+import { appPath } from "@/lib/console/paths"
 import { fetchAnalytics, type AnalyticsPayload } from "@/lib/api/analytics"
 import { fetchHealth, fetchMonitoring } from "@/lib/api/runtime"
 
@@ -163,38 +164,42 @@ export default function MonitoringPage() {
                     </tr>
                   </ConsoleThead>
                   <tbody>
-                    {analytics?.recent_predictions.slice(0, 12).map((row, idx) => (
+                    {analytics?.recent_predictions.slice(0, 12).map((row, idx) => {
+                      const guardrail = row.guardrail || "PASS"
+                      return (
                       <ConsoleTr key={`${row.time}-${idx}`}>
                         <ConsoleTd muted mono>
-                          {row.time}
+                          {row.time || "—"}
                         </ConsoleTd>
                         <ConsoleTd className="max-w-[200px] truncate" title={row.text}>
-                          {row.text}
+                          {row.text || "—"}
                         </ConsoleTd>
                         <ConsoleTd muted>
-                          {row.sentiment}
-                          {row.aspects.length ? ` · ${row.aspects.slice(0, 2).join(", ")}` : ""}
+                          {row.sentiment || "—"}
+                          {(row.aspects ?? []).length
+                            ? ` · ${(row.aspects ?? []).slice(0, 2).join(", ")}`
+                            : ""}
                         </ConsoleTd>
                         <ConsoleTd align="right" numeric>
-                          {(row.confidence * 100).toFixed(0)}%
+                          {((Number(row.confidence) || 0) * 100).toFixed(0)}%
                         </ConsoleTd>
                         <ConsoleTd>
-                          <StatusBadge value={row.guardrail} />
+                          <StatusBadge value={guardrail} />
                         </ConsoleTd>
                         <ConsoleTd mono muted>
                           {row.model_version}
                         </ConsoleTd>
                         <ConsoleTd>
-                          {row.guardrail === "PASS" ? (
+                          {guardrail === "PASS" ? (
                             <span className="text-muted-foreground/50">—</span>
                           ) : (
-                            <Link href="/inference" className="text-[11px] text-primary hover:underline">
+                            <Link href={appPath("/inference")} className="text-[11px] text-primary hover:underline">
                               Review
                             </Link>
                           )}
                         </ConsoleTd>
                       </ConsoleTr>
-                    ))}
+                    )})}
                   </tbody>
                 </ConsoleTable>
               </div>

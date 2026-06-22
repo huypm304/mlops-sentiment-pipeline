@@ -128,6 +128,16 @@ locals {
       invoke_arn    = var.metrics_lambda_invoke_arn
       function_name = var.metrics_lambda_function_name
     }
+    metrics_platform_context = {
+      route_key     = "GET /metrics/platform/context"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_review_queue = {
+      route_key     = "GET /metrics/review-queue"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
     metrics_runtime = {
       route_key     = "GET /metrics/runtime"
       invoke_arn    = var.metrics_lambda_invoke_arn

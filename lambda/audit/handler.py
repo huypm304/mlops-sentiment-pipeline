@@ -107,6 +107,192 @@ def _count_s3_lines(key: str) -> int:
     return sum(1 for line in body.splitlines() if line.strip())
 
 
+def _count_file_lines(path: Path) -> int:
+    count = 0
+    with path.open("rb") as handle:
+        for line in handle:
+            if line.strip():
+                count += 1
+    return count
+
+
+def _split_stats_from_prefix(prefix: str, split_names: list[str]) -> dict[str, Any]:
+    stats: dict[str, Any] = {}
+    total_rows = 0
+    for split in split_names:
+        filename = f"{split}.jsonl"
+        key = f"{prefix}/{filename}"
+        try:
+            head = _s3.head_object(Bucket=_BUCKET, Key=key)
+            rows = _count_s3_lines(key)
+            size_bytes = int(head.get("ContentLength") or 0)
+        except ClientError:
+            rows = 0
+            size_bytes = 0
+        stats[split] = {"filename": filename, "rows": rows, "size_bytes": size_bytes}
+        total_rows += rows
+    return {"split_stats": stats, "total_rows": total_rows}
+
+
+def _split_stats_from_paths(
+    paths: dict[str, Path],
+) -> tuple[dict[str, Any], int]:
+    stats: dict[str, Any] = {}
+    total_rows = 0
+    for split, path in paths.items():
+        rows = _count_file_lines(path)
+        stats[split] = {
+            "filename": f"{split}.jsonl",
+            "rows": rows,
+            "size_bytes": path.stat().st_size,
+        }
+        total_rows += rows
+    return stats, total_rows
+
+
+def _build_splits_payload(record: dict[str, Any]) -> dict[str, Any]:
+    prefix = str(record.get("s3_prefix") or f"datasets/pending/{record.get('dataset_id')}").strip("/")
+    split_names = record.get("splits") or ["train", "dev"]
+    if isinstance(split_names, dict):
+        split_names = list(split_names.keys())
+
+    cached = record.get("split_stats") or {}
+    splits_payload: dict[str, Any] = {}
+    for split in split_names:
+        filename = f"{split}.jsonl"
+        if split in cached:
+            info = cached[split]
+            splits_payload[split] = {
+                "filename": info.get("filename", filename),
+                "rows": int(info.get("rows", 0)),
+                "size_bytes": int(info.get("size_bytes", 0)),
+            }
+            continue
+        if _BUCKET:
+            key = f"{prefix}/{filename}"
+            try:
+                head = _s3.head_object(Bucket=_BUCKET, Key=key)
+                rows = _count_s3_lines(key)
+                size_bytes = int(head.get("ContentLength") or 0)
+                splits_payload[split] = {"filename": filename, "rows": rows, "size_bytes": size_bytes}
+                continue
+            except ClientError:
+                pass
+        splits_payload[split] = {"filename": filename, "rows": 0, "size_bytes": 0}
+    return splits_payload
+
+
+def _load_audit_report(record: dict[str, Any]) -> dict[str, Any] | None:
+    uri = str(record.get("audit_report_uri") or "")
+    if not uri.startswith("s3://") or not _BUCKET:
+        return None
+    key = urlparse(uri).path.lstrip("/")
+    try:
+        obj = _s3.get_object(Bucket=_BUCKET, Key=key)
+        return json.loads(obj["Body"].read())
+    except ClientError:
+        return None
+
+
+def _slim_benchmarks(benchmarks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": str(row.get("id", "")),
+            "name": str(row.get("name", "")),
+            "description": str(row.get("description", "")),
+            "value": float(row.get("value", 0)),
+            "threshold": float(row.get("threshold", 0)),
+            "unit": str(row.get("unit", "")),
+            "higher_is_better": bool(row.get("higher_is_better")),
+            "status": str(row.get("status", "fail")),
+            "display_value": str(row.get("display_value", "")),
+            "display_threshold": str(row.get("display_threshold", "")),
+        }
+        for row in benchmarks
+    ]
+
+
+def _audit_bundle_payload(
+    report: dict[str, Any] | None,
+    *,
+    report_id: str,
+    passed: bool,
+    audit_score: float,
+    generated_at: str,
+) -> dict[str, Any]:
+    summary = (report or {}).get("summary") or {}
+    benchmarks = (report or {}).get("benchmarks") or []
+    issues = (report or {}).get("issues") or []
+    distributions = (report or {}).get("distributions") or {}
+
+    return {
+        "report_id": report_id or "unknown",
+        "passed": passed,
+        "audit_score": audit_score,
+        "error_count": int(summary.get("error_count") or 0),
+        "generated_at": generated_at,
+        "data_level_status": (report or {}).get("data_level_status"),
+        "failed_checks": [
+            str(row.get("name") or row.get("id"))
+            for row in benchmarks
+            if row.get("status") == "fail"
+        ],
+        "benchmarks": _slim_benchmarks(benchmarks),
+        "distributions": distributions,
+        "issues": issues[:20],
+        "issue_truncated": bool((report or {}).get("issue_truncated")) or len(issues) > 20,
+        "summary": {
+            "train_rows": int(summary.get("train_rows") or 0),
+            "dev_rows": int(summary.get("dev_rows") or 0),
+            "warning_count": int(summary.get("warning_count") or 0),
+            "parsed_records": int(summary.get("parsed_records") or 0),
+            "total_opinions": int(summary.get("total_opinions") or 0),
+            "avg_opinions_per_record": float(summary.get("avg_opinions_per_record") or 0),
+        },
+    }
+
+
+def _build_audits_payload(record: dict[str, Any]) -> dict[str, Any]:
+    if (
+        not record.get("audit_report_uri")
+        and not record.get("audit_report_id")
+        and record.get("audit_passed") is None
+        and record.get("audit_score") is None
+    ):
+        return {}
+
+    report = _load_audit_report(record)
+    report_id = str(record.get("audit_report_id") or "")
+    if not report_id:
+        report_uri = str(record.get("audit_report_uri") or "")
+        if report_uri:
+            report_id = Path(urlparse(report_uri).path).stem
+        elif report:
+            report_id = str(report.get("report_id") or "unknown")
+
+    bundle = _audit_bundle_payload(
+        report,
+        report_id=report_id,
+        passed=bool(record.get("audit_passed")),
+        audit_score=float(record.get("audit_score") or 0),
+        generated_at=str(record.get("updated_at") or record.get("created_at") or now_iso()),
+    )
+    return {"bundle": bundle}
+
+
+def _dataset_manifest(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "dataset_id": record.get("dataset_id"),
+        "name": record.get("name", record.get("dataset_id")),
+        "status": _normalize_dataset_status(str(record.get("status", "pending"))),
+        "created_at": record.get("created_at", ""),
+        "updated_at": record.get("updated_at", record.get("created_at", "")),
+        "splits": _build_splits_payload(record),
+        "audits": _build_audits_payload(record),
+        "audit_passed": bool(record.get("audit_passed")),
+    }
+
+
 def _normalize_dataset_status(raw: str) -> str:
     status = raw.strip().lower()
     if status in {"pending_upload", "pending"}:
@@ -153,6 +339,7 @@ def _audit_result(payload: dict[str, Any]) -> dict[str, Any]:
     train_path = _download_dataset(train_key)
     dev_path = _download_dataset(dev_key)
     dataset_id = str(payload.get("dataset_id") or Path(train_key).parent.name)
+    split_stats, total_rows = _split_stats_from_paths({"train": train_path, "dev": dev_path})
 
     try:
         report = run_dataset_audit(
@@ -176,7 +363,11 @@ def _audit_result(payload: dict[str, Any]) -> dict[str, Any]:
             "status": status,
             "s3_uri": f"s3://{_BUCKET}/{Path(train_key).parent}/",
             "s3_prefix": str(Path(train_key).parent),
+            "splits": list(split_stats.keys()),
+            "split_stats": split_stats,
+            "num_records": total_rows,
             "audit_report_uri": f"s3://{_BUCKET}/{report_key}",
+            "audit_report_id": report["report_id"],
             "audit_passed": bool(report["passed"]),
             "audit_score": score,
         }
@@ -191,17 +382,20 @@ def _audit_result(payload: dict[str, Any]) -> dict[str, Any]:
                 }
             )
 
+    bundle = _audit_bundle_payload(
+        report,
+        report_id=str(report["report_id"]),
+        passed=bool(report["passed"]),
+        audit_score=score,
+        generated_at=now_iso(),
+    )
     return {
-        "passed": bool(report["passed"]),
-        "report_id": report["report_id"],
+        **bundle,
         "report_key": report_key,
-        "data_level_status": report.get("data_level_status"),
-        "summary": report.get("summary") or {},
-        "benchmarks": report.get("benchmarks") or [],
-        "modules": report.get("modules") or {},
         "dataset_id": dataset_id,
         "dataset_key": train_key,
-        "audit_score": score,
+        "summary": report.get("summary") or {},
+        "modules": report.get("modules") or {},
     }
 
 
@@ -249,22 +443,11 @@ def _handle_complete_upload(dataset_id: str) -> dict[str, Any]:
         raise RuntimeError("ARTIFACTS_BUCKET is not configured")
 
     prefix = str(record.get("s3_prefix") or f"datasets/pending/{dataset_id}").strip("/")
-    splits: list[str] = []
-    total_rows = 0
-    for split in ("train", "dev", "test"):
-        key = f"{prefix}/{split}.jsonl"
-        try:
-            _s3.head_object(Bucket=_BUCKET, Key=key)
-        except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
-            if code in {"404", "NoSuchKey", "NotFound", "403"}:
-                continue
-            raise
-        splits.append(split)
-        total_rows += _count_s3_lines(key)
-
+    discovered = _split_stats_from_prefix(prefix, ["train", "dev", "test"])
+    splits = [split for split, info in discovered["split_stats"].items() if info["rows"] > 0]
     if not splits:
         raise FileNotFoundError(f"No uploaded splits found under s3://{_BUCKET}/{prefix}/")
+    total_rows = discovered["total_rows"]
 
     store.update_dataset(
         dataset_id,
@@ -274,6 +457,7 @@ def _handle_complete_upload(dataset_id: str) -> dict[str, Any]:
             "s3_uri": f"s3://{_BUCKET}/{prefix}/",
             "s3_prefix": prefix,
             "splits": splits,
+            "split_stats": {split: discovered["split_stats"][split] for split in splits},
             "num_records": total_rows,
         },
     )
@@ -349,19 +533,7 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         record = store.get_dataset(dataset_id) if store.config.datasets_table else None
         if record is None:
             return _response(404, {"detail": f"Dataset '{dataset_id}' not found"})
-        return _response(
-            200,
-            {
-                "dataset_id": record.get("dataset_id", dataset_id),
-                "name": record.get("name", dataset_id),
-                "status": str(record.get("status", "pending")).lower(),
-                "created_at": record.get("created_at", ""),
-                "updated_at": record.get("updated_at", record.get("created_at", "")),
-                "splits": {split: {"filename": f"{split}.jsonl", "rows": 0, "size_bytes": 0} for split in (record.get("splits") or ["train", "dev"])},
-                "audits": {},
-                "audit_passed": bool(record.get("audit_passed")),
-            },
-        )
+        return _response(200, _dataset_manifest(record))
 
     if "/datasets/" in path and path.endswith("/audit") and method == "POST":
         dataset_id = path.split("/datasets/")[1].split("/")[0]
