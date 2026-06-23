@@ -1,5 +1,12 @@
 #!/usr/bin/env python3
-"""Seed DynamoDB registry from local or S3 training artifacts."""
+"""Seed DynamoDB model registry from S3 training artifacts.
+
+Metrics are loaded from train_log.csv under the model's artifact_prefix on S3.
+Deploy flow: upload artifacts with scripts/upload_model.sh, then seed registry.
+
+    export ARTIFACTS_BUCKET=absa-mlops-demo-artifacts
+    python scripts/seed_registry.py --model-id absa-v2b
+"""
 
 from __future__ import annotations
 
@@ -46,7 +53,7 @@ def _demote_other_production(store: RegistryStore, keep_model_id: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Seed production model metadata in DynamoDB")
+    parser = argparse.ArgumentParser(description="Seed production model metadata in DynamoDB from S3")
     parser.add_argument("--model-id", default="absa-v2b")
     parser.add_argument("--dataset-id", default="dataset-v1")
     parser.add_argument(
@@ -56,10 +63,14 @@ def main() -> int:
     )
     parser.add_argument(
         "--model-dir",
-        default=str(ROOT / "model"),
-        help="Local model dir when seeding metrics without S3",
+        default="",
+        help="Optional local staging dir (dev only — production uses S3)",
     )
-    parser.add_argument("--from-s3", action="store_true", help="Load metrics from S3 artifacts")
+    parser.add_argument(
+        "--from-local",
+        action="store_true",
+        help="Load metrics from --model-dir instead of S3 (not for deploy)",
+    )
     parser.add_argument("--no-demote-others", action="store_true", help="Keep other PRODUCTION rows unchanged")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
@@ -73,7 +84,11 @@ def main() -> int:
     encoder = "unknown"
     metrics: dict[str, float] = {}
 
-    if args.from_s3 and store.config.artifacts_bucket:
+    use_s3 = not args.from_local
+    if use_s3:
+        if not store.config.artifacts_bucket:
+            print("ARTIFACTS_BUCKET is not configured — cannot load metrics from S3", file=sys.stderr)
+            return 1
         payload = load_model_evaluation_from_s3(
             store._s3,
             store.config.artifacts_bucket,
@@ -90,14 +105,18 @@ def main() -> int:
                 "global_f1": scores["global_f1"],
             }
     else:
-        model_dir = Path(args.model_dir)
+        model_dir = Path(args.model_dir or ROOT / "model")
         train_log_text, config = _load_local_artifacts(model_dir)
         if train_log_text:
             metrics = metrics_summary_from_train_log(train_log_text)
         encoder = config.get("model_name", encoder)
 
     if not metrics:
-        print("Could not load metrics from artifacts", file=sys.stderr)
+        print(
+            f"Could not load metrics from s3://{store.config.artifacts_bucket}/{artifact_prefix}/",
+            file=sys.stderr,
+        )
+        print("Upload artifacts first: ./scripts/upload_model.sh <staging-dir>", file=sys.stderr)
         return 1
 
     version = now_iso()

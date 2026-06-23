@@ -10,6 +10,17 @@ from typing import Any
 
 import boto3
 
+from lineage import build_run_lineage
+from registry.paths import evaluation_report_key, model_candidate_prefix, training_run_uri
+from registry.run_artifacts import (
+    DEFAULT_PRODUCTION_PREFIX,
+    build_comparison_report,
+    build_evaluation_report,
+    copy_run_artifacts,
+    load_production_baseline_metrics,
+    load_run_metrics,
+    normalize_pipeline_metrics,
+)
 from storage import (
     get_approval_request,
     now_iso,
@@ -19,6 +30,8 @@ from storage import (
     put_training_run,
     resolve_run_created_at,
     update_training_run,
+    get_store,
+    list_model_records,
 )
 from training_config import as_sagemaker_hyperparameters, merge_training_config
 
@@ -28,17 +41,10 @@ _ENABLE_SAGEMAKER_TRAINING = os.getenv("ENABLE_SAGEMAKER_TRAINING", "false").low
 _SAGEMAKER_ROLE_ARN = os.getenv("SAGEMAKER_ROLE_ARN", "")
 _PROJECT = os.getenv("PROJECT", "absa-mlops")
 _ENVIRONMENT = os.getenv("ENVIRONMENT", "demo")
+_PRODUCTION_PREFIX = os.getenv("PRODUCTION_ARTIFACT_PREFIX", DEFAULT_PRODUCTION_PREFIX)
 
 _sfn = boto3.client("stepfunctions", region_name=_AWS_REGION)
 _sagemaker = boto3.client("sagemaker", region_name=_AWS_REGION)
-
-# Baseline production metrics (from model/train_log.csv best epoch — thesis demo)
-PRODUCTION_BASELINE = {
-    "tas_f1": 0.72,
-    "span_f1": 0.68,
-    "sentiment_f1": 0.75,
-    "global_f1": 0.73,
-}
 
 
 def _dataset_key_from_event(event: dict[str, Any]) -> str:
@@ -56,6 +62,25 @@ def _dataset_key_from_event(event: dict[str, Any]) -> str:
 
 def _output_prefix(run_id: str) -> str:
     return f"training-runs/{run_id}"
+
+
+def _seed_mock_run_artifacts(run_id: str, config: dict[str, Any]) -> None:
+    """Copy production baseline artifacts into the run prefix for demo E2E flow."""
+    if not _BUCKET:
+        return
+    store = get_store()
+    prefix = _output_prefix(run_id)
+    source_prefix = str(config.get("mock_baseline_prefix") or _PRODUCTION_PREFIX)
+    copied = copy_run_artifacts(
+        store._s3,
+        _BUCKET,
+        source_prefix=source_prefix,
+        dest_prefix=prefix,
+    )
+    if not copied:
+        raise RuntimeError(
+            f"Mock training could not copy baseline artifacts from s3://{_BUCKET}/{source_prefix}/"
+        )
 
 
 def handle_estimate_cost(event: dict[str, Any]) -> dict[str, Any]:
@@ -122,7 +147,15 @@ def _mock_training(event: dict[str, Any], config: dict[str, Any]) -> dict[str, A
     prefix = _output_prefix(run_id)
     created_at = event.get("created_at") or now_iso()
 
-    run_config = {**config, "run_id": run_id, "mode": "mock", "completed_at": now_iso()}
+    _seed_mock_run_artifacts(run_id, config)
+
+    run_config = {
+        **config,
+        "run_id": run_id,
+        "mode": "mock",
+        "completed_at": now_iso(),
+        "baseline_prefix": str(config.get("mock_baseline_prefix") or _PRODUCTION_PREFIX),
+    }
     put_json_s3(f"{prefix}/run_config.json", run_config)
     put_json_s3(
         f"{prefix}/training_manifest.json",
@@ -130,8 +163,8 @@ def _mock_training(event: dict[str, Any], config: dict[str, Any]) -> dict[str, A
             "run_id": run_id,
             "candidate_model_id": candidate_model_id,
             "status": "Completed",
-            "mode": "mock-realistic",
-            "message": "Demo training completed without SageMaker GPU job",
+            "mode": "mock-baseline-copy",
+            "message": "Copied production baseline artifacts for evaluate/compare/deploy demo",
         },
     )
 
@@ -142,6 +175,7 @@ def _mock_training(event: dict[str, Any], config: dict[str, Any]) -> dict[str, A
             "status": "TRAINING_COMPLETED",
             "training_mode": "mock",
             "artifact_prefix": prefix,
+            "artifact_uri": training_run_uri(_BUCKET, run_id) if _BUCKET else None,
             "candidate_model_id": candidate_model_id,
         },
     )
@@ -251,17 +285,30 @@ def handle_start_training(event: dict[str, Any]) -> dict[str, Any]:
     run_id = event.get("run_id") or f"run-{uuid.uuid4().hex[:12]}"
     created_at = event.get("created_at") or now_iso()
     config = merge_training_config(event.get("training_config"))
+    dataset_key = _dataset_key_from_event(event)
+    base_model_id = event.get("base_model_id", "absa-v2b")
+    candidate_model_id = event.get("candidate_model_id") or f"candidate-{run_id}"
+    lineage = build_run_lineage(
+        dataset_id=event.get("dataset_id", ""),
+        dataset_key=dataset_key,
+        base_model_id=base_model_id,
+        candidate_model_id=candidate_model_id,
+        training_config=config,
+    )
 
     put_training_run(
         {
             "run_id": run_id,
             "created_at": created_at,
             "status": "TRAINING",
-            "dataset_id": event.get("dataset_id", ""),
-            "dataset_key": _dataset_key_from_event(event),
+            "dataset_id": lineage["dataset_id"],
+            "dataset_key": dataset_key,
+            "dataset_s3_uri": lineage["dataset_s3_uri"],
             "training_config": config,
-            "candidate_model_id": event.get("candidate_model_id"),
-            "base_model_id": event.get("base_model_id", "absa-v1"),
+            "candidate_model_id": candidate_model_id,
+            "base_model_id": base_model_id,
+            "code_version": lineage["code_version"],
+            "training_source_uri": lineage["training_source_uri"],
             "updated_at": created_at,
         }
     )
@@ -303,29 +350,43 @@ def handle_wait_training(event: dict[str, Any]) -> dict[str, Any]:
 def handle_evaluate(event: dict[str, Any]) -> dict[str, Any]:
     run_id = event["run_id"]
     candidate_model_id = event.get("candidate_model_id") or f"candidate-{run_id}"
-    training_mode = (event.get("training") or {}).get("mode", "mock")
+    training = event.get("training") or {}
+    training_mode = training.get("mode", "mock")
+    prefix = training.get("output_prefix") or _output_prefix(run_id)
 
-    if training_mode == "mock":
-        return {
-            "run_id": run_id,
-            "candidate_model_id": candidate_model_id,
-            "passed": True,
-            "skipped": True,
-            "message": "Mock training — bật SageMaker training để có metric eval thật.",
-            "metrics": {},
-        }
+    if not _BUCKET:
+        raise RuntimeError("ARTIFACTS_BUCKET is not configured")
 
-    prefix = _output_prefix(run_id)
-    report = {
-        "run_id": run_id,
-        "candidate_model_id": candidate_model_id,
-        "metrics": {},
-        "evaluated_at": now_iso(),
-        "message": "Real evaluation not implemented in this scaffold yet.",
-    }
-    report_uri = put_json_s3(f"reports/evaluation/{run_id}.json", report)
+    store = get_store()
+    metrics = load_run_metrics(store._s3, _BUCKET, prefix)
+    if not metrics:
+        raise RuntimeError(f"No train_log.csv metrics found at s3://{_BUCKET}/{prefix}/")
+
+    passed = metrics.get("tas_relaxed_f1", 0) > 0
+    report = build_evaluation_report(
+        run_id=run_id,
+        candidate_model_id=candidate_model_id,
+        metrics=metrics,
+        mode=training_mode,
+        passed=passed,
+        message="Evaluated from train_log.csv on S3",
+    )
+    report_uri = put_json_s3(evaluation_report_key(run_id), report)
     put_json_s3(f"{prefix}/evaluation_report.json", report)
-    return {"metrics": {}, "report_s3_uri": report_uri, "passed": True}
+
+    created_at = resolve_run_created_at(event)
+    update_training_run(
+        run_id,
+        created_at,
+        {
+            "status": "EVALUATED",
+            "evaluation": report,
+            "metrics": metrics,
+            "best_f1": report.get("best_f1"),
+        },
+    )
+
+    return {**report, "report_s3_uri": report_uri}
 
 
 def handle_calibrate(event: dict[str, Any]) -> dict[str, Any]:
@@ -333,37 +394,50 @@ def handle_calibrate(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_compare_models(event: dict[str, Any]) -> dict[str, Any]:
-    metrics = (event.get("evaluation") or {}).get("metrics") or {}
-    delta = {
-        key: round(metrics.get(key, 0) - PRODUCTION_BASELINE.get(key, 0), 4)
-        for key in PRODUCTION_BASELINE
-    }
-    metric_gate_passed = metrics.get("global_f1", 0) >= PRODUCTION_BASELINE["global_f1"]
-    cost_gate_passed = True
-    promote = metric_gate_passed and cost_gate_passed
-    return {
-        "baseline_model_id": event.get("base_model_id", "absa-v1"),
-        "candidate_model_id": event.get("candidate_model_id"),
-        "production_baseline": PRODUCTION_BASELINE,
-        "candidate_metrics": metrics,
-        "delta": delta,
-        "metric_gate_passed": metric_gate_passed,
-        "cost_gate_passed": cost_gate_passed,
-        "promote": promote,
-    }
+    evaluation = event.get("evaluation") or {}
+    if isinstance(evaluation, dict) and "Payload" in evaluation:
+        evaluation = evaluation["Payload"]
+    metrics = normalize_pipeline_metrics(evaluation.get("metrics") or {})
+    base_model_id = event.get("base_model_id", "absa-v2b")
+    candidate_model_id = event.get("candidate_model_id") or evaluation.get("candidate_model_id")
+
+    store = get_store()
+    production_metrics, resolved_base_id, _ = load_production_baseline_metrics(store, base_model_id)
+    comparison = build_comparison_report(
+        baseline_model_id=resolved_base_id,
+        candidate_model_id=str(candidate_model_id),
+        production_metrics=production_metrics,
+        candidate_metrics=metrics,
+    )
+
+    run_id = event.get("run_id") or evaluation.get("run_id")
+    if run_id:
+        update_training_run(
+            run_id,
+            resolve_run_created_at(event),
+            {"comparison": comparison, "status": "COMPARED"},
+        )
+
+    return comparison
 
 
 def handle_register_model(event: dict[str, Any]) -> dict[str, Any]:
     run_id = event["run_id"]
     candidate_model_id = event.get("candidate_model_id") or f"candidate-{run_id}"
     comparison = event.get("comparison") or {}
+    if isinstance(comparison, dict) and "Payload" in comparison:
+        comparison = comparison["Payload"]
     evaluation = event.get("evaluation") or {}
-    metrics = comparison.get("candidate_metrics") or evaluation.get("metrics") or {}
-    if comparison:
-        status = "CANDIDATE" if comparison.get("promote") else "REJECTED"
-    else:
-        status = "CANDIDATE"
+    if isinstance(evaluation, dict) and "Payload" in evaluation:
+        evaluation = evaluation["Payload"]
+    metrics = normalize_pipeline_metrics(
+        comparison.get("candidate_metrics") or evaluation.get("metrics") or {}
+    )
+    status = "CANDIDATE" if comparison.get("promote") else "REJECTED"
+    if not comparison:
+        status = "CANDIDATE" if metrics.get("tas_relaxed_f1", 0) > 0 else "REJECTED"
     version = now_iso()
+    artifact_prefix = _output_prefix(run_id)
     put_model_record(
         {
             "model_id": candidate_model_id,
@@ -371,7 +445,8 @@ def handle_register_model(event: dict[str, Any]) -> dict[str, Any]:
             "status": status,
             "run_id": run_id,
             "metrics": metrics,
-            "artifact_prefix": _output_prefix(run_id),
+            "artifact_prefix": artifact_prefix,
+            "artifact_uri": training_run_uri(_BUCKET, run_id) if _BUCKET else artifact_prefix,
             "registered_at": version,
         }
     )
@@ -379,13 +454,52 @@ def handle_register_model(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def handle_smoke_test(event: dict[str, Any]) -> dict[str, Any]:
-    return {"passed": True, "checks": 3}
+    run_id = event.get("run_id", "")
+    prefix = _output_prefix(run_id) if run_id else ""
+    evaluation = event.get("evaluation") or {}
+    if isinstance(evaluation, dict) and "Payload" in evaluation:
+        evaluation = evaluation["Payload"]
+    checks = {
+        "train_log_present": bool(prefix),
+        "metrics_present": bool(evaluation.get("metrics")),
+        "weights_key": f"{prefix}/best_model.pt" if prefix else "",
+    }
+  if _BUCKET and prefix:
+      store = get_store()
+      try:
+          store._s3.head_object(Bucket=_BUCKET, Key=f"{prefix}/best_model.pt")
+          checks["weights_present"] = True
+      except Exception:  # noqa: BLE001
+          checks["weights_present"] = False
+  passed = checks.get("weights_present", True) and checks.get("metrics_present", True)
+  return {"passed": passed, "checks": checks}
+
+
+def _archive_other_production(keep_model_id: str) -> None:
+    for row in list_model_records(limit=50, status="PRODUCTION"):
+        if row.get("model_id") == keep_model_id:
+            continue
+        put_model_record(
+            {
+                "model_id": row["model_id"],
+                "version": row["version"],
+                "status": "ARCHIVED",
+                "archived_at": now_iso(),
+            }
+        )
 
 
 def handle_promote_model(event: dict[str, Any]) -> dict[str, Any]:
     candidate_model_id = event.get("candidate_model_id")
-    base_model_id = event.get("base_model_id", "absa-v1")
+    base_model_id = event.get("base_model_id", "absa-v2b")
+    run_id = event.get("run_id", "")
+    evaluation = event.get("evaluation") or {}
+    if isinstance(evaluation, dict) and "Payload" in evaluation:
+        evaluation = evaluation["Payload"]
+    metrics = normalize_pipeline_metrics(evaluation.get("metrics") or {})
     version = now_iso()
+
+    _archive_other_production(str(candidate_model_id))
     put_model_record(
         {
             "model_id": candidate_model_id,
@@ -393,20 +507,89 @@ def handle_promote_model(event: dict[str, Any]) -> dict[str, Any]:
             "status": "PRODUCTION",
             "promoted_at": version,
             "previous_production": base_model_id,
+            "run_id": run_id,
+            "metrics": metrics,
+            "artifact_prefix": _PRODUCTION_PREFIX,
+            "artifact_uri": f"s3://{_BUCKET}/{_PRODUCTION_PREFIX}/" if _BUCKET else _PRODUCTION_PREFIX,
         }
     )
     return {"promoted": True, "model_id": candidate_model_id, "previous": base_model_id}
+
+
+def handle_deploy_model(event: dict[str, Any]) -> dict[str, Any]:
+    """Copy promoted run artifacts to production S3 prefix (inference/metrics source)."""
+    run_id = event["run_id"]
+    candidate_model_id = event.get("candidate_model_id")
+    if not _BUCKET:
+        raise RuntimeError("ARTIFACTS_BUCKET is not configured")
+
+    store = get_store()
+    run_prefix = _output_prefix(run_id)
+    candidate_prefix = model_candidate_prefix(run_id)
+    production_prefix = _PRODUCTION_PREFIX
+
+    copied_run = copy_run_artifacts(
+        store._s3, _BUCKET, source_prefix=run_prefix, dest_prefix=candidate_prefix
+    )
+    copied_prod = copy_run_artifacts(
+        store._s3, _BUCKET, source_prefix=run_prefix, dest_prefix=production_prefix
+    )
+
+    deploy_record = {
+        "run_id": run_id,
+        "candidate_model_id": candidate_model_id,
+        "deployed_at": now_iso(),
+        "production_prefix": production_prefix,
+        "candidate_prefix": candidate_prefix,
+        "copied_keys": copied_prod,
+    }
+    put_json_s3(f"reports/deploy/{run_id}.json", deploy_record)
+
+    return {
+        "deployed": True,
+        "production_uri": f"s3://{_BUCKET}/{production_prefix}/",
+        "candidate_uri": f"s3://{_BUCKET}/{candidate_prefix}/",
+        "files_copied": len(copied_prod),
+        "sagemaker_note": "Redeploy runtime (model_version_stamp) to refresh SageMaker endpoint",
+    }
 
 
 def handle_notify(event: dict[str, Any]) -> dict[str, Any]:
     run_id = event.get("run_id", "unknown")
     outcome = event.get("outcome", "COMPLETED")
     created_at = resolve_run_created_at(event)
-    update_training_run(
-        run_id,
-        created_at,
-        {"status": outcome, "finished_at": now_iso()},
-    )
+
+    evaluation = event.get("evaluation") or {}
+    if isinstance(evaluation, dict) and "Payload" in evaluation:
+        evaluation = evaluation["Payload"]
+    comparison = event.get("comparison") or {}
+    if isinstance(comparison, dict) and "Payload" in comparison:
+        comparison = comparison["Payload"]
+    registry = event.get("registry") or {}
+    if isinstance(registry, dict) and "Payload" in registry:
+        registry = registry["Payload"]
+    deploy = event.get("deploy") or {}
+    if isinstance(deploy, dict) and "Payload" in deploy:
+        deploy = deploy["Payload"]
+
+    metrics = normalize_pipeline_metrics(evaluation.get("metrics") or {})
+    updates: dict[str, Any] = {
+        "status": outcome,
+        "finished_at": now_iso(),
+        "evaluation": evaluation,
+        "comparison": comparison,
+        "metrics": metrics,
+        "best_f1": evaluation.get("best_f1") or metrics.get("tas_relaxed_f1"),
+        "artifact_uri": training_run_uri(_BUCKET, run_id) if _BUCKET else None,
+    }
+    if registry:
+        updates["candidate_model_id"] = registry.get("model_id")
+        updates["registry_status"] = registry.get("status")
+    if deploy:
+        updates["deploy"] = deploy
+        updates["production_uri"] = deploy.get("production_uri")
+
+    update_training_run(run_id, created_at, updates)
     return {"run_id": run_id, "outcome": outcome, "notified_at": now_iso()}
 
 
@@ -421,6 +604,7 @@ ACTIONS: dict[str, Any] = {
     "register_model": handle_register_model,
     "smoke_test": handle_smoke_test,
     "promote_model": handle_promote_model,
+    "deploy_model": handle_deploy_model,
     "notify": handle_notify,
 }
 

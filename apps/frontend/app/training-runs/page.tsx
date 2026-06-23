@@ -25,8 +25,12 @@ import type { PipelineRun } from "@/types/pipeline"
 
 function runBestF1(run: PipelineRun): number | null {
   if (run.best_f1 != null) return run.best_f1
-  const metric = run.evaluation?.metrics?.tas_relaxed_f1 ?? run.evaluation?.metrics?.global_f1
-  return metric != null ? metric : null
+  const fromEval =
+    run.evaluation?.metrics?.tas_relaxed_f1 ??
+    run.evaluation?.metrics?.global_f1
+  if (fromEval != null) return fromEval
+  const fromMetrics = run.metrics?.tas_relaxed_f1 ?? run.metrics?.global_f1
+  return fromMetrics != null ? fromMetrics : null
 }
 
 function runModel(run: PipelineRun): string {
@@ -67,6 +71,26 @@ export default function TrainingRunsPage() {
   useEffect(() => {
     loadRuns()
   }, [loadRuns])
+
+  const hasActiveRun = useMemo(
+    () =>
+      runs.some((r) =>
+        ["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS", "EVALUATED", "COMPARED"].includes(
+          r.status.toUpperCase(),
+        ),
+      ),
+    [runs],
+  )
+
+  useEffect(() => {
+    if (!hasActiveRun) return
+    const id = setInterval(() => {
+      fetchPipelineRuns(25)
+        .then((res) => setRuns(res.runs))
+        .catch(() => undefined)
+    }, 8000)
+    return () => clearInterval(id)
+  }, [hasActiveRun])
 
   const onRunStarted = useCallback(
     (run: PipelineRun) => {
@@ -198,7 +222,7 @@ export default function TrainingRunsPage() {
                         <RegistryTd>
                           <RunNameCell
                             name={runName}
-                            href={`/training-runs/${encodeURIComponent(run.execution_arn)}`}
+                            href={`/training-runs/${encodeURIComponent(run.run_id ?? run.name)}`}
                             status={run.status}
                           />
                         </RegistryTd>

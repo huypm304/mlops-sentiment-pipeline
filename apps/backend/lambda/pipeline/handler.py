@@ -10,6 +10,7 @@ from typing import Any
 import boto3
 
 from actions import decide_approval, dispatch_action
+from lineage import build_run_lineage
 from storage import get_approval_request, get_training_run, list_training_runs, now_iso, put_training_run
 from training_config import DEFAULT_TRAINING_CONFIG, merge_training_config
 
@@ -64,7 +65,7 @@ def _build_execution_input(payload: dict[str, Any]) -> dict[str, Any]:
         "dataset_s3_uri": f"s3://{_BUCKET}/{dataset_key}",
         "artifacts_bucket": _BUCKET,
         "training_config": training_config,
-        "base_model_id": payload.get("base_model_id", "absa-v1"),
+        "base_model_id": payload.get("base_model_id", "absa-v2b"),
         "candidate_model_id": payload.get("candidate_model_id") or f"candidate-{run_id}",
         "approval_id": payload.get("approval_id") or f"appr-{run_id}",
         "requested_by": payload.get("requested_by", "admin-ui"),
@@ -93,6 +94,13 @@ def _format_run_row(row: dict[str, Any]) -> dict[str, Any]:
         "approval_id": row.get("approval_id"),
         "training_config": row.get("training_config"),
         "stages": row.get("stages") or [],
+        "evaluation": row.get("evaluation"),
+        "comparison": row.get("comparison"),
+        "metrics": row.get("metrics"),
+        "production_uri": row.get("production_uri"),
+        "code_version": row.get("code_version"),
+        "training_source_uri": row.get("training_source_uri"),
+        "dataset_s3_uri": row.get("dataset_s3_uri"),
     }
 
 
@@ -141,7 +149,7 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                 "demo_mode": not configured,
                 "state_machine_arn": _STATE_MACHINE_ARN or None,
                 "artifacts_bucket": _BUCKET or None,
-                "stages": ["Train", "Evaluate", "Register", "Done"],
+                "stages": ["Train", "Evaluate", "Compare", "Register", "Promote", "Deploy"],
                 "default_training_config": DEFAULT_TRAINING_CONFIG,
                 "message": (
                     "Step Functions connected — chọn dataset, config, trigger."
@@ -161,6 +169,13 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
             payload = _parse_body(event)
             execution_input = _build_execution_input(payload)
             name = f"retrain-{execution_input['run_id']}"[:80]
+            lineage = build_run_lineage(
+                dataset_id=execution_input["dataset_id"],
+                dataset_key=execution_input["dataset_key"],
+                base_model_id=execution_input["base_model_id"],
+                candidate_model_id=execution_input["candidate_model_id"],
+                training_config=execution_input["training_config"],
+            )
             result = _sfn.start_execution(
                 stateMachineArn=_STATE_MACHINE_ARN,
                 name=name,
@@ -173,11 +188,14 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                     "status": "RUNNING",
                     "dataset_id": execution_input["dataset_id"],
                     "dataset_key": execution_input["dataset_key"],
+                    "dataset_s3_uri": lineage["dataset_s3_uri"],
                     "base_model_id": execution_input["base_model_id"],
                     "candidate_model_id": execution_input["candidate_model_id"],
                     "approval_id": execution_input["approval_id"],
                     "requested_by": execution_input["requested_by"],
                     "training_config": execution_input["training_config"],
+                    "code_version": lineage["code_version"],
+                    "training_source_uri": lineage["training_source_uri"],
                     "step_function_execution_arn": result["executionArn"],
                     "started_at": result["startDate"].isoformat(),
                 }
@@ -193,6 +211,12 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                     "approval_id": execution_input["approval_id"],
                     "training_config": execution_input["training_config"],
                     "dataset_key": execution_input["dataset_key"],
+                    "dataset_id": execution_input["dataset_id"],
+                    "base_model_id": execution_input["base_model_id"],
+                    "candidate_model_id": execution_input["candidate_model_id"],
+                    "code_version": lineage["code_version"],
+                    "training_source_uri": lineage["training_source_uri"],
+                    "dataset_s3_uri": lineage["dataset_s3_uri"],
                 },
             )
         except json.JSONDecodeError:
@@ -227,11 +251,34 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         return _response(200, record)
 
     if "/pipeline/runs/" in path and method == "GET":
-        run_id = path.split("/pipeline/runs/")[1].strip("/")
+        run_id = path.split("/pipeline/runs/")[1].strip("/").split("?")[0]
         run = get_training_run(run_id)
         if run is None:
+            for row in list_training_runs(limit=50):
+                if row.get("run_id") == run_id:
+                    run = row
+                    break
+                arn = row.get("step_function_execution_arn") or ""
+                if arn and (arn == run_id or run_id in arn):
+                    run = row
+                    break
+        if run is None:
             return _response(404, {"detail": "Run not found"})
-        return _response(200, run)
+        return _response(200, _format_run_row(run) | {
+            k: run[k]
+            for k in (
+                "evaluation",
+                "comparison",
+                "metrics",
+                "deploy",
+                "production_uri",
+                "registry_status",
+                "code_version",
+                "training_source_uri",
+                "dataset_s3_uri",
+            )
+            if k in run
+        })
 
     if path.endswith("/pipeline/runs") and method == "GET":
         try:

@@ -1,0 +1,1 @@
+{"epoch": 50, "phase": "phase2", "is_best": true, "matrices": {"sentiment": {"labels": ["NEG", "POS", "NEU"], "raw": [[100, 20, 10], [15, 200, 25], [12, 18, 80]], "support": 480}, "global": {"labels": ["NEG", "POS", "NEU"], "raw": [[120, 15, 30], [18, 210, 22], [40, 25, 190]], "support": 670}}}

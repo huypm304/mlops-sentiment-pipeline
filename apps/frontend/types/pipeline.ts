@@ -18,6 +18,7 @@ export type TrainingConfig = {
   lambda_cons?: number
   lambda_contrast?: number
   contrast_sampler_weight?: number
+  pred_span_ratio?: number
   sagemaker_instance_type?: string
 }
 
@@ -27,6 +28,9 @@ export type RunComparison = {
   delta: Record<string, number>
   metric_gate_passed: boolean
   promote?: boolean
+  baseline_model_id?: string
+  candidate_model_id?: string
+  primary_metric?: string
 }
 
 export type RunEvaluation = {
@@ -35,6 +39,8 @@ export type RunEvaluation = {
   metrics: Record<string, number>
   evaluated_at?: string
   mode?: string
+  best_f1?: number
+  passed?: boolean
 }
 
 export type SfnStep = {
@@ -51,14 +57,19 @@ export type PipelineRun = {
   stop_date: string | null
   dataset_key: string | null
   dataset_id?: string
+  dataset_s3_uri?: string | null
   run_id?: string
   base_model_id?: string
   candidate_model_id?: string
+  code_version?: string | null
+  training_source_uri?: string | null
   best_f1?: number | null
   duration_seconds?: number | null
   artifact_uri?: string | null
+  production_uri?: string | null
   approval_id?: string
   training_config?: TrainingConfig
+  metrics?: Record<string, number>
   demo?: boolean
   current_stage?: string | null
   current_state?: string | null
@@ -88,3 +99,19 @@ export type ApprovalRecord = {
   training_config?: TrainingConfig
   cost_estimate?: { estimated_usd?: number; mode?: string }
 }
+
+/** Editable hyperparameter fields exposed in console/admin trigger forms. */
+export const TRAINING_CONFIG_FIELDS = [
+  "epochs",
+  "patience",
+  "batch_size",
+  "lr_backbone",
+  "lr_heads",
+  "lambda_bio",
+  "lambda_sent",
+  "lambda_global",
+  "contrast_sampler_weight",
+  "pred_span_ratio",
+] as const
+
+export type TrainingConfigField = (typeof TRAINING_CONFIG_FIELDS)[number]

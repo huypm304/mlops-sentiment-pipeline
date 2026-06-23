@@ -66,21 +66,19 @@ dist/
 build/
 pip-wheel-metadata/
 
-# --- ML / model artifacts (large binaries) ---
+# --- ML / model artifacts (large binaries — S3 is source of truth) ---
 *.pt
 *.pth
 *.onnx
 *.safetensors
-model/*.pt
-model/checkpoints/
-artifacts/*.pt
-artifacts/model/*.pt
-artifacts/model/checkpoints/
+model/
+run1a_phobert/
+reports/
 mlruns/
 lightning_logs/
 *.ckpt
 
-# Regenerate with scripts/export_model_artifacts.py and upload to S3
+# Regenerate locally then upload: scripts/upload_model.sh <dir> models/v1 --seed
 artifacts/
 !artifacts/.gitkeep
 

@@ -18,7 +18,8 @@ import {
   triggerPipeline,
 } from "@/lib/api/pipeline"
 import type { DatasetListItem, DatasetManifest } from "@/types/dataset"
-import type { PipelineConfig, PipelineRun, SfnStep, TrainingConfig } from "@/types/pipeline"
+import type { PipelineConfig, PipelineRun, SfnStep, TrainingConfig, TrainingConfigField } from "@/types/pipeline"
+import { TRAINING_CONFIG_FIELDS } from "@/types/pipeline"
 import { cn } from "@/lib/utils"
 
 function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -84,6 +85,7 @@ export function PipelineView() {
   const [sessionDataset, setSessionDataset] = useState<DatasetManifest | null>(null)
   const [selectedDatasetId, setSelectedDatasetId] = useState("")
   const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>({})
+  const [baseModelId, setBaseModelId] = useState("absa-v2b")
   const [activeRun, setActiveRun] = useState<PipelineRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -120,7 +122,8 @@ export function PipelineView() {
       const running = list.find((r) => r.status === "RUNNING")
       if (running) {
         try {
-          setActiveRun(await fetchPipelineRun(running.execution_arn))
+          const id = running.run_id ?? running.execution_arn
+          setActiveRun(await fetchPipelineRun(id))
         } catch {
           setActiveRun(running)
         }
@@ -147,20 +150,22 @@ export function PipelineView() {
   }, [load])
 
   useEffect(() => {
-    if (!activeRun?.execution_arn || activeRun.status !== "RUNNING") return
+    if (!activeRun) return
+    const id = activeRun.run_id ?? activeRun.execution_arn
+    if (!id || !["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS"].includes(activeRun.status.toUpperCase())) return
     const poll = async () => {
       try {
-        const detail = await fetchPipelineRun(activeRun.execution_arn)
+        const detail = await fetchPipelineRun(id)
         setActiveRun(detail)
-        setRuns((prev) => prev.map((r) => (r.execution_arn === detail.execution_arn ? detail : r)))
+        setRuns((prev) => prev.map((r) => ((r.run_id ?? r.execution_arn) === id ? detail : r)))
       } catch {
         /* ignore */
       }
     }
     poll()
-    const id = setInterval(poll, 5000)
-    return () => clearInterval(id)
-  }, [activeRun?.execution_arn, activeRun?.status])
+    const timer = setInterval(poll, 5000)
+    return () => clearInterval(timer)
+  }, [activeRun?.run_id, activeRun?.execution_arn, activeRun?.status])
 
   const onTrigger = async () => {
     if (!sessionDataset) return
@@ -169,7 +174,9 @@ export function PipelineView() {
     try {
       const run = await triggerPipeline({
         dataset_id: sessionDataset.dataset_id,
+        base_model_id: baseModelId,
         training_config: trainingConfig,
+        requested_by: "admin-ui",
       })
       setActiveRun(run)
       setRuns((prev) => [run, ...prev.filter((r) => r.execution_arn !== run.execution_arn)])
@@ -180,7 +187,7 @@ export function PipelineView() {
     }
   }
 
-  const updateConfig = (key: keyof TrainingConfig, value: string) => {
+  const updateConfig = (key: TrainingConfigField, value: string) => {
     const numeric = Number(value)
     setTrainingConfig((prev) => ({
       ...prev,
@@ -272,27 +279,30 @@ export function PipelineView() {
         <Card className="border-white/[0.08] bg-white/[0.02] lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-sm">Training config</CardTitle>
+            <CardDescription>Architecture / evaluator locked in code version — chỉ chỉnh experiment params.</CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
+            <label className="block text-xs">
+              base_model_id
+              <select
+                className="mt-1 w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                value={baseModelId}
+                onChange={(e) => setBaseModelId(e.target.value)}
+              >
+                <option value="absa-v2b">absa-v2b</option>
+                <option value="absa-v1">absa-v1</option>
+              </select>
+            </label>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {(
-                [
-                  ["epochs", trainingConfig.epochs],
-                  ["batch_size", trainingConfig.batch_size],
-                  ["lr_backbone", trainingConfig.lr_backbone],
-                  ["lr_heads", trainingConfig.lr_heads],
-                  ["lambda_bio", trainingConfig.lambda_bio],
-                  ["lambda_sent", trainingConfig.lambda_sent],
-                  ["lambda_global", trainingConfig.lambda_global],
-                  ["contrast_sampler_weight", trainingConfig.contrast_sampler_weight],
-                ] as const
-              ).map(([key, value]) => (
+              {TRAINING_CONFIG_FIELDS.map((key) => (
                 <label key={key} className="text-xs">
                   {key}
                   <Input
                     className="mt-1 font-mono text-xs"
-                    defaultValue={String(value ?? "")}
-                    onBlur={(e) => updateConfig(key, e.target.value)}
+                    type="number"
+                    step="any"
+                    value={String(trainingConfig[key] ?? "")}
+                    onChange={(e) => updateConfig(key, e.target.value)}
                   />
                 </label>
               ))}

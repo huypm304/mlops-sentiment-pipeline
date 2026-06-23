@@ -107,7 +107,7 @@ export function ModelsRegistry() {
     return (
       <EmptyState
         title="No registered models"
-        description="Ensure model/train_log.csv exists and the metrics API is running."
+        description="Register a model in DynamoDB with S3 artifacts (models/v1/train_log.csv) and ensure the metrics API is running."
       />
     )
   }

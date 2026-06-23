@@ -1,5 +1,11 @@
 data "aws_caller_identity" "current" {}
 
+variable "training_code_version" {
+  description = "Pinned training code label stored on each training run (lineage)."
+  type        = string
+  default     = "absa-train-v1"
+}
+
 locals {
   name_prefix = "${var.project}-${var.environment}"
   lambda_root = "${path.module}/../../apps/backend/lambda"
@@ -157,9 +163,11 @@ module "lambda_pipeline" {
   common_tags        = local.common_tags
 
   environment_variables = merge(local.lambda_env, {
-    STATE_MACHINE_ARN         = local.state_machine_arn
-    ENABLE_SAGEMAKER_TRAINING = tostring(var.enable_sagemaker_training)
-    SAGEMAKER_ROLE_ARN        = module.iam_runtime.sagemaker_role_arn
+    STATE_MACHINE_ARN          = local.state_machine_arn
+    ENABLE_SAGEMAKER_TRAINING  = tostring(var.enable_sagemaker_training)
+    SAGEMAKER_ROLE_ARN         = module.iam_runtime.sagemaker_role_arn
+    TRAINING_CODE_VERSION      = var.training_code_version
+    PRODUCTION_ARTIFACT_PREFIX = "models/v1"
   })
 }
 

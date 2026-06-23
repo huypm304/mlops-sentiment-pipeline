@@ -1,11 +1,11 @@
 {
-  "Comment": "ABSA retrain pipeline — dataset pre-audited manually: Train → Evaluate → Register → Notify",
+  "Comment": "ABSA retrain pipeline — Train → Evaluate → Compare → Register → Promote → Deploy → Notify",
   "StartAt": "StartTraining",
   "States": {
     "StartTraining": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Launch training (mock Lambda or SageMaker job).",
+      "Comment": "Launch training (mock copies baseline artifacts, or SageMaker GPU job).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -43,12 +43,13 @@
     "EvaluateCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Evaluate candidate model on dev split (real metrics when SageMaker training is enabled).",
+      "Comment": "Parse train_log.csv from S3 and persist evaluation metrics.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
           "action": "evaluate",
           "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
           "candidate_model_id.$": "$.candidate_model_id",
           "training.$": "$.training.Payload",
           "artifacts_bucket": "${artifacts_bucket}"
@@ -70,12 +71,46 @@
           "Next": "NotifyFailure"
         }
       ],
+      "Next": "CompareToProduction"
+    },
+    "CompareToProduction": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Compare candidate metrics against production baseline from registry/S3.",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "compare_models",
+          "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
+          "base_model_id.$": "$.base_model_id",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "evaluation.$": "$.evaluation.Payload",
+          "artifacts_bucket": "${artifacts_bucket}"
+        }
+      },
+      "ResultPath": "$.comparison",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
       "Next": "RegisterCandidate"
     },
     "RegisterCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Register candidate in model registry.",
+      "Comment": "Register candidate in model registry (CANDIDATE or REJECTED).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -83,6 +118,7 @@
           "run_id.$": "$.run_id",
           "candidate_model_id.$": "$.candidate_model_id",
           "evaluation.$": "$.evaluation.Payload",
+          "comparison.$": "$.comparison.Payload",
           "artifacts_bucket": "${artifacts_bucket}"
         }
       },
@@ -102,25 +138,128 @@
           "Next": "NotifyFailure"
         }
       ],
+      "Next": "PromoteGate"
+    },
+    "PromoteGate": {
+      "Type": "Choice",
+      "Comment": "Promote only when candidate tas_relaxed_f1 >= production baseline.",
+      "Choices": [
+        {
+          "Variable": "$.comparison.Payload.promote",
+          "BooleanEquals": true,
+          "Next": "SmokeTestCandidate"
+        }
+      ],
+      "Default": "NotifyRejected"
+    },
+    "SmokeTestCandidate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "smoke_test",
+          "run_id.$": "$.run_id",
+          "evaluation.$": "$.evaluation.Payload",
+          "artifacts_bucket": "${artifacts_bucket}"
+        }
+      },
+      "ResultPath": "$.smoke_test",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "PromoteModel"
+    },
+    "PromoteModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "promote_model",
+          "run_id.$": "$.run_id",
+          "base_model_id.$": "$.base_model_id",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "evaluation.$": "$.evaluation.Payload",
+          "artifacts_bucket": "${artifacts_bucket}"
+        }
+      },
+      "ResultPath": "$.promotion",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "DeployModel"
+    },
+    "DeployModel": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Copy run artifacts to models/v1 production prefix on S3.",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "deploy_model",
+          "run_id.$": "$.run_id",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "artifacts_bucket": "${artifacts_bucket}"
+        }
+      },
+      "ResultPath": "$.deploy",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
       "Next": "NotifyResult"
     },
     "NotifyResult": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Persist final run status.",
+      "Comment": "Persist final run status with evaluation and comparison.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
           "action": "notify",
           "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
           "candidate_model_id.$": "$.candidate_model_id",
           "evaluation.$": "$.evaluation.Payload",
+          "comparison.$": "$.comparison.Payload",
           "registry.$": "$.registry.Payload",
+          "deploy.$": "$.deploy.Payload",
           "outcome": "COMPLETED"
         }
       },
       "ResultPath": "$.notify",
       "Next": "PipelineSucceeded"
+    },
+    "NotifyRejected": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "notify",
+          "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "evaluation.$": "$.evaluation.Payload",
+          "comparison.$": "$.comparison.Payload",
+          "registry.$": "$.registry.Payload",
+          "outcome": "REJECTED"
+        }
+      },
+      "ResultPath": "$.notify",
+      "Next": "PipelineRejected"
     },
     "NotifyFailure": {
       "Type": "Task",
@@ -138,6 +277,9 @@
       "Next": "PipelineFailed"
     },
     "PipelineSucceeded": {
+      "Type": "Succeed"
+    },
+    "PipelineRejected": {
       "Type": "Succeed"
     },
     "PipelineFailed": {

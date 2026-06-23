@@ -28,7 +28,7 @@ export async function triggerPipeline(body: {
     body: JSON.stringify({
       dataset_id: body.dataset_id,
       requested_by: body.requested_by ?? "admin-ui",
-      base_model_id: body.base_model_id ?? "absa-v1",
+      base_model_id: body.base_model_id ?? "absa-v2b",
       training_config: body.training_config,
     }),
   })

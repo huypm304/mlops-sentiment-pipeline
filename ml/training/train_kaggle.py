@@ -1,17 +1,10 @@
-"""
-Frozen training script for reproducibility.
-
-This file is the original long Kaggle/Colab training script.
-Do not modify model/evaluation/training logic unless starting a new experiment.
-Refactored modules are used for inference, evaluation, reports, and deployment.
-"""
-
 import argparse
 import csv
 import json
 import math
 import os
 import random
+import re
 import subprocess
 import sys
 import unicodedata
@@ -42,12 +35,21 @@ if torch.cuda.is_available():
 
 
 def install_deps():
+    need_install = False
     try:
         from torchcrf import CRF as _CRF  # noqa: F401
     except ImportError:
+        need_install = True
+
+    try:
+        import sentencepiece as _spm  # noqa: F401
+    except ImportError:
+        need_install = True
+
+    if need_install:
         subprocess.check_call(
             [sys.executable, "-m", "pip", "install",
-             "pyvi", "pytorch-crf", "transformers", "scikit-learn", "-q"]
+             "pyvi", "pytorch-crf", "transformers", "scikit-learn", "sentencepiece", "-q"]
         )
 
 
@@ -55,13 +57,13 @@ install_deps()
 from torchcrf import CRF
 
 if "__file__" in globals():
-    REPO_ROOT = Path(__file__).resolve().parents[2]
+    REPO_ROOT = Path(__file__).resolve().parents[1]
 else:
     REPO_ROOT = Path.cwd()
 
-DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/train_aug500.jsonl")
+DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/train_aug500_boundary200.jsonl")
 DEFAULT_VAL_FILE   = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/dev_clean.jsonl")
-DEFAULT_OUTPUT_DIR = Path("/kaggle/working/run2b")
+DEFAULT_OUTPUT_DIR = Path("/kaggle/working/run1a_phobert")
 
 ASPECTS = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
 N_SENT  = 3
@@ -77,6 +79,33 @@ def build_bio_labels():
 BIO_LABELS, BIO_L2I, BIO_I2L = build_bio_labels()
 N_BIO = len(BIO_LABELS)
 TOKENIZE_BATCH_SIZE = 512
+
+CONTRAST_WORDS = {
+    "nhưng",
+    "tuy",
+    "dù",
+    "mà",
+    "song",
+    "còn",
+    "tuy nhiên",
+    "thế mà",
+    "thế nhưng",
+}
+
+
+def overlaps(a_start, a_end, b_start, b_end):
+    return max(a_start, b_start) < min(a_end, b_end)
+
+
+def find_contrast_char_spans(text: str):
+    text_l = text.lower()
+    spans = []
+    for phrase in CONTRAST_WORDS:
+        pattern = r"\\b" + re.sub(r"\\s+", r"(?:\\s+|_)", re.escape(phrase)) + r"\\b"
+        for m in re.finditer(pattern, text_l):
+            spans.append((m.start(), m.end()))
+    spans.sort()
+    return spans
 
 
 def nfc(text):
@@ -140,17 +169,23 @@ def compute_clause_aware_window(tmin, tmax, op_idx, span_token_lists, offsets, t
 
 
 def compute_clause_position(span_start, span_end, offsets_row, text, seq_len):
-    contrast_words = {"nhưng", "tuy", "dù", "mà", "song", "còn", "tuy_nhiên", "thế_nhưng"}
-    contrast_pos = None
+    contrast_spans = find_contrast_char_spans(text)
+    if not contrast_spans:
+        return 0
+
+    contrast_token_positions = []
     for idx in range(seq_len):
         cs = int(offsets_row[idx][0])
         ce = int(offsets_row[idx][1])
-        token = text[cs:ce].lower().strip()
-        if token in contrast_words:
-            contrast_pos = idx
-            break
-    if contrast_pos is None:
+        if cs == ce:
+            continue
+        if any(overlaps(cs, ce, ss, se) for ss, se in contrast_spans):
+            contrast_token_positions.append(idx)
+
+    if not contrast_token_positions:
         return 0
+
+    contrast_pos = sum(contrast_token_positions) / len(contrast_token_positions)
     center = 0.5 * (span_start + span_end)
     return 1 if center < contrast_pos else 2
 
@@ -257,8 +292,96 @@ def autocast_context(device):
     return nullcontext()
 
 
+def load_tokenizer(model_name: str):
+    tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
+
+    if not getattr(tokenizer, "is_fast", False):
+        # Some environments return a slow tokenizer for PhoBERT; try converting from slow.
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, from_slow=True)
+        except TypeError:
+            # Older transformers may not support `from_slow` in AutoTokenizer.
+            pass
+
+    if not getattr(tokenizer, "is_fast", False):
+        print(
+            f"[WARN] Tokenizer of {model_name} is slow. "
+            "Using manual offset mapping fallback for span alignment."
+        )
+
+    sample = ["Áo đẹp nhưng giao hàng chậm"]
+    try:
+        if getattr(tokenizer, "is_fast", False):
+            enc = tokenizer(
+                sample,
+                max_length=32,
+                padding="max_length",
+                truncation=True,
+                return_offsets_mapping=True,
+                return_special_tokens_mask=True,
+            )
+        else:
+            enc = tokenizer(
+                sample,
+                max_length=32,
+                padding="max_length",
+                truncation=True,
+                return_special_tokens_mask=True,
+            )
+        print("Tokenizer:", tokenizer.__class__.__name__)
+        print("is_fast:", tokenizer.is_fast)
+        print("tokens:", tokenizer.convert_ids_to_tokens(enc["input_ids"][0])[:20])
+        if "offset_mapping" in enc:
+            print("offsets:", enc["offset_mapping"][0][:20])
+    except Exception as e:
+        raise RuntimeError(
+            f"Tokenizer {model_name} cannot be initialized for this ABSA pipeline."
+        ) from e
+
+    return tokenizer
+
+
 def label_names_for_sentiment():
     return ["NEG", "POS", "NEU"]
+
+
+def build_offsets_from_tokens(text, tokens, special_tokens_mask):
+    text_l = text.lower()
+    cursor = 0
+    offsets = []
+
+    for tok, is_special in zip(tokens, special_tokens_mask):
+        if is_special:
+            offsets.append((0, 0))
+            continue
+
+        piece = tok or ""
+        if piece.startswith("##"):
+            piece = piece[2:]
+
+        # SentencePiece/Roberta boundary markers.
+        piece = piece.replace("▁", " ").replace("Ġ", " ")
+        piece = piece.strip()
+
+        if not piece:
+            offsets.append((0, 0))
+            continue
+
+        piece_l = piece.lower()
+        idx = text_l.find(piece_l, cursor)
+        if idx == -1:
+            idx = text_l.find(piece_l)
+
+        if idx == -1:
+            offsets.append((0, 0))
+            continue
+
+        start = idx
+        end = idx + len(piece)
+        offsets.append((start, end))
+        cursor = end
+
+    return offsets
 
 
 def confusion_payload(gold, pred, labels, label_names):
@@ -279,13 +402,6 @@ def save_confusion_matrices(path, epoch, phase_name, matrices, is_best):
         ) + "\n")
 
 
-# =============================================================================
-# CONTRAST FEATURE — Fix: dùng char-level match thay vì subword token match
-# ViBERTa syllable tokenizer có thể split "nhưng" thành nhiều subword.
-# Safer: scan offsets để tìm vị trí char, không dựa vào convert_ids_to_tokens.
-# =============================================================================
-CONTRAST_WORDS = {"nhưng", "tuy", "dù", "mà", "song", "còn"}
-
 def extract_contrast_feature(sequence, offsets_batch, text_batch, mask):
     """
     Tìm hidden state của contrast words dựa trên char offsets thay vì subword tokens.
@@ -296,16 +412,18 @@ def extract_contrast_feature(sequence, offsets_batch, text_batch, mask):
     per_batch = []
 
     for b in range(B):
-        text    = text_batch[b].lower()
+        text    = text_batch[b]
         offsets = offsets_batch[b]
+        contrast_spans = find_contrast_char_spans(text)
         found   = []
         for i in range(L):
             if mask[b, i]:
                 continue
             cs  = int(offsets[i, 0])
             ce  = int(offsets[i, 1])
-            tok = text[cs:ce].strip()
-            if tok in CONTRAST_WORDS:
+            if cs == ce:
+                continue
+            if any(overlaps(cs, ce, ss, se) for ss, se in contrast_spans):
                 found.append(sequence[b, i])
         if found:
             summed = torch.stack(found, dim=0).sum(0)   # no inplace
@@ -329,21 +447,39 @@ class ABSADataset(Dataset):
         for start_idx in range(0, len(records), TOKENIZE_BATCH_SIZE):
             batch_records = records[start_idx:start_idx + TOKENIZE_BATCH_SIZE]
             batch_texts = [nfc(record["text"]) for record in batch_records]
-            enc = tokenizer(
-                batch_texts,
-                max_length=max_len,
-                padding="max_length",
-                truncation=True,
-                return_offsets_mapping=True,
-                return_special_tokens_mask=True,
-            )
+            if getattr(tokenizer, "is_fast", False):
+                enc = tokenizer(
+                    batch_texts,
+                    max_length=max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_offsets_mapping=True,
+                    return_special_tokens_mask=True,
+                )
+                batch_offsets = enc["offset_mapping"]
+            else:
+                enc = tokenizer(
+                    batch_texts,
+                    max_length=max_len,
+                    padding="max_length",
+                    truncation=True,
+                    return_special_tokens_mask=True,
+                )
+                batch_offsets = []
+                for text, input_ids, spec_mask in zip(
+                    batch_texts,
+                    enc["input_ids"],
+                    enc["special_tokens_mask"],
+                ):
+                    toks = tokenizer.convert_ids_to_tokens(input_ids)
+                    batch_offsets.append(build_offsets_from_tokens(text, toks, spec_mask))
 
             for record, text, input_ids, attention_mask, offsets, spec_mask in zip(
                 batch_records,
                 batch_texts,
                 enc["input_ids"],
                 enc["attention_mask"],
-                enc["offset_mapping"],
+                batch_offsets,
                 enc["special_tokens_mask"],
             ):
                 seq_len = len(input_ids)
@@ -1282,7 +1418,7 @@ def parse_args():
     p.add_argument("--train-file",             type=Path,  default=DEFAULT_TRAIN_FILE)
     p.add_argument("--val-file",               type=Path,  default=DEFAULT_VAL_FILE)
     p.add_argument("--output-dir",             type=Path,  default=DEFAULT_OUTPUT_DIR)
-    p.add_argument("--model-name",             default="Fsoft-AIC/videberta-base")
+    p.add_argument("--model-name",             default="vinai/phobert-base")
     p.add_argument("--seed",                   type=int,   default=42)
     p.add_argument("--max-len",                type=int,   default=192,
                    help="p50 text ~82 chars; 192 covers p95 without 224 cost")
@@ -1355,7 +1491,7 @@ def main():
     set_seed(args.seed)
     print(f"Device: {device} | Train: {args.train_file} | Val: {args.val_file}")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name)
+    tokenizer = load_tokenizer(args.model_name)
     train_ds  = ABSADataset(args.train_file, tokenizer, args.max_len, args.max_ops, args.max_context_window)
     val_ds    = ABSADataset(args.val_file,   tokenizer, args.max_len, args.max_ops, args.max_context_window)
 

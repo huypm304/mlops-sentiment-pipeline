@@ -69,6 +69,10 @@ def list_model_records(limit: int = 50, status: str | None = None) -> list[dict[
     return _get_store().list_models(limit=limit, status=status)
 
 
+def get_store() -> RegistryStore:
+    return _get_store()
+
+
 def resolve_run_created_at(event: dict[str, Any]) -> str:
     if event.get("created_at"):
         return str(event["created_at"])

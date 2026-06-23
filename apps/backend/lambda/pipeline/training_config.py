@@ -33,6 +33,7 @@ NUMERIC_KEYS = {
     "lbtw_ema_decay",
     "lbtw_min_factor",
     "lbtw_max_factor",
+    "pred_span_ratio",
 }
 
 

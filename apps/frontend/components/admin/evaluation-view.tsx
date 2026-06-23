@@ -51,7 +51,7 @@ export function EvaluationView() {
         title="Could not load evaluation"
         description={
           error ??
-          "Ensure model/train_log.csv and confusion_matrices.jsonl exist and the API is running."
+          "Ensure the model is registered in DynamoDB with S3 artifacts (train_log.csv) and the metrics API is running."
         }
       />
     )

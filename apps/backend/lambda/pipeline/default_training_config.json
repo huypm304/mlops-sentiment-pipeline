@@ -17,6 +17,7 @@
   "lambda_cons": 0.0,
   "lambda_contrast": 0.0,
   "contrast_sampler_weight": 1.2,
+  "pred_span_ratio": 0.1,
   "lbtw_ema_decay": 0.99,
   "lbtw_min_factor": 0.3,
   "lbtw_max_factor": 3.0,
