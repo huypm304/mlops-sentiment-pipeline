@@ -28,6 +28,8 @@ import {
   type TrainingConfigField,
 } from "@/types/pipeline"
 import { cn } from "@/lib/utils"
+
+function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "SUCCEEDED") return "default"
   if (status === "FAILED") return "destructive"
   if (status === "RUNNING") return "secondary"
