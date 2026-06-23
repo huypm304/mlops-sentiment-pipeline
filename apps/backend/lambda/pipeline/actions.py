@@ -464,15 +464,15 @@ def handle_smoke_test(event: dict[str, Any]) -> dict[str, Any]:
         "metrics_present": bool(evaluation.get("metrics")),
         "weights_key": f"{prefix}/best_model.pt" if prefix else "",
     }
-  if _BUCKET and prefix:
-      store = get_store()
-      try:
-          store._s3.head_object(Bucket=_BUCKET, Key=f"{prefix}/best_model.pt")
-          checks["weights_present"] = True
-      except Exception:  # noqa: BLE001
-          checks["weights_present"] = False
-  passed = checks.get("weights_present", True) and checks.get("metrics_present", True)
-  return {"passed": passed, "checks": checks}
+    if _BUCKET and prefix:
+        store = get_store()
+        try:
+            store._s3.head_object(Bucket=_BUCKET, Key=f"{prefix}/best_model.pt")
+            checks["weights_present"] = True
+        except Exception:  # noqa: BLE001
+            checks["weights_present"] = False
+    passed = checks.get("weights_present", True) and checks.get("metrics_present", True)
+    return {"passed": passed, "checks": checks}
 
 
 def _archive_other_production(keep_model_id: str) -> None:

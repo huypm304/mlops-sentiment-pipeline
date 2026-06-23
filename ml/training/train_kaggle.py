@@ -65,6 +65,21 @@ DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/train_a
 DEFAULT_VAL_FILE   = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/dev_clean.jsonl")
 DEFAULT_OUTPUT_DIR = Path("/kaggle/working/run1a_phobert")
 
+# Default hyperparameters — keep in sync with default_training_config.json (pipeline UI / DynamoDB).
+DEFAULT_MODEL_NAME = "vinai/phobert-base"
+DEFAULT_EPOCHS = 50
+DEFAULT_PATIENCE = 8
+DEFAULT_BATCH_SIZE = 24
+DEFAULT_LR_BACKBONE = 8e-6
+DEFAULT_LR_HEADS = 3e-5
+DEFAULT_LAMBDA_BIO = 1.1
+DEFAULT_LAMBDA_SENT = 1.4
+DEFAULT_LAMBDA_GLOBAL = 0.2
+DEFAULT_LAMBDA_CONS = 0.0
+DEFAULT_LAMBDA_CONTRAST = 0.0
+DEFAULT_CONTRAST_SAMPLER_WEIGHT = 1.2
+DEFAULT_PRED_SPAN_RATIO = 0.1
+
 ASPECTS = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
 N_SENT  = 3
 
@@ -1418,16 +1433,16 @@ def parse_args():
     p.add_argument("--train-file",             type=Path,  default=DEFAULT_TRAIN_FILE)
     p.add_argument("--val-file",               type=Path,  default=DEFAULT_VAL_FILE)
     p.add_argument("--output-dir",             type=Path,  default=DEFAULT_OUTPUT_DIR)
-    p.add_argument("--model-name",             default="vinai/phobert-base")
+    p.add_argument("--model-name",             default=DEFAULT_MODEL_NAME)
     p.add_argument("--seed",                   type=int,   default=42)
     p.add_argument("--max-len",                type=int,   default=192,
                    help="p50 text ~82 chars; 192 covers p95 without 224 cost")
-    p.add_argument("--epochs",                 type=int,   default=50)
-    p.add_argument("--patience",               type=int,   default=8)
+    p.add_argument("--epochs",                 type=int,   default=DEFAULT_EPOCHS)
+    p.add_argument("--patience",               type=int,   default=DEFAULT_PATIENCE)
     p.add_argument("--phase1-epochs",          type=int,   default=2)
     p.add_argument("--max-ops",                type=int,   default=6,
                    help="train max 6 opinions/sample; only 2 rows need >6")
-    p.add_argument("--batch-size",             type=int,   default=24)
+    p.add_argument("--batch-size",             type=int,   default=DEFAULT_BATCH_SIZE)
     p.add_argument("--eval-batch-size",        type=int,   default=64)
     p.add_argument("--grad-accum-steps",       type=int,   default=1)
     p.add_argument("--num-workers",            type=int,   default=2)
@@ -1435,17 +1450,17 @@ def parse_args():
                    help="validate every N epochs (phase2); phase1 always evals")
     p.add_argument("--save-all-confusion",     action="store_true",
                    help="write confusion_matrices.jsonl every epoch (slower I/O)")
-    p.add_argument("--lr-backbone",            type=float, default=8e-6)
-    p.add_argument("--lr-heads",               type=float, default=3e-5)
+    p.add_argument("--lr-backbone",            type=float, default=DEFAULT_LR_BACKBONE)
+    p.add_argument("--lr-heads",               type=float, default=DEFAULT_LR_HEADS)
     p.add_argument("--max-context-window",     type=int,   default=25)
     p.add_argument("--span-match-iou",         type=float, default=0.5)
     p.add_argument("--contrast-margin",        type=float, default=0.25)
-    p.add_argument("--lambda-bio",             type=float, default=1.1)
-    p.add_argument("--lambda-sent",            type=float, default=1.4)
-    p.add_argument("--lambda-global",          type=float, default=0.2)
-    p.add_argument("--lambda-cons",            type=float, default=0)
-    p.add_argument("--lambda-contrast",        type=float, default=0)
-    p.add_argument("--contrast-sampler-weight",type=float, default=1.2)
+    p.add_argument("--lambda-bio",             type=float, default=DEFAULT_LAMBDA_BIO)
+    p.add_argument("--lambda-sent",            type=float, default=DEFAULT_LAMBDA_SENT)
+    p.add_argument("--lambda-global",          type=float, default=DEFAULT_LAMBDA_GLOBAL)
+    p.add_argument("--lambda-cons",            type=float, default=DEFAULT_LAMBDA_CONS)
+    p.add_argument("--lambda-contrast",        type=float, default=DEFAULT_LAMBDA_CONTRAST)
+    p.add_argument("--contrast-sampler-weight",type=float, default=DEFAULT_CONTRAST_SAMPLER_WEIGHT)
     p.add_argument("--lbtw-ema-decay",         type=float, default=0.99)
     p.add_argument("--lbtw-min-factor",        type=float, default=0.3)
     p.add_argument("--lbtw-max-factor",        type=float, default=3.0)
@@ -1454,7 +1469,7 @@ def parse_args():
     p.add_argument("--disable-ema",            action="store_true")
     p.add_argument("--disable-tf32",           action="store_true")
     p.add_argument("--rdrop-alpha",            type=float, default=0.0)
-    p.add_argument("--pred-span-ratio",        type=float, default=0.1,
+    p.add_argument("--pred-span-ratio",        type=float, default=DEFAULT_PRED_SPAN_RATIO,
                    help="Phase2 ratio of samples using predicted spans (rest uses gold spans)")
     args, unknown = p.parse_known_args()
     if unknown:

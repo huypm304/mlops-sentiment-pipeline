@@ -8,7 +8,7 @@ from train_log.csv.
 Usage:
     python scripts/eval_model.py \\
         --model-path artifacts/model/best_model.pt \\
-        --model-name Fsoft-AIC/videberta-base \\
+        --model-name vinai/phobert-base \\
         --eval-file /path/to/dev_clean.jsonl \\
         --output-dir artifacts/evaluation \\
         --max-len 192 --max-ops 6 --max-context-window 25 \\
@@ -106,7 +106,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="ABSA model evaluation script")
     p.add_argument("--model-path",         type=Path, required=True,
                    help="Path to best_model.pt checkpoint")
-    p.add_argument("--model-name",         default="Fsoft-AIC/videberta-base",
+    p.add_argument("--model-name",         default="vinai/phobert-base",
                    help="HuggingFace model name used during training")
     p.add_argument("--eval-file",          type=Path, required=True,
                    help="JSONL eval file (dev_clean.jsonl schema: text, opinions, global_sentiment)")

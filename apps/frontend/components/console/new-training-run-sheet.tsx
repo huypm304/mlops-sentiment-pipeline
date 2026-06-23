@@ -5,7 +5,6 @@ import { useCallback, useEffect, useState } from "react"
 import { Loader2, PlayCircle, Plus } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Sheet,
   SheetContent,
@@ -17,9 +16,10 @@ import {
 import { fetchDatasets } from "@/lib/api/datasets"
 import { fetchDefaultTrainingConfig, fetchPipelineConfig, triggerPipeline } from "@/lib/api/pipeline"
 import { appPath } from "@/lib/console/paths"
+import { TrainingConfigFields } from "@/components/training-config-fields"
 import type { DatasetListItem } from "@/types/dataset"
 import {
-  TRAINING_CONFIG_FIELDS,
+  DEFAULT_TRAINING_CONFIG,
   type PipelineConfig,
   type PipelineRun,
   type TrainingConfig,
@@ -32,6 +32,16 @@ type Props = {
 
 const BASE_MODEL_OPTIONS = ["absa-v2b", "absa-v1"] as const
 
+const FALLBACK_PIPELINE_CONFIG: PipelineConfig = {
+  configured: true,
+  demo_mode: false,
+  state_machine_arn: null,
+  artifacts_bucket: null,
+  stages: ["Train", "Evaluate", "Compare", "Register", "Promote", "Deploy"],
+  default_training_config: DEFAULT_TRAINING_CONFIG,
+  message: "Pipeline config tạm thời không tải được — vẫn chọn dataset đã lưu.",
+}
+
 export function NewTrainingRunSheet({ onStarted }: Props) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -41,30 +51,50 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
   const [datasets, setDatasets] = useState<DatasetListItem[]>([])
   const [selectedId, setSelectedId] = useState("")
   const [baseModelId, setBaseModelId] = useState<string>("absa-v2b")
-  const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>({})
+  const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>(DEFAULT_TRAINING_CONFIG)
 
   const loadForm = useCallback(async () => {
     setLoading(true)
     setError(null)
+    const warnings: string[] = []
+
+    let rows: DatasetListItem[] = []
     try {
-      const [cfg, defaults, rows] = await Promise.all([
-        fetchPipelineConfig(),
-        fetchDefaultTrainingConfig().catch(() => ({ training_config: {} as TrainingConfig })),
-        fetchDatasets(),
-      ])
-      setConfig(cfg)
-      setTrainingConfig(defaults.training_config ?? cfg.default_training_config ?? {})
-      setDatasets(rows)
-      const preferred =
-        rows.find((d) => d.audit_passed && d.status !== "failed") ??
-        rows.find((d) => d.audit_passed) ??
-        rows[0]
-      setSelectedId(preferred?.dataset_id ?? "")
+      rows = await fetchDatasets()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Không tải được cấu hình pipeline.")
-    } finally {
-      setLoading(false)
+      warnings.push(err instanceof Error ? err.message : "Không tải được danh sách dataset.")
     }
+    setDatasets(rows)
+    const preferred =
+      rows.find((d) => d.audit_passed && d.status !== "failed") ??
+      rows.find((d) => d.audit_passed) ??
+      rows[0]
+    setSelectedId(preferred?.dataset_id ?? "")
+
+    let cfg: PipelineConfig = FALLBACK_PIPELINE_CONFIG
+    try {
+      cfg = await fetchPipelineConfig()
+    } catch (err) {
+      warnings.push(err instanceof Error ? err.message : "Không tải được cấu hình pipeline.")
+    }
+    setConfig(cfg)
+
+    let merged: TrainingConfig = {
+      ...DEFAULT_TRAINING_CONFIG,
+      ...cfg.default_training_config,
+    }
+    try {
+      const defaults = await fetchDefaultTrainingConfig()
+      merged = { ...merged, ...defaults.training_config }
+    } catch {
+      /* dùng DEFAULT_TRAINING_CONFIG */
+    }
+    setTrainingConfig(merged)
+
+    if (warnings.length > 0) {
+      setError(warnings.join(" "))
+    }
+    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -73,7 +103,7 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
 
   const canStart =
     Boolean(selectedId) &&
-    Boolean(config?.configured) &&
+    datasets.length > 0 &&
     !config?.demo_mode &&
     !busy &&
     !loading
@@ -201,21 +231,7 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
 
             <div className="space-y-2">
               <p className="text-sm text-muted-foreground">Training config</p>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {TRAINING_CONFIG_FIELDS.map((key) => (
-                  <label key={key} className="text-xs">
-                    {key}
-                    <Input
-                      className="mt-1 font-mono text-xs"
-                      type="number"
-                      step="any"
-                      value={String(trainingConfig[key] ?? "")}
-                      onChange={(e) => updateConfig(key, e.target.value)}
-                      disabled={busy}
-                    />
-                  </label>
-                ))}
-              </div>
+              <TrainingConfigFields value={trainingConfig} onChange={updateConfig} disabled={busy} />
             </div>
 
             {error ? <p className="text-sm text-destructive">{error}</p> : null}

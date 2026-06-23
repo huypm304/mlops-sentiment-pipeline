@@ -179,7 +179,7 @@ mlops-sentiment-pipeline/
 2. **Sentiment theo opinion** — Negative / Positive / Neutral (0/1/2)
 3. **Global sentiment** — Cảm xúc tổng thể câu
 
-**Kiến trúc:** Encoder `Fsoft-AIC/videberta-base` (ViDeBERTa), multi-task heads:
+**Kiến trúc:** Encoder `vinai/phobert-base` (PhoBERT), multi-task heads:
 - BiLSTM + CRF BIO tagger cho target/aspect extraction
 - Attention-weighted span pooling + cross-attention + span self-attention
 - Aspect embedding + clause position embedding
@@ -213,7 +213,7 @@ python training/train_absa_full_kaggle.py \
 ```bash
 python scripts/eval_model.py \
   --model-path final_artifacts/model/best_model.pt \
-  --model-name Fsoft-AIC/videberta-base \
+  --model-name vinai/phobert-base \
   --eval-file  /path/to/dev_clean.jsonl \
   --output-dir final_artifacts/evaluation \
   --strict-load true

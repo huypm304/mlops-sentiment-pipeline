@@ -1,5 +1,5 @@
 {
-  "model_name": "Fsoft-AIC/videberta-base",
+  "model_name": "vinai/phobert-base",
   "seed": 42,
   "max_len": 192,
   "epochs": 50,

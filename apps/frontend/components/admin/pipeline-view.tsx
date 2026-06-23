@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
-import { Input } from "@/components/ui/input"
+import { TrainingConfigFields } from "@/components/training-config-fields"
 import { fetchDataset, fetchDatasets } from "@/lib/api/datasets"
 import {
   fetchDefaultTrainingConfig,
@@ -18,8 +18,14 @@ import {
   triggerPipeline,
 } from "@/lib/api/pipeline"
 import type { DatasetListItem, DatasetManifest } from "@/types/dataset"
-import type { PipelineConfig, PipelineRun, SfnStep, TrainingConfig, TrainingConfigField } from "@/types/pipeline"
-import { TRAINING_CONFIG_FIELDS } from "@/types/pipeline"
+import {
+  DEFAULT_TRAINING_CONFIG,
+  type PipelineConfig,
+  type PipelineRun,
+  type SfnStep,
+  type TrainingConfig,
+  type TrainingConfigField,
+} from "@/types/pipeline"
 import { cn } from "@/lib/utils"
 
 function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
@@ -84,7 +90,7 @@ export function PipelineView() {
   const [registry, setRegistry] = useState<DatasetListItem[]>([])
   const [sessionDataset, setSessionDataset] = useState<DatasetManifest | null>(null)
   const [selectedDatasetId, setSelectedDatasetId] = useState("")
-  const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>({})
+  const [trainingConfig, setTrainingConfig] = useState<TrainingConfig>(DEFAULT_TRAINING_CONFIG)
   const [baseModelId, setBaseModelId] = useState("absa-v2b")
   const [activeRun, setActiveRun] = useState<PipelineRun | null>(null)
   const [loading, setLoading] = useState(true)
@@ -108,18 +114,31 @@ export function PipelineView() {
     else setRefreshing(true)
     setError(null)
     try {
-      const [cfg, { runs: list }, defaults, datasets] = await Promise.all([
-        fetchPipelineConfig(),
-        fetchPipelineRuns(),
-        fetchDefaultTrainingConfig().catch(() => ({ training_config: {} })),
-        fetchDatasets().catch(() => []),
+      const [cfg, listRes, defaults, datasets] = await Promise.all([
+        fetchPipelineConfig().catch(() => null),
+        fetchPipelineRuns().catch(() => ({ runs: [] as PipelineRun[] })),
+        fetchDefaultTrainingConfig().catch(() => ({ training_config: {} as TrainingConfig })),
+        fetchDatasets().catch(() => [] as DatasetListItem[]),
       ])
-      setConfig(cfg)
-      setRuns(list)
+      const resolvedCfg: PipelineConfig = cfg ?? {
+        configured: datasets.length > 0,
+        demo_mode: false,
+        state_machine_arn: null,
+        artifacts_bucket: null,
+        stages: ["Train", "Evaluate", "Compare", "Register", "Promote", "Deploy"],
+        default_training_config: DEFAULT_TRAINING_CONFIG,
+        message: "Pipeline config tạm thời không tải được.",
+      }
+      setConfig(resolvedCfg)
+      setRuns(listRes.runs)
       setRegistry(datasets)
-      setTrainingConfig(defaults.training_config ?? cfg.default_training_config ?? {})
+      setTrainingConfig({
+        ...DEFAULT_TRAINING_CONFIG,
+        ...resolvedCfg.default_training_config,
+        ...defaults.training_config,
+      })
 
-      const running = list.find((r) => r.status === "RUNNING")
+      const running = listRes.runs.find((r) => r.status === "RUNNING")
       if (running) {
         try {
           const id = running.run_id ?? running.execution_arn
@@ -293,20 +312,11 @@ export function PipelineView() {
                 <option value="absa-v1">absa-v1</option>
               </select>
             </label>
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              {TRAINING_CONFIG_FIELDS.map((key) => (
-                <label key={key} className="text-xs">
-                  {key}
-                  <Input
-                    className="mt-1 font-mono text-xs"
-                    type="number"
-                    step="any"
-                    value={String(trainingConfig[key] ?? "")}
-                    onChange={(e) => updateConfig(key, e.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
+            <TrainingConfigFields
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              value={trainingConfig}
+              onChange={updateConfig}
+            />
           </CardContent>
         </Card>
       </div>

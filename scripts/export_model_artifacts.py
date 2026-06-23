@@ -100,7 +100,7 @@ def main() -> None:
     eval_report = _load_json_safe(args.eval_report)
     metrics = _best_metrics(args.train_log, eval_report)
 
-    model_name = run_config.get("model_name", "Fsoft-AIC/videberta-base")
+    model_name = run_config.get("model_name", "vinai/phobert-base")
     max_len    = int(run_config.get("max_len", 192))
     max_ops    = int(run_config.get("max_ops", 6))
 
@@ -185,7 +185,7 @@ def main() -> None:
         "architecture": {
             "heads": ["BIO tagging (CRF)", "span-level sentiment", "global sentiment"],
             "components": [
-                "ViDeBERTa encoder", "BiLSTM BIO tagger", "CRF decoder",
+                "PhoBERT encoder", "BiLSTM BIO tagger", "CRF decoder",
                 "attention-weighted span pooling", "cross-attention (seq→span)",
                 "span self-attention", "aspect embedding", "clause position embedding",
                 "polarity-aware global head",

@@ -100,6 +100,20 @@ export type ApprovalRecord = {
   cost_estimate?: { estimated_usd?: number; mode?: string }
 }
 
+/** Defaults aligned with apps/backend/lambda/pipeline/default_training_config.json and train_kaggle.py */
+export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
+  epochs: 50,
+  patience: 8,
+  batch_size: 24,
+  lr_backbone: 8e-6,
+  lr_heads: 3e-5,
+  lambda_bio: 1.1,
+  lambda_sent: 1.4,
+  lambda_global: 0.2,
+  contrast_sampler_weight: 1.2,
+  pred_span_ratio: 0.1,
+}
+
 /** Editable hyperparameter fields exposed in console/admin trigger forms. */
 export const TRAINING_CONFIG_FIELDS = [
   "epochs",
