@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { EmptyState } from "@/components/ui/empty-state"
+import { ActivePipelineRunPanel } from "@/components/active-pipeline-run-panel"
+import { PipelineStageStepper } from "@/components/pipeline-stage-stepper"
 import { TrainingConfigFields } from "@/components/training-config-fields"
 import { fetchDataset, fetchDatasets } from "@/lib/api/datasets"
 import {
@@ -22,46 +24,14 @@ import {
   DEFAULT_TRAINING_CONFIG,
   type PipelineConfig,
   type PipelineRun,
-  type SfnStep,
   type TrainingConfig,
   type TrainingConfigField,
 } from "@/types/pipeline"
 import { cn } from "@/lib/utils"
-
-function statusVariant(status: string): "default" | "secondary" | "destructive" | "outline" {
   if (status === "SUCCEEDED") return "default"
   if (status === "FAILED") return "destructive"
   if (status === "RUNNING") return "secondary"
   return "outline"
-}
-
-function SfnStepper({ steps, currentState }: { steps: SfnStep[]; currentState?: string | null }) {
-  if (steps.length === 0) return null
-  return (
-    <div className="space-y-1">
-      {currentState ? (
-        <p className="mb-2 text-xs text-muted-foreground">
-          Bước hiện tại: <span className="font-mono text-primary">{currentState}</span>
-        </p>
-      ) : null}
-      <ol className="flex flex-wrap gap-2">
-        {steps.map((step) => (
-          <li
-            key={step.id}
-            className={cn(
-              "rounded-md border px-2 py-1 text-[11px] font-medium",
-              step.status === "completed" && "border-chart-2/40 bg-chart-2/10 text-chart-2",
-              step.status === "running" && "border-primary/50 bg-primary/10 text-primary",
-              step.status === "failed" && "border-destructive/50 bg-destructive/10 text-destructive",
-              step.status === "pending" && "border-border/60 text-muted-foreground"
-            )}
-          >
-            {step.name}
-          </li>
-        ))}
-      </ol>
-    </div>
-  )
 }
 
 function RunCard({ run }: { run: PipelineRun }) {
@@ -78,7 +48,7 @@ function RunCard({ run }: { run: PipelineRun }) {
         </div>
       </CardHeader>
       <CardContent>
-        <SfnStepper steps={steps} currentState={run.current_state} />
+        <PipelineStageStepper steps={steps} currentState={run.current_state} compact />
       </CardContent>
     </Card>
   )
@@ -197,8 +167,17 @@ export function PipelineView() {
         training_config: trainingConfig,
         requested_by: "admin-ui",
       })
-      setActiveRun(run)
-      setRuns((prev) => [run, ...prev.filter((r) => r.execution_arn !== run.execution_arn)])
+      const runId = run.run_id ?? run.name
+      let detail = run
+      if (runId) {
+        try {
+          detail = await fetchPipelineRun(runId)
+        } catch {
+          detail = run
+        }
+      }
+      setActiveRun(detail)
+      setRuns((prev) => [detail, ...prev.filter((r) => r.execution_arn !== detail.execution_arn)])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to start pipeline")
     } finally {
@@ -246,15 +225,17 @@ export function PipelineView() {
         </div>
       ) : null}
 
-      {activeRun?.status === "RUNNING" ? (
-        <Card className="border-primary/30 bg-primary/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">Đang chạy: {activeRun.name}</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SfnStepper steps={activeRun.sfn_steps ?? []} currentState={activeRun.current_state} />
-          </CardContent>
-        </Card>
+      {activeRun && ["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS", "TRAINING_COMPLETED", "EVALUATED", "COMPARED"].includes(activeRun.status.toUpperCase()) ? (
+        <ActivePipelineRunPanel
+          run={activeRun}
+          onUpdate={(detail) => {
+            setActiveRun(detail)
+            setRuns((prev) =>
+              prev.map((r) => ((r.run_id ?? r.execution_arn) === (detail.run_id ?? detail.execution_arn) ? detail : r)),
+            )
+          }}
+          onCancelled={() => setActiveRun(null)}
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3">

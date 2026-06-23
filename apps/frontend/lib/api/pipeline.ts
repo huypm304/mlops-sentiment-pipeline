@@ -17,6 +17,16 @@ export async function fetchPipelineRun(executionArn: string): Promise<PipelineRu
   return apiClient<PipelineRun>(`/pipeline/runs/${encodeURIComponent(executionArn)}`)
 }
 
+export async function cancelPipelineRun(
+  runId: string,
+  cancelledBy = "console-ui",
+): Promise<{ run_id: string; status: string }> {
+  return apiClient(`/pipeline/runs/${encodeURIComponent(runId)}/cancel`, {
+    method: "POST",
+    body: JSON.stringify({ cancelled_by: cancelledBy }),
+  })
+}
+
 export async function triggerPipeline(body: {
   dataset_id: string
   requested_by?: string

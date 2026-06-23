@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, PlayCircle, Plus } from "lucide-react"
 
@@ -43,6 +44,7 @@ const FALLBACK_PIPELINE_CONFIG: PipelineConfig = {
 }
 
 export function NewTrainingRunSheet({ onStarted }: Props) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -142,10 +144,15 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
         code_version: run.code_version,
         training_source_uri: run.training_source_uri,
         training_config: run.training_config ?? trainingConfig,
-        stages: run.stages ?? [],
+        sfn_steps: run.sfn_steps,
+        stages: run.stages ?? run.sfn_steps ?? [],
+        current_state: run.current_state ?? "StartTraining",
       }
       onStarted?.(normalized)
       setOpen(false)
+      if (normalized.run_id) {
+        router.push(appPath(`/training-runs/${encodeURIComponent(normalized.run_id)}`))
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không khởi động được pipeline.")
     } finally {

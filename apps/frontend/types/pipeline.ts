@@ -73,6 +73,7 @@ export type PipelineRun = {
   demo?: boolean
   current_stage?: string | null
   current_state?: string | null
+  sfn_status?: string | null
   message?: string
   stages: PipelineStage[]
   sfn_steps?: SfnStep[]

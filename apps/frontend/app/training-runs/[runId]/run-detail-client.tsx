@@ -2,12 +2,14 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Square } from "lucide-react"
 
+import { PipelineStageStepper, isActiveRunStatus } from "@/components/pipeline-stage-stepper"
 import { ConsoleShell } from "@/components/layout/console-shell"
 import { SectionHeader } from "@/components/console/section-header"
 import { StatusBadge } from "@/components/console/status-badge"
-import { fetchPipelineRun } from "@/lib/api/pipeline"
+import { Button } from "@/components/ui/button"
+import { cancelPipelineRun, fetchPipelineRun } from "@/lib/api/pipeline"
 import { formatF1 } from "@/lib/console/format"
 import type { PipelineRun } from "@/types/pipeline"
 
@@ -15,10 +17,17 @@ const tabs = ["Overview", "Parameters", "Metrics", "Artifacts", "Comparison", "D
 
 type RunTab = (typeof tabs)[number]
 
-const ACTIVE_STATUSES = new Set(["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS", "EVALUATED", "COMPARED"])
+const ACTIVE_STATUSES = new Set([
+  "RUNNING",
+  "TRAINING",
+  "TRAINING_IN_PROGRESS",
+  "TRAINING_COMPLETED",
+  "EVALUATED",
+  "COMPARED",
+])
 
 function isActiveStatus(status: string) {
-  return ACTIVE_STATUSES.has(status.toUpperCase())
+  return isActiveRunStatus(status) || ACTIVE_STATUSES.has(status.toUpperCase())
 }
 
 export function RunDetailClient({ runId }: { runId: string }) {
@@ -26,6 +35,7 @@ export function RunDetailClient({ runId }: { runId: string }) {
   const [run, setRun] = useState<PipelineRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [cancelling, setCancelling] = useState(false)
 
   const loadRun = useCallback(async () => {
     try {
@@ -46,9 +56,22 @@ export function RunDetailClient({ runId }: { runId: string }) {
 
   useEffect(() => {
     if (!run || !isActiveStatus(run.status)) return
-    const id = setInterval(loadRun, 5000)
+    const id = setInterval(loadRun, 3000)
     return () => clearInterval(id)
   }, [run?.status, loadRun, run])
+
+  const onCancel = async () => {
+    setCancelling(true)
+    setError(null)
+    try {
+      await cancelPipelineRun(runId)
+      await loadRun()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Không hủy được pipeline.")
+    } finally {
+      setCancelling(false)
+    }
+  }
 
   const tabBody = useMemo(() => {
     if (!run) return null
@@ -157,12 +180,37 @@ export function RunDetailClient({ runId }: { runId: string }) {
           <p className="text-sm text-muted-foreground">Run not found.</p>
         ) : (
           <div className="rounded-md border border-border bg-card">
-            {isActiveStatus(run.status) ? (
-              <div className="flex items-center gap-2 border-b border-border px-4 py-2 text-xs text-muted-foreground">
-                <Loader2 className="size-3 animate-spin" />
-                Pipeline running — auto-refresh every 5s
+            <div className="space-y-3 border-b border-border px-4 py-3">
+              {(run.sfn_steps?.length ?? run.stages?.length ?? 0) > 0 ? (
+                <PipelineStageStepper
+                  steps={run.sfn_steps ?? run.stages ?? []}
+                  currentState={run.current_state}
+                />
+              ) : null}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {isActiveStatus(run.status) ? (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <Loader2 className="size-3 animate-spin" />
+                    Pipeline running — auto-refresh every 3s
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Pipeline stages</span>
+                )}
+                {isActiveStatus(run.status) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-destructive hover:text-destructive"
+                    disabled={cancelling}
+                    onClick={onCancel}
+                  >
+                    {cancelling ? <Loader2 className="size-3.5 animate-spin" /> : <Square className="size-3.5" />}
+                    Hủy training
+                  </Button>
+                ) : null}
               </div>
-            ) : null}
+            </div>
             <div className="flex flex-wrap gap-2 border-b border-border px-4 py-3">
               {tabs.map((tab) => (
                 <button

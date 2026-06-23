@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Loader2 } from "lucide-react"
 
+import { ActivePipelineRunPanel } from "@/components/active-pipeline-run-panel"
+import { isActiveRunStatus } from "@/components/pipeline-stage-stepper"
 import { ConsoleShell } from "@/components/layout/console-shell"
 import { NewTrainingRunSheet } from "@/components/console/new-training-run-sheet"
 import {
@@ -43,6 +45,7 @@ function runDataset(run: PipelineRun): string {
 
 export default function TrainingRunsPage() {
   const [runs, setRuns] = useState<PipelineRun[]>([])
+  const [activeRun, setActiveRun] = useState<PipelineRun | null>(null)
   const [loading, setLoading] = useState(true)
   const [notice, setNotice] = useState<string | null>(null)
   const [search, setSearch] = useState("")
@@ -74,13 +77,19 @@ export default function TrainingRunsPage() {
 
   const hasActiveRun = useMemo(
     () =>
-      runs.some((r) =>
-        ["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS", "EVALUATED", "COMPARED"].includes(
-          r.status.toUpperCase(),
-        ),
-      ),
-    [runs],
+      runs.some((r) => isActiveRunStatus(r.status)) ||
+      (activeRun != null && isActiveRunStatus(activeRun.status)),
+    [runs, activeRun],
   )
+
+  useEffect(() => {
+    const fromList = runs.find((r) => isActiveRunStatus(r.status))
+    if (fromList) {
+      setActiveRun((prev) => (prev?.run_id === fromList.run_id ? prev : fromList))
+    } else if (activeRun && !isActiveRunStatus(activeRun.status)) {
+      setActiveRun(null)
+    }
+  }, [runs, activeRun])
 
   useEffect(() => {
     if (!hasActiveRun) return
@@ -88,17 +97,15 @@ export default function TrainingRunsPage() {
       fetchPipelineRuns(25)
         .then((res) => setRuns(res.runs))
         .catch(() => undefined)
-    }, 8000)
+    }, 3000)
     return () => clearInterval(id)
   }, [hasActiveRun])
 
   const onRunStarted = useCallback(
     (run: PipelineRun) => {
+      setActiveRun(run)
       setRuns((prev) => [run, ...prev.filter((r) => r.execution_arn !== run.execution_arn)])
       setNotice(null)
-      fetchPipelineRuns(25)
-        .then((res) => setRuns(res.runs))
-        .catch(() => undefined)
     },
     [],
   )
@@ -138,6 +145,19 @@ export default function TrainingRunsPage() {
           metadata={<PlatformMetadataLine />}
           actions={<NewTrainingRunSheet onStarted={onRunStarted} />}
         />
+
+        {activeRun && isActiveRunStatus(activeRun.status) ? (
+          <ActivePipelineRunPanel
+            run={activeRun}
+            onUpdate={(detail) => {
+              setActiveRun(detail)
+              setRuns((prev) =>
+                prev.map((r) => ((r.run_id ?? r.name) === (detail.run_id ?? detail.name) ? detail : r)),
+              )
+            }}
+            onCancelled={() => setActiveRun(null)}
+          />
+        ) : null}
 
         {loading ? (
           <div className="flex items-center gap-2 py-8 text-[13px] text-muted-foreground">

@@ -11,7 +11,14 @@ import boto3
 
 from actions import decide_approval, dispatch_action
 from lineage import build_run_lineage
-from storage import get_approval_request, get_training_run, list_training_runs, now_iso, put_training_run
+from storage import (
+    get_approval_request,
+    get_training_run,
+    list_training_runs,
+    now_iso,
+    put_training_run,
+)
+from sfn_progress import cancel_training_run, enrich_run_with_sfn_progress, initial_sfn_steps
 from training_config import DEFAULT_TRAINING_CONFIG, merge_training_config
 
 _STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN", "")
@@ -94,6 +101,9 @@ def _format_run_row(row: dict[str, Any]) -> dict[str, Any]:
         "approval_id": row.get("approval_id"),
         "training_config": row.get("training_config"),
         "stages": row.get("stages") or [],
+        "sfn_steps": row.get("sfn_steps") or [],
+        "current_state": row.get("current_state"),
+        "sfn_status": row.get("sfn_status"),
         "evaluation": row.get("evaluation"),
         "comparison": row.get("comparison"),
         "metrics": row.get("metrics"),
@@ -101,6 +111,53 @@ def _format_run_row(row: dict[str, Any]) -> dict[str, Any]:
         "code_version": row.get("code_version"),
         "training_source_uri": row.get("training_source_uri"),
         "dataset_s3_uri": row.get("dataset_s3_uri"),
+    }
+
+
+def _resolve_run(run_id: str) -> dict[str, Any] | None:
+    run = get_training_run(run_id)
+    if run is not None:
+        return run
+    for row in list_training_runs(limit=50):
+        if row.get("run_id") == run_id:
+            return row
+        arn = row.get("step_function_execution_arn") or ""
+        if arn and (arn == run_id or run_id in arn):
+            return row
+    return None
+
+
+def _format_run_detail(run: dict[str, Any]) -> dict[str, Any]:
+    enriched = enrich_run_with_sfn_progress(run)
+    payload = _format_run_row(enriched) | {
+        k: enriched[k]
+        for k in (
+            "evaluation",
+            "comparison",
+            "metrics",
+            "deploy",
+            "production_uri",
+            "registry_status",
+            "code_version",
+            "training_source_uri",
+            "dataset_s3_uri",
+            "sfn_steps",
+            "current_state",
+            "sfn_status",
+        )
+        if k in enriched
+    }
+    return payload
+
+
+def _is_active_run(status: str) -> bool:
+    return status.upper() in {
+        "RUNNING",
+        "TRAINING",
+        "TRAINING_IN_PROGRESS",
+        "TRAINING_COMPLETED",
+        "EVALUATED",
+        "COMPARED",
     }
 
 
@@ -149,7 +206,7 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                 "demo_mode": not configured,
                 "state_machine_arn": _STATE_MACHINE_ARN or None,
                 "artifacts_bucket": _BUCKET or None,
-                "stages": ["Train", "Evaluate", "Compare", "Register", "Promote", "Deploy"],
+                "stages": ["Train", "Evaluate", "Compare", "Register", "Smoke", "Promote", "Deploy", "Done"],
                 "default_training_config": DEFAULT_TRAINING_CONFIG,
                 "message": (
                     "Step Functions connected — chọn dataset, config, trigger."
@@ -200,6 +257,7 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                     "started_at": result["startDate"].isoformat(),
                 }
             )
+            steps = initial_sfn_steps()
             return _response(
                 200,
                 {
@@ -217,6 +275,9 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
                     "code_version": lineage["code_version"],
                     "training_source_uri": lineage["training_source_uri"],
                     "dataset_s3_uri": lineage["dataset_s3_uri"],
+                    "sfn_steps": steps,
+                    "stages": [{"name": s["name"], "status": s["status"]} for s in steps],
+                    "current_state": "StartTraining",
                 },
             )
         except json.JSONDecodeError:
@@ -250,41 +311,41 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         record.pop("task_token", None)
         return _response(200, record)
 
-    if "/pipeline/runs/" in path and method == "GET":
-        run_id = path.split("/pipeline/runs/")[1].strip("/").split("?")[0]
-        run = get_training_run(run_id)
-        if run is None:
-            for row in list_training_runs(limit=50):
-                if row.get("run_id") == run_id:
-                    run = row
-                    break
-                arn = row.get("step_function_execution_arn") or ""
-                if arn and (arn == run_id or run_id in arn):
-                    run = row
-                    break
+    if "/pipeline/runs/" in path and path.endswith("/cancel") and method == "POST":
+        run_id = path.split("/pipeline/runs/")[1].replace("/cancel", "").strip("/")
+        run = _resolve_run(run_id)
         if run is None:
             return _response(404, {"detail": "Run not found"})
-        return _response(200, _format_run_row(run) | {
-            k: run[k]
-            for k in (
-                "evaluation",
-                "comparison",
-                "metrics",
-                "deploy",
-                "production_uri",
-                "registry_status",
-                "code_version",
-                "training_source_uri",
-                "dataset_s3_uri",
+        try:
+            payload = _parse_body(event)
+            result = cancel_training_run(
+                run,
+                cancelled_by=str(payload.get("cancelled_by") or "console-ui"),
             )
-            if k in run
-        })
+            return _response(200, result)
+        except ValueError as exc:
+            return _response(400, {"detail": str(exc)})
+        except Exception as exc:  # noqa: BLE001
+            return _response(500, {"detail": str(exc)})
+
+    if "/pipeline/runs/" in path and method == "GET":
+        run_id = path.split("/pipeline/runs/")[1].strip("/").split("?")[0]
+        run = _resolve_run(run_id)
+        if run is None:
+            return _response(404, {"detail": "Run not found"})
+        return _response(200, _format_run_detail(run))
 
     if path.endswith("/pipeline/runs") and method == "GET":
         try:
             runs = list_training_runs(limit=15)
             if runs:
-                return _response(200, {"runs": [_format_run_row(row) for row in runs]})
+                formatted = []
+                for row in runs:
+                    if _is_active_run(str(row.get("status", ""))):
+                        formatted.append(_format_run_row(enrich_run_with_sfn_progress(row)))
+                    else:
+                        formatted.append(_format_run_row(row))
+                return _response(200, {"runs": formatted})
             return _response(200, {"runs": _list_sfn_runs(limit=15)})
         except Exception as exc:  # noqa: BLE001
             return _response(500, {"detail": str(exc)})

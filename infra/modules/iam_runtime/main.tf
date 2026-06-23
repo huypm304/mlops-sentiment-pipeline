@@ -72,6 +72,8 @@ data "aws_iam_policy_document" "lambda_execution" {
       "states:StartExecution",
       "states:DescribeExecution",
       "states:ListExecutions",
+      "states:GetExecutionHistory",
+      "states:StopExecution",
       "states:SendTaskSuccess",
       "states:SendTaskFailure",
     ]

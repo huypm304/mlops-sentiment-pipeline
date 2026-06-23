@@ -58,6 +58,11 @@ locals {
       invoke_arn    = var.pipeline_lambda_invoke_arn
       function_name = var.pipeline_lambda_function_name
     }
+    pipeline_run_cancel = {
+      route_key     = "POST /pipeline/runs/{run_id}/cancel"
+      invoke_arn    = var.pipeline_lambda_invoke_arn
+      function_name = var.pipeline_lambda_function_name
+    }
     pipeline_runs_list = {
       route_key     = "GET /pipeline/runs"
       invoke_arn    = var.pipeline_lambda_invoke_arn
