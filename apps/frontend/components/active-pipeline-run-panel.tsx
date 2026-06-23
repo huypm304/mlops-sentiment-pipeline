@@ -7,7 +7,7 @@ import { Loader2, Square } from "lucide-react"
 import { PipelineStageStepper, isActiveRunStatus } from "@/components/pipeline-stage-stepper"
 import { Button } from "@/components/ui/button"
 import { cancelPipelineRun, fetchPipelineRun } from "@/lib/api/pipeline"
-import { appPath } from "@/lib/console/paths"
+import { trainingRunDetailPath } from "@/lib/console/paths"
 import type { PipelineRun } from "@/types/pipeline"
 
 type Props = {
@@ -90,10 +90,7 @@ export function ActivePipelineRunPanel({ run: initialRun, onUpdate, onCancelled,
               Hủy
             </Button>
           ) : null}
-          <Link
-            href={appPath(`/training-runs/${encodeURIComponent(runId)}`)}
-            className="text-xs text-link hover:underline"
-          >
+          <Link href={trainingRunDetailPath(runId)} className="text-xs text-link hover:underline">
             Chi tiết
           </Link>
         </div>

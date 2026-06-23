@@ -22,6 +22,7 @@ import {
   RunStatusCell,
 } from "@/components/console/registry"
 import { fetchPipelineRuns } from "@/lib/api/pipeline"
+import { trainingRunDetailPath } from "@/lib/console/paths"
 import { formatDuration, formatF1 } from "@/lib/console/format"
 import type { PipelineRun } from "@/types/pipeline"
 
@@ -242,7 +243,7 @@ export default function TrainingRunsPage() {
                         <RegistryTd>
                           <RunNameCell
                             name={runName}
-                            href={`/training-runs/${encodeURIComponent(run.run_id ?? run.name)}`}
+                            href={trainingRunDetailPath(run.run_id ?? run.name)}
                             status={run.status}
                           />
                         </RegistryTd>

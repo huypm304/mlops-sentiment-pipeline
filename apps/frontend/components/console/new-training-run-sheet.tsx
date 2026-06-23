@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/sheet"
 import { fetchDatasets } from "@/lib/api/datasets"
 import { fetchDefaultTrainingConfig, fetchPipelineConfig, triggerPipeline } from "@/lib/api/pipeline"
-import { appPath } from "@/lib/console/paths"
+import { appPath, trainingRunDetailPath } from "@/lib/console/paths"
 import { TrainingConfigFields } from "@/components/training-config-fields"
 import type { DatasetListItem } from "@/types/dataset"
 import {
@@ -151,7 +151,7 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
       onStarted?.(normalized)
       setOpen(false)
       if (normalized.run_id) {
-        router.push(appPath(`/training-runs/${encodeURIComponent(normalized.run_id)}`))
+        router.push(trainingRunDetailPath(normalized.run_id))
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Không khởi động được pipeline.")

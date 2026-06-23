@@ -27,7 +27,7 @@ import { fetchModels } from "@/lib/api/metrics"
 import { fetchHealth, fetchMonitoring } from "@/lib/api/runtime"
 import { fetchPipelineRuns } from "@/lib/api/pipeline"
 import { datasetAuditLabel } from "@/lib/console/format"
-import { datasetDetailPath, modelDetailPath } from "@/lib/console/paths"
+import { datasetDetailPath, modelDetailPath, trainingRunDetailPath } from "@/lib/console/paths"
 import type { ModelSummary } from "@/lib/constants/metrics"
 import type { DatasetListItem } from "@/types/dataset"
 import type { PipelineRun } from "@/types/pipeline"
@@ -182,7 +182,7 @@ export default function HomePage() {
                     <RegistryTd>
                       <RunNameCell
                         name={run.run_id ?? run.name}
-                        href={`/training-runs/${encodeURIComponent(run.execution_arn)}`}
+                        href={trainingRunDetailPath(run.run_id ?? run.name)}
                         status={run.status}
                       />
                     </RegistryTd>
