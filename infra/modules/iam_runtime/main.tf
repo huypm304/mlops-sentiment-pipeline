@@ -90,6 +90,8 @@ data "aws_iam_policy_document" "lambda_execution" {
       "sagemaker:CreateTrainingJob",
       "sagemaker:DescribeTrainingJob",
       "sagemaker:StopTrainingJob",
+      "sagemaker:AddTags",
+      "sagemaker:ListTags",
     ]
     resources = ["*"]
   }
@@ -143,6 +145,18 @@ data "aws_iam_policy_document" "lambda_pass_sagemaker_role" {
       variable = "iam:PassedToService"
       values   = ["sagemaker.amazonaws.com"]
     }
+  }
+
+  statement {
+    sid    = "TagSageMakerTrainingJobs"
+    effect = "Allow"
+    actions = [
+      "sagemaker:AddTags",
+      "sagemaker:ListTags",
+    ]
+    resources = [
+      "arn:aws:sagemaker:${var.aws_region}:${data.aws_caller_identity.current.account_id}:training-job/${local.name_prefix}-*",
+    ]
   }
 }
 
