@@ -24,18 +24,27 @@ PIPELINE_SFN_STAGES: list[tuple[str, str]] = [
     ("NotifyResult", "Done"),
 ]
 
-_TERMINAL_SFN_STATES = frozenset(
+_ACTIVE_RUN_STATUSES = frozenset(
     {
-        "PipelineSucceeded",
-        "PipelineRejected",
-        "PipelineFailed",
-        "NotifyResult",
-        "NotifyRejected",
-        "NotifyFailure",
+        "RUNNING",
+        "TRAINING",
+        "TRAINING_IN_PROGRESS",
+        "TRAINING_COMPLETED",
+        "EVALUATED",
+        "COMPARED",
     }
 )
 
 _CANCELLABLE_SFN = frozenset({"RUNNING", "PENDING_REDRIVE"})
+
+_SFN_LIST_STATUSES = (
+    "RUNNING",
+    "PENDING_REDRIVE",
+    "FAILED",
+    "ABORTED",
+    "TIMED_OUT",
+    "SUCCEEDED",
+)
 
 
 def _execution_arn_from_run(row: dict[str, Any]) -> str:
@@ -48,7 +57,7 @@ def _find_execution_arn_by_run_id(run_id: str) -> str:
     name = f"retrain-{run_id}"[:80]
     try:
         paginator = _sfn.get_paginator("list_executions")
-        for status in ("RUNNING", "PENDING_REDRIVE"):
+        for status in _SFN_LIST_STATUSES:
             for page in paginator.paginate(
                 stateMachineArn=_STATE_MACHINE_ARN,
                 statusFilter=status,
@@ -66,6 +75,21 @@ def _resolve_execution_arn(row: dict[str, Any]) -> str:
     if arn:
         return arn
     return _find_execution_arn_by_run_id(str(row.get("run_id") or ""))
+
+
+def _persist_run_updates(row: dict[str, Any], updates: dict[str, Any]) -> None:
+    run_id = str(row.get("run_id") or "")
+    created_at = str(row.get("created_at") or "")
+    if run_id and created_at:
+        update_training_run(run_id, created_at, updates)
+
+
+def _status_from_sfn(sfn_status: str) -> str | None:
+    if sfn_status in {"FAILED", "TIMED_OUT"}:
+        return "FAILED"
+    if sfn_status == "ABORTED":
+        return "CANCELLED"
+    return None
 
 
 def _parse_history(execution_arn: str) -> tuple[set[str], str | None, str]:
@@ -93,8 +117,6 @@ def _parse_history(execution_arn: str) -> tuple[set[str], str | None, str]:
         for sfn_id, _ in PIPELINE_SFN_STAGES:
             completed.add(sfn_id)
         current = None
-    elif sfn_status in ("ABORTED", "TIMED_OUT"):
-        current = current or None
 
     return completed, current, sfn_status
 
@@ -157,12 +179,11 @@ def _state_index(sfn_id: str) -> int:
 
 
 def initial_sfn_steps() -> list[dict[str, str]]:
-    steps = build_sfn_steps(
+    return build_sfn_steps(
         completed_states=set(),
         current_state="StartTraining",
         sfn_status="RUNNING",
     )
-    return steps
 
 
 def enrich_run_with_sfn_progress(row: dict[str, Any]) -> dict[str, Any]:
@@ -171,7 +192,10 @@ def enrich_run_with_sfn_progress(row: dict[str, Any]) -> dict[str, Any]:
         return row
 
     completed, current, sfn_status = _parse_history(execution_arn)
-    failed = sfn_status == "FAILED" or str(row.get("status", "")).upper() in ("FAILED", "REJECTED")
+    failed = sfn_status in {"FAILED", "TIMED_OUT"} or str(row.get("status", "")).upper() in (
+        "FAILED",
+        "REJECTED",
+    )
     steps = build_sfn_steps(
         completed_states=completed,
         current_state=current,
@@ -180,29 +204,77 @@ def enrich_run_with_sfn_progress(row: dict[str, Any]) -> dict[str, Any]:
     )
 
     merged = dict(row)
+    merged["step_function_execution_arn"] = execution_arn
+    merged["execution_arn"] = execution_arn
     merged["sfn_steps"] = steps
     merged["stages"] = [{"name": s["name"], "status": s["status"]} for s in steps]
     merged["current_state"] = current
     merged["sfn_status"] = sfn_status
 
-    if sfn_status == "SUCCEEDED" and str(row.get("status", "")).upper() == "RUNNING":
-        merged["status"] = row.get("status")
-    elif sfn_status == "ABORTED":
+    row_status = str(row.get("status", "")).upper()
+    if sfn_status == "ABORTED":
         merged["status"] = "CANCELLED"
-    elif sfn_status == "FAILED":
+    elif sfn_status in {"FAILED", "TIMED_OUT"}:
         merged["status"] = "FAILED"
+    elif sfn_status == "SUCCEEDED" and row_status in _ACTIVE_RUN_STATUSES:
+        merged["status"] = row.get("status")
+
+    persist: dict[str, Any] = {"step_function_execution_arn": execution_arn}
+    if str(merged.get("status", "")).upper() != row_status and merged.get("status"):
+        persist["status"] = merged["status"]
+        if str(merged["status"]).upper() in {"FAILED", "CANCELLED", "COMPLETED", "REJECTED"}:
+            persist["finished_at"] = now_iso()
+    if len(persist) > 1 or not _execution_arn_from_run(row):
+        _persist_run_updates(row, persist)
 
     return merged
 
 
 def cancel_training_run(row: dict[str, Any], *, cancelled_by: str = "ui") -> dict[str, Any]:
+    run_id = str(row.get("run_id") or "")
     execution_arn = _resolve_execution_arn(row)
+
     if not execution_arn:
-        raise ValueError("Run has no Step Functions execution ARN")
+        _persist_run_updates(
+            row,
+            {
+                "status": "CANCELLED",
+                "finished_at": now_iso(),
+                "cancelled_by": cancelled_by,
+                "message": "Marked cancelled locally (no Step Functions execution ARN found).",
+            },
+        )
+        return {
+            "run_id": run_id,
+            "status": "CANCELLED",
+            "execution_arn": "",
+            "message": "Run cleared in registry; no active Step Functions execution was found.",
+        }
 
     desc = _sfn.describe_execution(executionArn=execution_arn)
     sfn_status = str(desc.get("status", ""))
+
     if sfn_status not in _CANCELLABLE_SFN:
+        synced = _status_from_sfn(sfn_status)
+        if synced:
+            _persist_run_updates(
+                row,
+                {
+                    "status": synced,
+                    "finished_at": now_iso(),
+                    "step_function_execution_arn": execution_arn,
+                    "message": f"Step Functions already {sfn_status}; synced registry status.",
+                },
+            )
+            enriched = enrich_run_with_sfn_progress({**row, "status": synced, "step_function_execution_arn": execution_arn})
+            return {
+                "run_id": run_id,
+                "status": synced,
+                "execution_arn": execution_arn,
+                "sfn_steps": enriched.get("sfn_steps", []),
+                "current_state": enriched.get("current_state"),
+                "message": f"Execution already {sfn_status}; registry updated.",
+            }
         raise ValueError(f"Cannot cancel run with Step Functions status: {sfn_status}")
 
     _sfn.stop_execution(
@@ -211,19 +283,15 @@ def cancel_training_run(row: dict[str, Any], *, cancelled_by: str = "ui") -> dic
         cause=f"Cancelled by {cancelled_by}",
     )
 
-    created_at = str(row.get("created_at") or "")
-    run_id = str(row.get("run_id") or "")
-    if run_id and created_at:
-        update_training_run(
-            run_id,
-            created_at,
-            {
-                "status": "CANCELLED",
-                "finished_at": now_iso(),
-                "cancelled_by": cancelled_by,
-                "step_function_execution_arn": execution_arn,
-            },
-        )
+    _persist_run_updates(
+        row,
+        {
+            "status": "CANCELLED",
+            "finished_at": now_iso(),
+            "cancelled_by": cancelled_by,
+            "step_function_execution_arn": execution_arn,
+        },
+    )
 
     enriched = enrich_run_with_sfn_progress(
         {

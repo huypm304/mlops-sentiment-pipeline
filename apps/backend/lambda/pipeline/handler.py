@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import uuid
+from decimal import Decimal
 from typing import Any
 
 import boto3
@@ -29,11 +31,20 @@ _ENABLE_SAGEMAKER_TRAINING = os.getenv("ENABLE_SAGEMAKER_TRAINING", "false").low
 _sfn = boto3.client("stepfunctions", region_name=_AWS_REGION)
 
 
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, float):
+        if math.isnan(value) or math.isinf(value):
+            return None
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _response(status: int, body: dict[str, Any]) -> dict[str, Any]:
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body, ensure_ascii=False),
+        "body": json.dumps(body, ensure_ascii=False, default=_json_default),
     }
 
 
@@ -341,12 +352,7 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
         try:
             runs = list_training_runs(limit=15)
             if runs:
-                formatted = []
-                for row in runs:
-                    if _is_active_run(str(row.get("status", ""))):
-                        formatted.append(_format_run_row(enrich_run_with_sfn_progress(row)))
-                    else:
-                        formatted.append(_format_run_row(row))
+                formatted = [_format_run_row(enrich_run_with_sfn_progress(row)) for row in runs]
                 return _response(200, {"runs": formatted})
             return _response(200, {"runs": _list_sfn_runs(limit=15)})
         except Exception as exc:  # noqa: BLE001
