@@ -57,4 +57,6 @@ def predict_fn(text: str, bundle: dict[str, Any]) -> dict[str, Any]:
 def output_fn(prediction: dict[str, Any], accept: str) -> tuple[str, str]:
     if accept not in ("application/json", "application/json; charset=utf-8"):
         raise ValueError(f"Unsupported accept type: {accept}")
-    return json.dumps(prediction, ensure_ascii=False), "application/json"
+    from ml.inference.postprocess import _sanitize_json_value
+
+    return json.dumps(_sanitize_json_value(prediction), ensure_ascii=False), "application/json"

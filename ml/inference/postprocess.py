@@ -15,6 +15,31 @@ from .labels import SENT_ID2LABEL
 
 _LOG3 = math.log(3)
 
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(parsed) or math.isinf(parsed):
+        return default
+    return parsed
+
+
+def _max_prob(probs: list[float]) -> float:
+    clean = [_safe_float(p) for p in probs]
+    return max(clean) if clean else 0.0
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_json_value(item) for item in value]
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return 0.0
+    return value
+
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
@@ -244,8 +269,8 @@ def postprocess_predictions(
 def _public_opinion(op: dict[str, Any], cfg: PostprocessConfig, text: str) -> dict[str, Any]:
     probs = op.get("_probs") or [0.0, 0.0, 1.0]
     sent_id = int(op.get("_sent_id", max(range(3), key=lambda i: probs[i])))
-    conf = float(probs[sent_id])
-    raw_conf = float(op.get("raw_confidence", op.get("confidence", conf)))
+    conf = _safe_float(probs[sent_id])
+    raw_conf = _safe_float(op.get("raw_confidence", op.get("confidence", conf)))
     reasons = _review_reasons(op, cfg, text)
     return {
         "target": op.get("target", ""),
@@ -281,12 +306,12 @@ def _build_response(
         "opinions": public_ops,
         "global_sentiment": SENT_ID2LABEL[glob_id],
         "global_sentiment_id": glob_id,
-        "global_confidence": round(float(glob_conf), 4),
-        "global_raw_confidence": round(float(max(glob_probs)) if glob_probs else 0.0, 4),
+        "global_confidence": round(_safe_float(glob_conf), 4),
+        "global_raw_confidence": round(_max_prob(glob_probs), 4),
         "global_probs": {
-            "NEG": round(float(glob_probs[0]) if len(glob_probs) > 0 else 0.0, 4),
-            "POS": round(float(glob_probs[1]) if len(glob_probs) > 1 else 0.0, 4),
-            "NEU": round(float(glob_probs[2]) if len(glob_probs) > 2 else 0.0, 4),
+            "NEG": round(_safe_float(glob_probs[0] if len(glob_probs) > 0 else 0.0), 4),
+            "POS": round(_safe_float(glob_probs[1] if len(glob_probs) > 1 else 0.0), 4),
+            "NEU": round(_safe_float(glob_probs[2] if len(glob_probs) > 2 else 0.0), 4),
         },
         "model_version": model_version,
         "need_review": any_need_review,

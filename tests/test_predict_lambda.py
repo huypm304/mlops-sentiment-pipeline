@@ -102,3 +102,27 @@ def test_predict_returns_503_when_sagemaker_invoke_fails():
     assert response["statusCode"] == 503
     body = json.loads(response["body"])
     assert "endpoint down" in body["detail"]
+
+
+def test_predict_sanitizes_nan_for_strict_json():
+    handler._ENABLE_SAGEMAKER = True
+    handler._ENDPOINT = "absa-mlops-demo-endpoint"
+    sm_payload = {
+        "opinions": [],
+        "global_sentiment": "NEG",
+        "global_confidence": 0.3333,
+        "global_raw_confidence": float("nan"),
+        "model_version": "absa-v2b",
+        "latency_ms": 120,
+    }
+
+    with patch.object(handler, "_invoke_sagemaker", return_value=sm_payload):
+        response = handler.lambda_handler(
+            {"rawPath": "/predict", "body": json.dumps({"text": "dòng hồ đẹp"})},
+            None,
+        )
+
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["global_raw_confidence"] == 0.0
+    assert "NaN" not in response["body"]

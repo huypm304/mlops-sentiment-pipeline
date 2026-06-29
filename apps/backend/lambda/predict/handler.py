@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from typing import Any
@@ -41,11 +42,31 @@ def _get_sagemaker_client() -> Any:
     return _sagemaker_client
 
 
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    if math.isnan(parsed) or math.isinf(parsed):
+        return default
+    return parsed
+
+
+def _sanitize_json_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {key: _sanitize_json_value(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_sanitize_json_value(item) for item in value]
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return 0.0
+    return value
+
+
 def _response(status: int, body: dict[str, Any]) -> dict[str, Any]:
     return {
         "statusCode": status,
         "headers": {"Content-Type": "application/json"},
-        "body": json.dumps(body, ensure_ascii=False),
+        "body": json.dumps(_sanitize_json_value(body), ensure_ascii=False),
     }
 
 
@@ -85,9 +106,13 @@ def _normalize_api_result(raw: dict[str, Any]) -> dict[str, Any]:
                 "target": opinion.get("target", ""),
                 "aspect": opinion.get("aspect", ""),
                 "sentiment": _sentiment_label(opinion.get("sentiment", "NEU")),
-                "confidence": float(opinion.get("calibrated_confidence", opinion.get("confidence", 0.0))),
-                "raw_confidence": float(opinion.get("raw_confidence", opinion.get("confidence", 0.0))),
-                "calibrated_confidence": float(
+                "confidence": _safe_float(
+                    opinion.get("calibrated_confidence", opinion.get("confidence", 0.0))
+                ),
+                "raw_confidence": _safe_float(
+                    opinion.get("raw_confidence", opinion.get("confidence", 0.0))
+                ),
+                "calibrated_confidence": _safe_float(
                     opinion.get("calibrated_confidence", opinion.get("confidence", 0.0))
                 ),
                 "start": opinion.get("start"),
@@ -98,8 +123,10 @@ def _normalize_api_result(raw: dict[str, Any]) -> dict[str, Any]:
     return {
         "opinions": opinions,
         "global_sentiment": _sentiment_label(raw.get("global_sentiment", "NEU")),
-        "global_confidence": float(raw.get("global_confidence", 0.0)),
-        "global_raw_confidence": float(raw.get("global_raw_confidence", raw.get("global_confidence", 0.0))),
+        "global_confidence": _safe_float(raw.get("global_confidence", 0.0)),
+        "global_raw_confidence": _safe_float(
+            raw.get("global_raw_confidence", raw.get("global_confidence", 0.0))
+        ),
         "model_version": raw.get("model_version") or _DEFAULT_MODEL_VERSION,
         "latency_ms": int(raw.get("latency_ms") or 0),
         "need_review": bool(raw.get("need_review", False)),
@@ -148,7 +175,7 @@ def _invoke_sagemaker(text: str) -> dict[str, Any]:
 
     if "latency_ms" not in payload:
         payload["latency_ms"] = int((time.time() - started) * 1000)
-    return payload
+    return _sanitize_json_value(payload)
 
 
 def _run_inference(text: str) -> dict[str, Any]:
