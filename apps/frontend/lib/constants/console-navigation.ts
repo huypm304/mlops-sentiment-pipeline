@@ -1,5 +1,6 @@
 import {
   Activity,
+  BarChart3,
   Box,
   Database,
   DollarSign,
@@ -36,6 +37,7 @@ export const consoleNavGroups: NavGroup[] = [
   {
     title: "Operations",
     items: [
+      { title: "Insights", href: "/insights", icon: BarChart3 },
       { title: "Monitoring", href: "/monitoring", icon: Activity },
       { title: "Review Queue", href: "/review-queue", icon: Inbox },
     ],
