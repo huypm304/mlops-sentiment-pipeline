@@ -298,10 +298,12 @@ def handle_start_training(event: dict[str, Any]) -> dict[str, Any]:
         training_config=config,
     )
 
-    put_training_run(
+    execution_arn = str(event.get("execution_arn") or event.get("step_function_execution_arn") or "")
+
+    update_training_run(
+        run_id,
+        created_at,
         {
-            "run_id": run_id,
-            "created_at": created_at,
             "status": "TRAINING",
             "dataset_id": lineage["dataset_id"],
             "dataset_key": dataset_key,
@@ -311,8 +313,8 @@ def handle_start_training(event: dict[str, Any]) -> dict[str, Any]:
             "base_model_id": base_model_id,
             "code_version": lineage["code_version"],
             "training_source_uri": lineage["training_source_uri"],
-            "updated_at": created_at,
-        }
+            **({"step_function_execution_arn": execution_arn} if execution_arn else {}),
+        },
     )
 
     event = {**event, "run_id": run_id, "created_at": created_at}
@@ -333,7 +335,11 @@ def handle_wait_training(event: dict[str, Any]) -> dict[str, Any]:
         payload = dict(training) if training else {"status": "Completed", "mode": "mock"}
         if prefix:
             payload["output_prefix"] = prefix
+        payload.setdefault("status", "Completed")
         return payload
+
+    if not _SAGEMAKER_ROLE_ARN:
+        raise RuntimeError("SAGEMAKER_ROLE_ARN is not configured")
 
     desc = _sagemaker.describe_training_job(TrainingJobName=job_name)
     status = desc["TrainingJobStatus"]

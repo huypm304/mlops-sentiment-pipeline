@@ -18,6 +18,7 @@
           "training_config.$": "$.training_config",
           "base_model_id.$": "$.base_model_id",
           "candidate_model_id.$": "$.candidate_model_id",
+          "execution_arn.$": "$$.Execution.Id",
           "artifacts_bucket": "${artifacts_bucket}"
         }
       },
@@ -77,6 +78,16 @@
       "Type": "Choice",
       "Comment": "Loop until SageMaker job finishes (50 epochs can take hours).",
       "Choices": [
+        {
+          "Variable": "$.training.Payload.error",
+          "IsPresent": true,
+          "Next": "NotifyFailure"
+        },
+        {
+          "Variable": "$.training.Payload.status",
+          "IsPresent": false,
+          "Next": "NotifyFailure"
+        },
         {
           "Variable": "$.training.Payload.status",
           "StringEquals": "Completed",

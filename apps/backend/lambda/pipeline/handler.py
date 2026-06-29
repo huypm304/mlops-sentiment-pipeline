@@ -81,11 +81,7 @@ def _build_execution_input(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_run_row(row: dict[str, Any]) -> dict[str, Any]:
-    execution_arn = (
-        row.get("step_function_execution_arn")
-        or row.get("execution_arn")
-        or f"run://{row.get('run_id', '')}"
-    )
+    execution_arn = row.get("step_function_execution_arn") or row.get("execution_arn") or ""
     return {
         "execution_arn": execution_arn,
         "name": row.get("run_id") or row.get("name", ""),
@@ -378,12 +374,9 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
 
 
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
-    # Step Functions direct task invocation
+    # Step Functions direct task invocation — let failures propagate to SFN Catch blocks.
     if isinstance(event, dict) and event.get("action") and not event.get("requestContext"):
-        try:
-            return dispatch_action(event)
-        except Exception as exc:  # noqa: BLE001
-            return {"error": str(exc), "action": event.get("action")}
+        return dispatch_action(event)
 
     if event.get("requestContext") or event.get("rawPath") or event.get("path"):
         return _handle_http(event)

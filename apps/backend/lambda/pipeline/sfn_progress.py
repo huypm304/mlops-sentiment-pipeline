@@ -9,6 +9,7 @@ import boto3
 from storage import now_iso, update_training_run
 
 _AWS_REGION = __import__("os").environ.get("AWS_REGION", "ap-southeast-1")
+_STATE_MACHINE_ARN = __import__("os").environ.get("STATE_MACHINE_ARN", "")
 _sfn = boto3.client("stepfunctions", region_name=_AWS_REGION)
 
 # Display order aligned with training_pipeline.asl.json
@@ -39,6 +40,32 @@ _CANCELLABLE_SFN = frozenset({"RUNNING", "PENDING_REDRIVE"})
 
 def _execution_arn_from_run(row: dict[str, Any]) -> str:
     return str(row.get("step_function_execution_arn") or row.get("execution_arn") or "")
+
+
+def _find_execution_arn_by_run_id(run_id: str) -> str:
+    if not _STATE_MACHINE_ARN or not run_id:
+        return ""
+    name = f"retrain-{run_id}"[:80]
+    try:
+        paginator = _sfn.get_paginator("list_executions")
+        for status in ("RUNNING", "PENDING_REDRIVE"):
+            for page in paginator.paginate(
+                stateMachineArn=_STATE_MACHINE_ARN,
+                statusFilter=status,
+            ):
+                for execution in page.get("executions", []):
+                    if execution.get("name") == name:
+                        return str(execution.get("executionArn") or "")
+    except Exception:  # noqa: BLE001
+        return ""
+    return ""
+
+
+def _resolve_execution_arn(row: dict[str, Any]) -> str:
+    arn = _execution_arn_from_run(row)
+    if arn:
+        return arn
+    return _find_execution_arn_by_run_id(str(row.get("run_id") or ""))
 
 
 def _parse_history(execution_arn: str) -> tuple[set[str], str | None, str]:
@@ -139,7 +166,7 @@ def initial_sfn_steps() -> list[dict[str, str]]:
 
 
 def enrich_run_with_sfn_progress(row: dict[str, Any]) -> dict[str, Any]:
-    execution_arn = _execution_arn_from_run(row)
+    execution_arn = _resolve_execution_arn(row)
     if not execution_arn:
         return row
 
@@ -169,7 +196,7 @@ def enrich_run_with_sfn_progress(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def cancel_training_run(row: dict[str, Any], *, cancelled_by: str = "ui") -> dict[str, Any]:
-    execution_arn = _execution_arn_from_run(row)
+    execution_arn = _resolve_execution_arn(row)
     if not execution_arn:
         raise ValueError("Run has no Step Functions execution ARN")
 
@@ -194,6 +221,7 @@ def cancel_training_run(row: dict[str, Any], *, cancelled_by: str = "ui") -> dic
                 "status": "CANCELLED",
                 "finished_at": now_iso(),
                 "cancelled_by": cancelled_by,
+                "step_function_execution_arn": execution_arn,
             },
         )
 
