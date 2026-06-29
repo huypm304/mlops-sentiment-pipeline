@@ -603,6 +603,28 @@ def handle_deploy_model(event: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _extract_failure_reason(event: dict[str, Any]) -> str | None:
+    reason = event.get("reason")
+    if reason is None:
+        return None
+    if isinstance(reason, str):
+        return reason
+    if not isinstance(reason, dict):
+        return str(reason)
+    cause = reason.get("Cause") or reason.get("cause")
+    if isinstance(cause, str):
+        try:
+            parsed = json.loads(cause)
+            if isinstance(parsed, dict):
+                return parsed.get("errorMessage") or parsed.get("message") or cause
+        except json.JSONDecodeError:
+            return cause
+    error = reason.get("Error") or reason.get("error")
+    if error and cause:
+        return f"{error}: {cause}"
+    return error or cause or json.dumps(reason, default=str)
+
+
 def handle_notify(event: dict[str, Any]) -> dict[str, Any]:
     run_id = event.get("run_id", "unknown")
     outcome = event.get("outcome", "COMPLETED")
@@ -637,6 +659,10 @@ def handle_notify(event: dict[str, Any]) -> dict[str, Any]:
     if deploy:
         updates["deploy"] = deploy
         updates["production_uri"] = deploy.get("production_uri")
+    if outcome == "FAILED":
+        failure_reason = _extract_failure_reason(event)
+        if failure_reason:
+            updates["failure_reason"] = failure_reason
 
     update_training_run(run_id, created_at, updates)
     return {"run_id": run_id, "outcome": outcome, "notified_at": now_iso()}

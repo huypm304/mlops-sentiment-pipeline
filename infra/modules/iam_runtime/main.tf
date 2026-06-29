@@ -128,6 +128,30 @@ resource "aws_iam_role_policy" "lambda_execution" {
   policy = data.aws_iam_policy_document.lambda_execution.json
 }
 
+data "aws_iam_policy_document" "lambda_pass_sagemaker_role" {
+  statement {
+    sid    = "PassSageMakerExecutionRole"
+    effect = "Allow"
+    actions = [
+      "iam:PassRole",
+    ]
+    resources = [
+      aws_iam_role.sagemaker.arn,
+    ]
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["sagemaker.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_pass_sagemaker_role" {
+  name   = "${local.name_prefix}-lambda-pass-sagemaker"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.lambda_pass_sagemaker_role.json
+}
+
 # ---------------------------------------------------------------------------
 # Step Functions execution role
 # ---------------------------------------------------------------------------
