@@ -377,7 +377,7 @@ Deploy Runtime với `enable_sagemaker_endpoint=true` + `model_package_version` 
 
 - [`infra/README.md`](infra/README.md) — Terraform stacks & feature flags
 - [`docs/architecture.md`](docs/architecture.md) — kiến trúc chi tiết
-- [`docs/data-management.md`](docs/data-management.md) — DVC, dataset versioning
+- [`docs/data-management.md`](docs/data-management.md) — dataset versioning, S3 publish
 - [`apps/backend/lambda/audit/README.md`](apps/backend/lambda/audit/README.md) — quy tắc audit
 
 ---

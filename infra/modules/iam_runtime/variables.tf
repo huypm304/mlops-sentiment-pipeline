@@ -24,6 +24,12 @@ variable "dynamodb_table_arns" {
   default     = []
 }
 
+variable "weekly_reports_table_arn" {
+  description = "ARN of the weekly-reports DynamoDB table (optional separate grant)."
+  type        = string
+  default     = ""
+}
+
 variable "common_tags" {
   type    = map(string)
   default = {}

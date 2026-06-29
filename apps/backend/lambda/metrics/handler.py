@@ -12,6 +12,15 @@ from urllib.parse import parse_qs, urlparse
 from registry.model_artifacts import load_model_evaluation_from_s3, load_training_history_from_s3
 from registry.store import RegistryStore, now_iso
 
+from insights import (
+    ASPECT_ORDER,
+    SENTIMENT_KEYS,
+    aggregate_weekly_stats,
+    build_insights,
+    period_window,
+    render_markdown,
+)
+
 _BUCKET = os.getenv("ARTIFACTS_BUCKET", "")
 _STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN", "")
 _PRODUCTION_MODEL_ID = os.getenv("PRODUCTION_MODEL_ID", "absa-v2b").strip() or "absa-v2b"
@@ -24,8 +33,6 @@ PRODUCTION_BASELINE = {
     "global_f1": 0.73,
 }
 
-ASPECT_ORDER = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
-SENTIMENT_KEYS = ["negative", "positive", "neutral"]
 DRIFT_THRESHOLD = 0.18
 MIN_PRODUCTION_SAMPLES = 5
 
@@ -74,6 +81,105 @@ def _registry_row_for_model(model_id: str) -> dict[str, Any] | None:
         return None
     matches.sort(key=lambda row: row.get("version", ""), reverse=True)
     return matches[0]
+
+
+def _compute_weekly_report(
+    model_id: str | None = None,
+    *,
+    period_days: int = 7,
+) -> dict[str, Any]:
+    model_id = model_id or _PRODUCTION_MODEL_ID
+    store = _get_store()
+    if not store.config.predictions_table:
+        raise RuntimeError("Predictions table is not configured")
+    if not store.config.weekly_reports_table:
+        raise RuntimeError("Weekly reports table is not configured")
+
+    period_start, period_end = period_window(period_days=period_days)
+    predictions = store.list_predictions_since(
+        period_start,
+        model_version=model_id,
+    )
+    previous = store.get_previous_weekly_report(
+        before_period_start=period_start,
+        model_id=model_id,
+    )
+    previous_stats = (previous or {}).get("stats")
+
+    stats = aggregate_weekly_stats(predictions, aspect_order=ASPECT_ORDER)
+    insights = build_insights(stats, previous_stats=previous_stats)
+
+    report_body: dict[str, Any] = {
+        "name": f"Báo cáo tuần {period_end[:10]}",
+        "model_id": model_id,
+        "period_days": period_days,
+        "period_start": period_start,
+        "period_end": period_end,
+        "stats": stats,
+        "insights": insights,
+        "previous_report_id": (previous or {}).get("report_id"),
+        "created_at": now_iso(),
+    }
+
+    saved = store.put_weekly_report(report_body)
+    report_id = str(saved.get("report_id", ""))
+
+    if _BUCKET and report_id:
+        import boto3
+
+        s3 = boto3.client("s3")
+        json_key = f"reports/weekly/{report_id}.json"
+        md_key = f"reports/weekly/{report_id}.md"
+        saved = {
+            **saved,
+            "s3_json_key": json_key,
+            "s3_markdown_key": md_key,
+            "s3_json_uri": f"s3://{_BUCKET}/{json_key}",
+            "s3_markdown_uri": f"s3://{_BUCKET}/{md_key}",
+        }
+        s3.put_object(
+            Bucket=_BUCKET,
+            Key=json_key,
+            Body=json.dumps(saved, ensure_ascii=False, indent=2).encode("utf-8"),
+            ContentType="application/json",
+        )
+        s3.put_object(
+            Bucket=_BUCKET,
+            Key=md_key,
+            Body=render_markdown(saved).encode("utf-8"),
+            ContentType="text/markdown; charset=utf-8",
+        )
+        saved = store.put_weekly_report(saved)
+
+    return saved
+
+
+def _weekly_reports_list_payload(*, limit: int = 12) -> dict[str, Any]:
+    store = _get_store()
+    if not store.config.weekly_reports_table:
+        return {"reports": []}
+    reports = store.list_weekly_reports(limit=limit)
+    summaries = [
+        {
+            "report_id": row.get("report_id"),
+            "name": row.get("name"),
+            "model_id": row.get("model_id"),
+            "period_start": row.get("period_start"),
+            "period_end": row.get("period_end"),
+            "total_reviews": int((row.get("stats") or {}).get("total_reviews", 0)),
+            "created_at": row.get("created_at"),
+            "s3_markdown_uri": row.get("s3_markdown_uri"),
+        }
+        for row in reports
+    ]
+    return {"reports": summaries}
+
+
+def _weekly_report_detail(report_id: str) -> dict[str, Any] | None:
+    store = _get_store()
+    if not store.config.weekly_reports_table:
+        return None
+    return store.get_weekly_report(report_id)
 
 
 def _compute_snapshot(model_id: str | None = None) -> dict[str, Any]:
@@ -512,8 +618,27 @@ def _analytics_payload(params: dict[str, str]) -> dict[str, Any]:
     }
 
 
+def _http_method(event: dict[str, Any]) -> str:
+    return str(
+        event.get("requestContext", {}).get("http", {}).get("method")
+        or event.get("httpMethod")
+        or "GET"
+    ).upper()
+
+
 def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
     store = _get_store()
+
+    if isinstance(event, dict) and event.get("action") == "compute_weekly_report":
+        try:
+            period_days = int(event.get("period_days", 7))
+            report = _compute_weekly_report(
+                str(event.get("model_id", _PRODUCTION_MODEL_ID)),
+                period_days=period_days,
+            )
+            return {"status": "ok", "action": "compute_weekly_report", "report": report}
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "error", "action": "compute_weekly_report", "detail": str(exc)}
 
     if isinstance(event, dict) and event.get("action") == "compute_snapshot":
         try:
@@ -559,6 +684,33 @@ def lambda_handler(event: dict[str, Any], context: Any) -> dict[str, Any]:
 
     if route.endswith("/metrics/analytics"):
         return _response(200, _analytics_payload(params))
+
+    if route.endswith("/metrics/weekly-reports"):
+        if _http_method(event) == "POST":
+            try:
+                body = _parse_body(event)
+                period_days = int(body.get("period_days", params.get("period_days", "7")))
+                model_id = str(body.get("model_id") or params.get("model_id") or _PRODUCTION_MODEL_ID)
+                report = _compute_weekly_report(model_id, period_days=period_days)
+                return _response(200, {"status": "ok", "report": report})
+            except json.JSONDecodeError:
+                return _response(400, {"detail": "invalid JSON body"})
+            except Exception as exc:  # noqa: BLE001
+                return _response(500, {"detail": str(exc)})
+        try:
+            limit = int(params.get("limit", "12"))
+            return _response(200, _weekly_reports_list_payload(limit=limit))
+        except Exception as exc:  # noqa: BLE001
+            return _response(500, {"detail": str(exc)})
+
+    if "/metrics/weekly-reports/" in route:
+        report_id = route.split("/metrics/weekly-reports/")[1].strip("/").split("?")[0]
+        if not report_id:
+            return _response(400, {"detail": "report_id is required"})
+        report = _weekly_report_detail(report_id)
+        if report is None:
+            return _response(404, {"detail": f"Weekly report '{report_id}' not found"})
+        return _response(200, report)
 
     if route.endswith("/metrics/platform/context"):
         try:

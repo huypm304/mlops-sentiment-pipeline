@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import boto3
-from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.conditions import Attr, Key
 
 from registry.config import RegistryConfig, load_config
 from registry.convert import from_dynamo, to_dynamo
@@ -268,6 +268,46 @@ class RegistryStore:
         items.sort(key=lambda row: row.get("created_at", ""), reverse=True)
         return items[:limit]
 
+    def list_predictions_since(
+        self,
+        start_iso: str,
+        *,
+        model_version: str | None = None,
+        max_items: int = 5000,
+    ) -> list[dict[str, Any]]:
+        table = self._table(self.config.predictions_table)
+        items: list[dict[str, Any]] = []
+
+        if model_version:
+            resp = table.query(
+                IndexName="model_version-created_at-index",
+                KeyConditionExpression=Key("model_version").eq(model_version)
+                & Key("created_at").gte(start_iso),
+                ScanIndexForward=False,
+            )
+            items.extend(self._records(resp.get("Items") or []))
+            while "LastEvaluatedKey" in resp and len(items) < max_items:
+                resp = table.query(
+                    IndexName="model_version-created_at-index",
+                    KeyConditionExpression=Key("model_version").eq(model_version)
+                    & Key("created_at").gte(start_iso),
+                    ExclusiveStartKey=resp["LastEvaluatedKey"],
+                    ScanIndexForward=False,
+                )
+                items.extend(self._records(resp.get("Items") or []))
+            return items[:max_items]
+
+        resp = table.scan(FilterExpression=Attr("created_at").gte(start_iso))
+        items.extend(self._records(resp.get("Items") or []))
+        while "LastEvaluatedKey" in resp and len(items) < max_items:
+            resp = table.scan(
+                FilterExpression=Attr("created_at").gte(start_iso),
+                ExclusiveStartKey=resp["LastEvaluatedKey"],
+            )
+            items.extend(self._records(resp.get("Items") or []))
+        items.sort(key=lambda row: row.get("created_at", ""), reverse=True)
+        return items[:max_items]
+
     # ------------------------------------------------------------------
     # monitoring_snapshots
     # ------------------------------------------------------------------
@@ -293,6 +333,46 @@ class RegistryStore:
                     return row
             return None
         return snapshots[0] if snapshots else None
+
+    # ------------------------------------------------------------------
+    # weekly_reports
+    # ------------------------------------------------------------------
+
+    def put_weekly_report(self, record: dict[str, Any]) -> dict[str, Any]:
+        item = dict(record)
+        item.setdefault("report_id", f"weekly-{uuid.uuid4().hex[:10]}")
+        item.setdefault("period_start", now_iso())
+        self._table(self.config.weekly_reports_table).put_item(Item=self._item(item))
+        return from_dynamo(item)
+
+    def list_weekly_reports(self, *, limit: int = 12) -> list[dict[str, Any]]:
+        resp = self._table(self.config.weekly_reports_table).scan(Limit=limit)
+        items = self._records(resp.get("Items") or [])
+        items.sort(key=lambda row: row.get("period_start", ""), reverse=True)
+        return items[:limit]
+
+    def get_weekly_report(self, report_id: str) -> dict[str, Any] | None:
+        resp = self._table(self.config.weekly_reports_table).scan(
+            FilterExpression=Attr("report_id").eq(report_id),
+            Limit=5,
+        )
+        items = self._records(resp.get("Items") or [])
+        return items[0] if items else None
+
+    def get_previous_weekly_report(
+        self,
+        *,
+        before_period_start: str,
+        model_id: str | None = None,
+    ) -> dict[str, Any] | None:
+        reports = self.list_weekly_reports(limit=24)
+        for row in reports:
+            if row.get("period_start", "") >= before_period_start:
+                continue
+            if model_id and row.get("model_id") != model_id:
+                continue
+            return row
+        return None
 
     # ------------------------------------------------------------------
     # review_queue

@@ -30,6 +30,18 @@ variable "monitoring_schedule_expression" {
   default     = "rate(1 hour)"
 }
 
+variable "enable_weekly_report_schedule" {
+  description = "Create EventBridge rule to generate weekly business insights reports."
+  type        = bool
+  default     = true
+}
+
+variable "weekly_report_schedule_expression" {
+  description = "EventBridge schedule for weekly insights report generation."
+  type        = string
+  default     = "rate(7 days)"
+}
+
 variable "common_tags" {
   type    = map(string)
   default = {}

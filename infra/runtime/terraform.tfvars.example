@@ -19,6 +19,7 @@ predictions_table_name          = "absa-mlops-demo-predictions"
 monitoring_snapshots_table_name = "absa-mlops-demo-monitoring-snapshots"
 approval_requests_table_name    = "absa-mlops-demo-approval-requests"
 review_queue_table_name         = "absa-mlops-demo-review-queue"
+weekly_reports_table_name       = "absa-mlops-demo-weekly-reports"
 
 dynamodb_table_arns = [
   "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-datasets",
@@ -50,6 +51,7 @@ log_retention_days     = 14
 enable_sagemaker_training     = true
 enable_sagemaker_endpoint     = false
 enable_eventbridge_monitoring = true
+enable_weekly_report_schedule = true
 sagemaker_instance_type       = "ml.m5.large"
 # Bump after uploading models/production/model.tar.gz (PhoBERT run1a → v3)
 model_package_version         = "v3"

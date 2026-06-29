@@ -158,6 +158,21 @@ locals {
       invoke_arn    = var.metrics_lambda_invoke_arn
       function_name = var.metrics_lambda_function_name
     }
+    metrics_weekly_reports_list = {
+      route_key     = "GET /metrics/weekly-reports"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_weekly_reports_create = {
+      route_key     = "POST /metrics/weekly-reports"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
+    metrics_weekly_report_detail = {
+      route_key     = "GET /metrics/weekly-reports/{report_id}"
+      invoke_arn    = var.metrics_lambda_invoke_arn
+      function_name = var.metrics_lambda_function_name
+    }
     review_queue_list = {
       route_key     = "GET /review-queue"
       invoke_arn    = var.metrics_lambda_invoke_arn

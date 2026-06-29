@@ -134,11 +134,6 @@ artifacts/examples/audit/*.json
 artifacts/examples/monitoring/*.json
 artifacts/examples/monitoring/*.jsonl
 
-# --- DVC (local cache; .dvc/config is committed) ---
-.dvc/cache/
-.dvc/tmp/
-.dvc/config.local
-
 # --- Logs & temp ---
 *.log
 logs/

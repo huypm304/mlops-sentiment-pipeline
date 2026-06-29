@@ -235,3 +235,26 @@ resource "aws_dynamodb_table" "review_queue" {
 
   tags = merge(var.common_tags, { Name = "${local.prefix}-review-queue" })
 }
+
+# ---------------------------------------------------------------------------
+# weekly_reports (business insights summaries)
+# ---------------------------------------------------------------------------
+resource "aws_dynamodb_table" "weekly_reports" {
+  name         = "${local.prefix}-weekly-reports"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "report_id"
+  range_key    = "period_start"
+
+  attribute {
+    name = "report_id"
+    type = "S"
+  }
+  attribute {
+    name = "period_start"
+    type = "S"
+  }
+
+  point_in_time_recovery { enabled = true }
+
+  tags = merge(var.common_tags, { Name = "${local.prefix}-weekly-reports" })
+}

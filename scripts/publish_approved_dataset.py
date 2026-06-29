@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Publish DVC-tracked benchmark splits to S3 approved + manifest + DynamoDB.
+"""Publish local benchmark splits to S3 approved + manifest + DynamoDB.
 
-Local workflow (after ``dvc pull``):
+Local workflow:
 
     python scripts/publish_approved_dataset.py \\
         --dataset-id dataset-v1 \\
@@ -12,7 +12,7 @@ Upload targets (same artifacts bucket as Terraform core):
   - s3://<bucket>/datasets/pending/<dataset_id>/   (mirror for audit Lambda)
   - s3://<bucket>/datasets/manifests/<dataset_id>.json
 
-Cloud training reads ``datasets/approved/`` + manifest — not the DVC store.
+Cloud training reads ``datasets/approved/`` + manifest.
 """
 
 from __future__ import annotations
@@ -20,7 +20,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import re
 import subprocess
 import sys
 from datetime import datetime, timezone
@@ -70,34 +69,6 @@ def _git_commit() -> str:
         return ""
 
 
-def _parse_dvc_out(path: Path) -> dict[str, Any]:
-    """Extract md5/size from a .dvc sidecar (supports md5 and hash fields)."""
-    if not path.is_file():
-        return {}
-    text = path.read_text(encoding="utf-8")
-    info: dict[str, Any] = {}
-    for key in ("md5", "hash", "size", "nfiles"):
-        match = re.search(rf"^\s*{key}:\s*(\S+)\s*$", text, re.MULTILINE)
-        if match:
-            value: Any = match.group(1).strip("'\"")
-            if key in {"size", "nfiles"}:
-                try:
-                    value = int(value)
-                except ValueError:
-                    pass
-            info[key] = value
-    return info
-
-
-def _load_dvc_remote_url() -> str:
-    config_path = ROOT / ".dvc" / "config"
-    if not config_path.is_file():
-        return ""
-    text = config_path.read_text(encoding="utf-8")
-    match = re.search(r'url\s*=\s*(s3://[^\s]+)', text)
-    return match.group(1) if match else ""
-
-
 def _resolve_split_paths(processed_dir: Path, splits: tuple[str, ...]) -> dict[str, Path]:
     resolved: dict[str, Path] = {}
     missing: list[str] = []
@@ -109,8 +80,7 @@ def _resolve_split_paths(processed_dir: Path, splits: tuple[str, ...]) -> dict[s
             missing.append(str(path))
     if missing:
         raise FileNotFoundError(
-            "Required split files not found. Run `dvc pull` first.\n  "
-            + "\n  ".join(missing)
+            "Required split files not found.\n  " + "\n  ".join(missing)
         )
     return resolved
 
@@ -122,17 +92,13 @@ def build_manifest(
     split_paths: dict[str, Path],
     processed_dir: Path,
     git_commit: str,
-    dvc_remote_url: str,
     mirror_pending: bool,
 ) -> dict[str, Any]:
     now = _now_iso()
     splits: dict[str, dict[str, Any]] = {}
-    dvc_files: dict[str, Any] = {}
 
     for split, path in split_paths.items():
         checksum = _md5(path)
-        dvc_sidecar = processed_dir / f"{path.name}.dvc"
-        dvc_meta = _parse_dvc_out(dvc_sidecar)
         splits[split] = {
             "filename": path.name,
             "rows": _count_jsonl_rows(path),
@@ -141,16 +107,6 @@ def build_manifest(
             "s3_key_approved": f"datasets/approved/{dataset_id}/{path.name}",
             "s3_key_pending": f"datasets/pending/{dataset_id}/{path.name}",
         }
-        dvc_files[split] = {
-            "dvc_file": (
-                str(dvc_sidecar.relative_to(ROOT))
-                if dvc_sidecar.is_file() and ROOT in dvc_sidecar.parents
-                else (str(dvc_sidecar) if dvc_sidecar.is_file() else "")
-            ),
-            "md5": dvc_meta.get("md5") or dvc_meta.get("hash") or checksum,
-            "size": dvc_meta.get("size", path.stat().st_size),
-            "rows": splits[split]["rows"],
-        }
 
     approved_prefix = f"datasets/approved/{dataset_id}/"
     pending_prefix = f"datasets/pending/{dataset_id}/"
@@ -158,23 +114,21 @@ def build_manifest(
     return {
         "dataset_id": dataset_id,
         "name": name.strip() or dataset_id,
-        "source": "dvc",
+        "source": "local_publish",
         "status": "approved",
         "created_at": now,
         "updated_at": now,
-        "uploaded_by": "dvc-publish",
+        "uploaded_by": "publish-script",
         "s3_approved_prefix": approved_prefix,
         "s3_pending_prefix": pending_prefix if mirror_pending else "",
         "splits": splits,
-        "dvc": {
-            "remote_url": dvc_remote_url,
+        "lineage": {
             "git_commit": git_commit,
             "processed_dir": (
                 str(processed_dir.relative_to(ROOT))
                 if ROOT in processed_dir.parents
                 else str(processed_dir)
             ),
-            "files": dvc_files,
         },
         "audits": {},
         "audit_passed": False,
@@ -241,8 +195,8 @@ def sync_dynamodb(manifest: dict[str, Any], *, dry_run: bool) -> None:
         if store.config.artifacts_bucket
         else record.get("s3_uri", "")
     )
-    record["source"] = "dvc"
-    record["dvc_git_commit"] = (manifest.get("dvc") or {}).get("git_commit", "")
+    record["source"] = manifest.get("source", "local_publish")
+    record["git_commit"] = (manifest.get("lineage") or {}).get("git_commit", "")
     record["manifest_s3_key"] = f"datasets/manifests/{manifest['dataset_id']}.json"
 
     if dry_run:
@@ -268,7 +222,7 @@ def parse_args() -> argparse.Namespace:
         "--processed-dir",
         type=Path,
         default=DEFAULT_PROCESSED_DIR,
-        help="Directory containing DVC-tracked JSONL splits",
+        help="Directory containing train/dev/test JSONL splits",
     )
     parser.add_argument(
         "--bucket",
@@ -297,7 +251,6 @@ def main() -> int:
 
     split_paths = _resolve_split_paths(processed_dir, SPLITS)
     git_commit = _git_commit()
-    dvc_remote = _load_dvc_remote_url()
 
     manifest = build_manifest(
         dataset_id=args.dataset_id,
@@ -305,7 +258,6 @@ def main() -> int:
         split_paths=split_paths,
         processed_dir=processed_dir,
         git_commit=git_commit,
-        dvc_remote_url=dvc_remote,
         mirror_pending=args.mirror_pending,
     )
 

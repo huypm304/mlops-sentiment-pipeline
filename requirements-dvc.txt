@@ -1,3 +1,0 @@
-# Optional — DVC for official benchmark dataset versioning only.
-# Install: pip install -r requirements-dvc.txt
-dvc[s3]>=3.50.0,<4.0.0

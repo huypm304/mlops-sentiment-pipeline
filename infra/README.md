@@ -178,7 +178,6 @@ The cheapest demo configuration leaves both SageMaker flags at `false` and uses 
 ## S3 artifact prefix layout
 
 ```
-dvc-store/                DVC remote blobs (content-addressed; not human-readable)
 datasets/pending/         Uploaded, awaiting audit
 datasets/approved/        Audit passed, approved for training
 datasets/rejected/        Audit failed — auto-expired after 30 days

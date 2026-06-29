@@ -17,6 +17,7 @@ class RegistryConfig:
     monitoring_table: str
     approval_table: str
     review_queue_table: str
+    weekly_reports_table: str
 
     @property
     def enabled(self) -> bool:
@@ -28,6 +29,7 @@ class RegistryConfig:
             or self.monitoring_table
             or self.approval_table
             or self.review_queue_table
+            or self.weekly_reports_table
         )
 
 
@@ -42,4 +44,5 @@ def load_config() -> RegistryConfig:
         monitoring_table=os.getenv("MONITORING_TABLE", "").strip(),
         approval_table=os.getenv("APPROVAL_TABLE", "").strip(),
         review_queue_table=os.getenv("REVIEW_QUEUE_TABLE", "").strip(),
+        weekly_reports_table=os.getenv("WEEKLY_REPORTS_TABLE", "").strip(),
     )

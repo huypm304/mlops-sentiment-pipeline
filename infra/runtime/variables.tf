@@ -90,6 +90,11 @@ variable "review_queue_table_name" {
   default = ""
 }
 
+variable "weekly_reports_table_name" {
+  type    = string
+  default = ""
+}
+
 # ---------------------------------------------------------------------------
 # Lambda configuration
 # ---------------------------------------------------------------------------
@@ -132,6 +137,12 @@ variable "enable_sagemaker_endpoint" {
 
 variable "enable_eventbridge_monitoring" {
   description = "Create EventBridge rules for periodic monitoring snapshots."
+  type        = bool
+  default     = true
+}
+
+variable "enable_weekly_report_schedule" {
+  description = "Create EventBridge rule for weekly business insights reports."
   type        = bool
   default     = true
 }

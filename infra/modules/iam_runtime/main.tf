@@ -166,6 +166,31 @@ resource "aws_iam_role_policy" "lambda_pass_sagemaker_role" {
   policy = data.aws_iam_policy_document.lambda_pass_sagemaker_role.json
 }
 
+data "aws_iam_policy_document" "lambda_weekly_reports_ddb" {
+  count = var.weekly_reports_table_arn != "" ? 1 : 0
+
+  statement {
+    sid    = "WeeklyReportsDynamoDB"
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+      "dynamodb:PutItem",
+      "dynamodb:UpdateItem",
+      "dynamodb:Query",
+      "dynamodb:Scan",
+    ]
+    resources = [var.weekly_reports_table_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "lambda_weekly_reports_ddb" {
+  count = var.weekly_reports_table_arn != "" ? 1 : 0
+
+  name   = "${local.name_prefix}-lambda-weekly-reports"
+  role   = aws_iam_role.lambda.id
+  policy = data.aws_iam_policy_document.lambda_weekly_reports_ddb[0].json
+}
+
 # ---------------------------------------------------------------------------
 # Step Functions execution role
 # ---------------------------------------------------------------------------

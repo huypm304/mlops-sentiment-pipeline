@@ -55,6 +55,10 @@ output "review_queue_table_name" {
   value = module.dynamodb_registry.review_queue_table_name
 }
 
+output "weekly_reports_table_name" {
+  value = module.dynamodb_registry.weekly_reports_table_name
+}
+
 output "all_dynamodb_table_arns" {
   description = "All registry table ARNs — useful for IAM policy attachment in runtime stack."
   value       = module.dynamodb_registry.all_table_arns

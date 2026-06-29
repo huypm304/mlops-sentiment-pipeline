@@ -41,6 +41,7 @@ locals {
   monitoring_snapshots_table_name = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.monitoring_snapshots_table_name : var.monitoring_snapshots_table_name
   approval_requests_table_name    = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.approval_requests_table_name : var.approval_requests_table_name
   review_queue_table_name         = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.review_queue_table_name : var.review_queue_table_name
+  weekly_reports_table_name       = local.use_remote_state ? data.terraform_remote_state.core[0].outputs.weekly_reports_table_name : var.weekly_reports_table_name
 
   route53_zone_id = local.use_remote_state ? (
     try(data.terraform_remote_state.core[0].outputs.route53_zone_id, "")
@@ -73,6 +74,7 @@ locals {
     MONITORING_TABLE    = local.monitoring_snapshots_table_name
     APPROVAL_TABLE      = local.approval_requests_table_name
     REVIEW_QUEUE_TABLE  = local.review_queue_table_name
+    WEEKLY_REPORTS_TABLE = local.weekly_reports_table_name
   }
 }
 
@@ -103,6 +105,7 @@ module "iam_runtime" {
   aws_region          = var.aws_region
   artifact_bucket_arn = local.artifact_bucket_arn
   dynamodb_table_arns = local.dynamodb_table_arns
+  weekly_reports_table_arn = local.weekly_reports_table_name != "" ? "arn:aws:dynamodb:${var.aws_region}:${data.aws_caller_identity.current.account_id}:table/${local.weekly_reports_table_name}" : ""
   common_tags         = local.common_tags
 }
 
@@ -252,6 +255,7 @@ module "eventbridge" {
   metrics_lambda_function_name = module.lambda_metrics.function_name
 
   enable_monitoring_schedule = var.enable_eventbridge_monitoring
+  enable_weekly_report_schedule = var.enable_weekly_report_schedule
   common_tags                = local.common_tags
 }
 

@@ -73,3 +73,42 @@ resource "aws_lambda_permission" "retrain_check" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.retrain_check.arn
 }
+
+# ---------------------------------------------------------------------------
+# Weekly business insights report
+# ---------------------------------------------------------------------------
+
+resource "aws_cloudwatch_event_rule" "weekly_report" {
+  count = var.enable_weekly_report_schedule ? 1 : 0
+
+  name                = "${local.name_prefix}-weekly-report"
+  description         = "Weekly aggregation of production reviews into business insights report."
+  schedule_expression = var.weekly_report_schedule_expression
+  state               = "ENABLED"
+
+  tags = merge(var.common_tags, { Name = "${local.name_prefix}-weekly-report" })
+}
+
+resource "aws_cloudwatch_event_target" "weekly_report" {
+  count = var.enable_weekly_report_schedule ? 1 : 0
+
+  rule      = aws_cloudwatch_event_rule.weekly_report[0].name
+  target_id = "metrics-lambda-weekly-report"
+  arn       = var.metrics_lambda_arn
+
+  input = jsonencode({
+    action      = "compute_weekly_report"
+    source      = "eventbridge-schedule"
+    period_days = 7
+  })
+}
+
+resource "aws_lambda_permission" "weekly_report" {
+  count = var.enable_weekly_report_schedule ? 1 : 0
+
+  statement_id  = "AllowEventBridgeWeeklyReport"
+  action        = "lambda:InvokeFunction"
+  function_name = var.metrics_lambda_function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.weekly_report[0].arn
+}

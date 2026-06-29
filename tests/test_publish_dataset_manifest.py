@@ -1,4 +1,4 @@
-"""Tests for DVC publish manifest builder."""
+"""Tests for local dataset publish manifest builder."""
 
 from __future__ import annotations
 
@@ -44,17 +44,15 @@ def test_build_manifest_schema(sample_splits: Path):
         split_paths=paths,
         processed_dir=sample_splits,
         git_commit="abc123",
-        dvc_remote_url="s3://absa-mlops-demo-artifacts/dvc-store",
         mirror_pending=True,
     )
 
     assert manifest["dataset_id"] == "dataset-v1"
-    assert manifest["source"] == "dvc"
+    assert manifest["source"] == "local_publish"
     assert manifest["status"] == "approved"
     assert manifest["s3_approved_prefix"] == "datasets/approved/dataset-v1/"
     assert manifest["splits"]["train"]["rows"] == 2
-    assert manifest["dvc"]["git_commit"] == "abc123"
-    assert manifest["dvc"]["files"]["train"]["rows"] == 2
+    assert manifest["lineage"]["git_commit"] == "abc123"
+    assert manifest["splits"]["train"]["checksum_md5"]
 
-    # Must be JSON-serializable for S3 manifest upload
     json.dumps(manifest, ensure_ascii=False)
