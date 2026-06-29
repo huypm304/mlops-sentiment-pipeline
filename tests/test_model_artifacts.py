@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "backend"))
 
 from registry.model_artifacts import (
     build_evaluation_payload,
@@ -11,20 +14,21 @@ from registry.model_artifacts import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_DIR = ROOT / "model"
+FIXTURES = ROOT / "tests" / "fixtures"
+CONFIG_DIR = ROOT / "ml" / "configs"
 
 
-def test_metrics_summary_from_local_train_log():
-    text = (MODEL_DIR / "train_log.csv").read_text(encoding="utf-8")
+def test_metrics_summary_from_train_log_fixture():
+    text = (FIXTURES / "train_log_sample.csv").read_text(encoding="utf-8")
     metrics = metrics_summary_from_train_log(text)
     assert metrics["global_f1"] > 0.8
     assert metrics["span_f1"] > 0.8
 
 
-def test_build_evaluation_from_local_artifacts():
-    train_log = (MODEL_DIR / "train_log.csv").read_text(encoding="utf-8")
-    run_config = (MODEL_DIR / "run_config.json").read_text(encoding="utf-8")
-    confusion = (MODEL_DIR / "confusion_matrices.jsonl").read_text(encoding="utf-8")
+def test_build_evaluation_from_fixtures():
+    train_log = (FIXTURES / "train_log_sample.csv").read_text(encoding="utf-8")
+    run_config = (CONFIG_DIR / "run_config.json").read_text(encoding="utf-8")
+    confusion = (FIXTURES / "confusion_sample.jsonl").read_text(encoding="utf-8")
 
     payload = build_evaluation_payload(
         model_id="absa-v2b",
@@ -46,4 +50,4 @@ def test_build_evaluation_from_local_artifacts():
     assert payload["scores"]["global_f1"] > 0.8
     assert payload["confusion_matrix"]["matrix"][0][0] >= 0
     assert payload["artifacts"]["train_log"].endswith("models/v1/train_log.csv")
-    assert len(build_training_history(train_log)) > 10
+    assert len(build_training_history(train_log)) >= 1

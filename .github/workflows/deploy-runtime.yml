@@ -13,9 +13,9 @@ on:
         type: boolean
         default: false
       enable_sagemaker_training:
-        description: Enable SageMaker training jobs in pipeline
+        description: Enable SageMaker GPU training (train_kaggle.py, 50 epochs)
         type: boolean
-        default: false
+        default: true
       sagemaker_instance_type:
         description: SageMaker endpoint instance type
         type: choice
@@ -68,6 +68,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build and upload SageMaker training source
+        if: inputs.enable_sagemaker_training == 'true'
+        shell: bash
+        env:
+          ARTIFACTS_BUCKET: absa-mlops-demo-artifacts
+          AWS_REGION: ap-southeast-1
+        run: bash scripts/build_training_package.sh
+
       - name: Deploy options
         shell: bash
         run: |
@@ -96,7 +104,7 @@ jobs:
           api_subdomain: ${{ inputs.api_subdomain }}
 
       - name: Smoke test /health
-        working-directory: infrastructure/terraform/runtime
+        working-directory: infra/runtime
         shell: bash
         env:
           TF_STATE_BUCKET: absa-mlops-demo-tf-state

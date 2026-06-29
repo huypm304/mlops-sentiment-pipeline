@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Validate and package final_artifacts/ for submission or S3 upload.
+"""Validate and package artifacts/ for submission or S3 upload.
 
 Checks that required files exist, generates a manifest, and optionally
 creates a zip archive suitable for SageMaker model.tar.gz.
 
 Usage:
-    python scripts/package_final_artifacts.py \\
-        --artifacts-dir final_artifacts \\
-        --output-zip   final_artifacts/absa_model_package.zip
+    python scripts/package_artifacts.py \\
+        --artifacts-dir artifacts \\
+        --output-zip   artifacts/absa_model_package.zip
 """
 
 from __future__ import annotations
@@ -85,8 +85,8 @@ def _collect_files(artifacts_dir: Path) -> list[Path]:
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Validate and package final_artifacts/")
-    p.add_argument("--artifacts-dir", type=Path, default=Path("final_artifacts"))
+    p = argparse.ArgumentParser(description="Validate and package artifacts/")
+    p.add_argument("--artifacts-dir", type=Path, default=Path("artifacts"))
     p.add_argument("--output-zip",    type=Path, default=None,
                    help="If provided, create a zip archive of required+optional files")
     p.add_argument("--strict",        action="store_true",
@@ -138,7 +138,7 @@ def main() -> None:
         "files": manifest_entries,
     }
 
-    manifest_path = args.artifacts_dir / "final_artifacts_manifest.json"
+    manifest_path = args.artifacts_dir / "artifacts_manifest.json"
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
     print(f"\nManifest written: {manifest_path}")

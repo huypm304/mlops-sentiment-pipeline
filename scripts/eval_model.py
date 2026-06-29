@@ -7,10 +7,10 @@ from train_log.csv.
 
 Usage:
     python scripts/eval_model.py \\
-        --model-path final_artifacts/model/best_model.pt \\
-        --model-name Fsoft-AIC/videberta-base \\
+        --model-path artifacts/model/best_model.pt \\
+        --model-name vinai/phobert-base \\
         --eval-file /path/to/dev_clean.jsonl \\
-        --output-dir final_artifacts/evaluation \\
+        --output-dir artifacts/evaluation \\
         --max-len 192 --max-ops 6 --max-context-window 25 \\
         --span-match-iou 0.5 --strict-load true
 """
@@ -31,10 +31,10 @@ from transformers import AutoTokenizer
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.absa.dataset import ABSADataset
-from src.absa.evaluation import evaluate, print_eval_metrics_line, save_eval_report
-from src.absa.model import ABSAModel
-from src.absa.utils import ensure_dir, md5_file
+from ml.inference.dataset import ABSADataset
+from ml.inference.evaluation import evaluate, print_eval_metrics_line, save_eval_report
+from ml.inference.model import ABSAModel
+from ml.inference.utils import ensure_dir, md5_file
 
 
 # ---------------------------------------------------------------------------
@@ -106,11 +106,11 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="ABSA model evaluation script")
     p.add_argument("--model-path",         type=Path, required=True,
                    help="Path to best_model.pt checkpoint")
-    p.add_argument("--model-name",         default="Fsoft-AIC/videberta-base",
+    p.add_argument("--model-name",         default="vinai/phobert-base",
                    help="HuggingFace model name used during training")
     p.add_argument("--eval-file",          type=Path, required=True,
                    help="JSONL eval file (dev_clean.jsonl schema: text, opinions, global_sentiment)")
-    p.add_argument("--output-dir",         type=Path, default=Path("final_artifacts/evaluation"),
+    p.add_argument("--output-dir",         type=Path, default=Path("artifacts/evaluation"),
                    help="Directory to save eval reports")
     p.add_argument("--max-len",            type=int, default=192)
     p.add_argument("--max-ops",            type=int, default=6)

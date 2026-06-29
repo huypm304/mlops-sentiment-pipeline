@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export model artifacts to final_artifacts/model/ for deployment and packaging.
+"""Export model artifacts to artifacts/model/ for deployment and packaging.
 
 Generates: model_card.json, label_mapping.json, tokenizer_info.json,
 postprocess_config.json, checksum.txt, requirements.txt, README.md.
@@ -7,10 +7,10 @@ postprocess_config.json, checksum.txt, requirements.txt, README.md.
 Usage:
     python scripts/export_model_artifacts.py \\
         --model-path model/best_model.pt \\
-        --run-config model/run_config.json \\
-        --eval-report final_artifacts/evaluation/eval_report.json \\
+        --run-config ml/configs/run_config.json \\
+        --eval-report artifacts/evaluation/eval_report.json \\
         --train-log model/train_log.csv \\
-        --output-dir final_artifacts/model \\
+        --output-dir artifacts/model \\
         --model-version absa-v2b
 """
 
@@ -28,8 +28,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.absa.labels import ASPECTS, N_BIO, N_SENT, SENT_ID2LABEL, SENT_LABEL2ID, BIO_LABELS
-from src.absa.postprocess import PostprocessConfig
+from ml.inference.labels import ASPECTS, N_BIO, N_SENT, SENT_ID2LABEL, SENT_LABEL2ID, BIO_LABELS
+from ml.inference.postprocess import PostprocessConfig
 
 
 def _md5(path: Path) -> str:
@@ -80,11 +80,11 @@ def _best_metrics(train_log: Path | None, eval_report: dict) -> dict:
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Export model artifacts for deployment")
     p.add_argument("--model-path",    type=Path, default=Path("model/best_model.pt"))
-    p.add_argument("--run-config",    type=Path, default=Path("model/run_config.json"))
+    p.add_argument("--run-config",    type=Path, default=Path("ml/configs/run_config.json"))
     p.add_argument("--eval-report",   type=Path, default=None,
                    help="eval_report.json from eval_model.py (optional)")
     p.add_argument("--train-log",     type=Path, default=Path("model/train_log.csv"))
-    p.add_argument("--output-dir",    type=Path, default=Path("final_artifacts/model"))
+    p.add_argument("--output-dir",    type=Path, default=Path("artifacts/model"))
     p.add_argument("--model-version", default="absa-v2b")
     p.add_argument("--copy-checkpoint", action="store_true",
                    help="Copy best_model.pt to output-dir (default: write pointer.txt only)")
@@ -100,7 +100,7 @@ def main() -> None:
     eval_report = _load_json_safe(args.eval_report)
     metrics = _best_metrics(args.train_log, eval_report)
 
-    model_name = run_config.get("model_name", "Fsoft-AIC/videberta-base")
+    model_name = run_config.get("model_name", "vinai/phobert-base")
     max_len    = int(run_config.get("max_len", 192))
     max_ops    = int(run_config.get("max_ops", 6))
 
@@ -185,7 +185,7 @@ def main() -> None:
         "architecture": {
             "heads": ["BIO tagging (CRF)", "span-level sentiment", "global sentiment"],
             "components": [
-                "ViDeBERTa encoder", "BiLSTM BIO tagger", "CRF decoder",
+                "PhoBERT encoder", "BiLSTM BIO tagger", "CRF decoder",
                 "attention-weighted span pooling", "cross-attention (seq→span)",
                 "span self-attention", "aspect embedding", "clause position embedding",
                 "polarity-aware global head",
@@ -281,9 +281,9 @@ Version: **{args.model_version}**
 
 ```python
 import sys; sys.path.insert(0, ".")
-from src.absa.inference import load_model, predict_one
+from ml.inference.inference import load_model, predict_one
 
-bundle = load_model("final_artifacts/model")
+bundle = load_model("artifacts/model")
 result = predict_one("Giá mềm nhưng giao hàng chậm", bundle)
 print(result)
 ```

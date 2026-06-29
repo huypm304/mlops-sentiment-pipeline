@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "backend"))
 
 from registry.convert import from_dynamo, to_dynamo
 from registry.store import RegistryStore

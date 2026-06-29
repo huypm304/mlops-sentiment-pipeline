@@ -3,8 +3,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BUILD="$ROOT/lambda/.build/audit"
+BUILD="$ROOT/apps/backend/lambda/.build/audit"
 
 bash "$ROOT/scripts/prepare_lambda_bundles.sh"
-rsync -a --delete "$ROOT/data_benchmark/" "$BUILD/data_benchmark/"
+rsync -a --delete "$ROOT/ml/data_processing/" "$BUILD/data_benchmark/"
 echo "Audit Lambda bundle ready: $BUILD"

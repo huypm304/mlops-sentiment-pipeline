@@ -10,13 +10,13 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-CHECKPOINT = Path(__file__).resolve().parents[1] / "model" / "best_model.pt"
+CHECKPOINT = Path(__file__).resolve().parents[1] / "artifacts" / "model" / "best_model.pt"
 MODEL_DIR = CHECKPOINT.parent
 
 
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_predict_one_schema():
-    from src.absa.inference import load_model, predict_one
+    from ml.inference.inference import load_model, predict_one
 
     bundle = load_model(MODEL_DIR, device="cpu", strict=True)
     text = "Giá mềm, chất vải mát, nhưng giao hàng làm mình chờ hơi lâu."
@@ -58,7 +58,7 @@ def test_predict_one_schema():
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_predict_one_expected_aspects():
     """The test sentence should produce Price, Fashion, and/or Ship aspects."""
-    from src.absa.inference import load_model, predict_one
+    from ml.inference.inference import load_model, predict_one
 
     bundle = load_model(MODEL_DIR, device="cpu", strict=True)
     text = "Giá mềm, chất vải mát, nhưng giao hàng làm mình chờ hơi lâu."
@@ -75,7 +75,7 @@ def test_predict_one_expected_aspects():
 
 @pytest.mark.skipif(not CHECKPOINT.is_file(), reason="best_model.pt not present")
 def test_predict_batch():
-    from src.absa.inference import load_model, predict_batch
+    from ml.inference.inference import load_model, predict_batch
 
     bundle = load_model(MODEL_DIR, device="cpu", strict=True)
     texts = [

@@ -4,7 +4,7 @@
 Usage:
     python scripts/make_learning_curves.py \\
         --train-log model/train_log.csv \\
-        --output-dir final_artifacts/figures
+        --output-dir artifacts/figures
 """
 
 from __future__ import annotations
@@ -156,7 +156,7 @@ def _plot(config: dict, rows: list[dict], headers: list[str], out_dir: Path) -> 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate learning curve plots from train_log.csv")
     p.add_argument("--train-log",   type=Path, required=True,  help="Path to train_log.csv")
-    p.add_argument("--output-dir",  type=Path, default=Path("final_artifacts/figures"))
+    p.add_argument("--output-dir",  type=Path, default=Path("artifacts/figures"))
     return p.parse_args()
 
 

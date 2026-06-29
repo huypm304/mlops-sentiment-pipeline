@@ -7,8 +7,8 @@ Usage:
     python scripts/generate_reports.py \\
         --train-log model/train_log.csv \\
         --confusion-file model/best_confusion_matrices.json \\
-        --eval-main final_artifacts/evaluation/eval_report.json \\
-        --output-dir final_artifacts
+        --eval-main artifacts/evaluation/eval_report.json \\
+        --output-dir artifacts
 """
 
 from __future__ import annotations
@@ -170,7 +170,7 @@ def parse_args() -> argparse.Namespace:
                    help="Main eval_report.json (from eval_model.py)")
     p.add_argument("--eval-hard",       type=Path, default=None,
                    help="Hard/stress eval_report.json (optional)")
-    p.add_argument("--output-dir",      type=Path, default=Path("final_artifacts"),
+    p.add_argument("--output-dir",      type=Path, default=Path("artifacts"),
                    help="Root output directory (figures/, evaluation/ subdirs created)")
     return p.parse_args()
 

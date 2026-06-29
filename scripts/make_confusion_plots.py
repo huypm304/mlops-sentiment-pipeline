@@ -7,7 +7,7 @@ Reads either best_confusion_matrices.json or confusion_matrices.jsonl
 Usage:
     python scripts/make_confusion_plots.py \\
         --confusion-file model/best_confusion_matrices.json \\
-        --output-dir final_artifacts/figures
+        --output-dir artifacts/figures
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Generate confusion matrix plots")
     p.add_argument("--confusion-file", type=Path, required=True,
                    help="Path to best_confusion_matrices.json or confusion_matrices.jsonl")
-    p.add_argument("--output-dir", type=Path, default=Path("final_artifacts/figures"))
+    p.add_argument("--output-dir", type=Path, default=Path("artifacts/figures"))
     p.add_argument("--normalized", action="store_true",
                    help="Plot normalized instead of raw counts")
     return p.parse_args()

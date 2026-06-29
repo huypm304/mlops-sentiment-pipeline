@@ -5,7 +5,7 @@ Usage:
     python scripts/make_data_reports.py \\
         --train-file /path/to/train.jsonl \\
         --dev-file   /path/to/dev_clean.jsonl \\
-        --output-dir final_artifacts/data
+        --output-dir artifacts/data
 """
 
 from __future__ import annotations
@@ -136,7 +136,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--train-file", type=Path, default=None)
     p.add_argument("--dev-file",   type=Path, default=None)
     p.add_argument("--test-file",  type=Path, default=None)
-    p.add_argument("--output-dir", type=Path, default=Path("final_artifacts/data"))
+    p.add_argument("--output-dir", type=Path, default=Path("artifacts/data"))
     return p.parse_args()
 
 

@@ -13,8 +13,9 @@ from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-CHECKPOINT = Path(__file__).resolve().parents[1] / "model" / "best_model.pt"
+CHECKPOINT = Path(__file__).resolve().parents[1] / "artifacts" / "model" / "best_model.pt"
 MODEL_DIR = CHECKPOINT.parent
+RUN_CONFIG = Path(__file__).resolve().parents[1] / "ml" / "configs" / "run_config.json"
 MINI_DEV  = Path(__file__).resolve().parent / "fixtures" / "dev_mini.jsonl"
 
 
@@ -22,12 +23,12 @@ MINI_DEV  = Path(__file__).resolve().parent / "fixtures" / "dev_mini.jsonl"
 def test_evaluate_runs():
     import json
 
-    from src.absa.dataset import ABSADataset
-    from src.absa.evaluation import evaluate
-    from src.absa.model import ABSAModel
-    from src.absa.utils import load_tokenizer
+    from ml.inference.dataset import ABSADataset
+    from ml.inference.evaluation import evaluate
+    from ml.inference.model import ABSAModel
+    from ml.inference.utils import load_tokenizer
 
-    run_config = json.loads((MODEL_DIR / "run_config.json").read_text(encoding="utf-8"))
+    run_config = json.loads(RUN_CONFIG.read_text(encoding="utf-8"))
     config_source = run_config.get("model_name", "vinai/phobert-base")
 
     device = torch.device("cpu")
@@ -72,7 +73,7 @@ def test_evaluate_output_schema():
         "class_metrics", "confusion_matrices",
     ]
     # We just check that evaluate() can be imported and has the right signature
-    from src.absa.evaluation import evaluate
+    from ml.inference.evaluation import evaluate
     import inspect
     sig = inspect.signature(evaluate)
     params = list(sig.parameters.keys())

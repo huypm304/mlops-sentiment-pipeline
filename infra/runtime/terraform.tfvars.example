@@ -1,0 +1,72 @@
+# Copy to terraform.tfvars
+# cp terraform.tfvars.example terraform.tfvars
+
+aws_region  = "ap-southeast-1"
+project     = "absa-mlops"
+environment = "demo"
+owner       = "minh-huy"
+
+# ---------------------------------------------------------------------------
+# Option A: Pass core outputs directly (simpler for local runs)
+# ---------------------------------------------------------------------------
+artifact_bucket_name = "absa-mlops-demo-artifacts"
+artifact_bucket_arn  = "arn:aws:s3:::absa-mlops-demo-artifacts"
+
+datasets_table_name             = "absa-mlops-demo-datasets"
+training_runs_table_name        = "absa-mlops-demo-training-runs"
+models_table_name               = "absa-mlops-demo-models"
+predictions_table_name          = "absa-mlops-demo-predictions"
+monitoring_snapshots_table_name = "absa-mlops-demo-monitoring-snapshots"
+approval_requests_table_name    = "absa-mlops-demo-approval-requests"
+review_queue_table_name         = "absa-mlops-demo-review-queue"
+weekly_reports_table_name       = "absa-mlops-demo-weekly-reports"
+
+dynamodb_table_arns = [
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-datasets",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-training-runs",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-models",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-predictions",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-monitoring-snapshots",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-approval-requests",
+  "arn:aws:dynamodb:ap-southeast-1:ACCOUNT_ID:table/absa-mlops-demo-review-queue",
+]
+
+# ---------------------------------------------------------------------------
+# Option B: Read from remote state (CI/CD — leave above blank, set these)
+# ---------------------------------------------------------------------------
+# core_state_bucket = "absa-mlops-demo-tf-state"
+# core_state_key    = "core/terraform.tfstate"
+
+# ---------------------------------------------------------------------------
+# Lambda settings
+# ---------------------------------------------------------------------------
+lambda_runtime         = "python3.12"
+lambda_memory_mb       = 512
+lambda_timeout_seconds = 30
+log_retention_days     = 14
+
+# ---------------------------------------------------------------------------
+# Feature flags
+# ---------------------------------------------------------------------------
+enable_sagemaker_training     = true
+enable_sagemaker_endpoint     = false
+enable_eventbridge_monitoring = true
+enable_weekly_report_schedule = true
+sagemaker_instance_type       = "ml.m5.large"
+# Bump after uploading models/production/model.tar.gz (PhoBERT run1a → v3)
+model_package_version         = "v3"
+
+# ---------------------------------------------------------------------------
+# Custom domain — zone lives in core stack; runtime reads zone_id via remote state
+# ---------------------------------------------------------------------------
+domain_name          = "minhhuy.me"
+enable_custom_domain = true
+api_subdomain        = "api"
+route53_zone_id      = "" # filled automatically when core_state_bucket is set
+
+cors_allow_origins = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "https://minhhuy.me",
+  "https://www.minhhuy.me",
+]

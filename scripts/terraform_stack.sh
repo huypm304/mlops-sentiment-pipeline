@@ -6,7 +6,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 STACK="${1:?stack required: bootstrap|core|runtime}"
 COMMAND="${2:?command required: init|plan|apply|destroy|validate}"
-TF_DIR="${ROOT_DIR}/infrastructure/terraform/${STACK}"
+TF_DIR="${ROOT_DIR}/infra/${STACK}"
 
 PROJECT="${PROJECT:-absa-mlops}"
 ENVIRONMENT="${ENVIRONMENT:-demo}"

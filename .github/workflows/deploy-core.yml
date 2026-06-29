@@ -42,7 +42,7 @@ jobs:
           domain_name: ${{ inputs.domain_name }}
 
       - name: Print outputs
-        working-directory: infrastructure/terraform/core
+        working-directory: infra/core
         shell: bash
         run: |
           echo "## Core outputs" >> "$GITHUB_STEP_SUMMARY"
