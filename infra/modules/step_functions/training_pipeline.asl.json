@@ -38,7 +38,62 @@
           "Next": "NotifyFailure"
         }
       ],
-      "Next": "EvaluateCandidate"
+      "Next": "CheckTrainingStatus"
+    },
+    "CheckTrainingStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Poll SageMaker training job; mock runs return Completed immediately.",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "wait_training",
+          "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "training.$": "$.training.Payload"
+        }
+      },
+      "ResultPath": "$.training",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "TrainingCompleteGate"
+    },
+    "TrainingCompleteGate": {
+      "Type": "Choice",
+      "Comment": "Loop until SageMaker job finishes (50 epochs can take hours).",
+      "Choices": [
+        {
+          "Variable": "$.training.Payload.status",
+          "StringEquals": "Completed",
+          "Next": "EvaluateCandidate"
+        },
+        {
+          "Variable": "$.training.Payload.status",
+          "StringEquals": "InProgress",
+          "Next": "WaitForTraining"
+        }
+      ],
+      "Default": "NotifyFailure"
+    },
+    "WaitForTraining": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckTrainingStatus"
     },
     "EvaluateCandidate": {
       "Type": "Task",
@@ -86,6 +141,7 @@
           "base_model_id.$": "$.base_model_id",
           "candidate_model_id.$": "$.candidate_model_id",
           "evaluation.$": "$.evaluation.Payload",
+          "training.$": "$.training.Payload",
           "artifacts_bucket": "${artifacts_bucket}"
         }
       },

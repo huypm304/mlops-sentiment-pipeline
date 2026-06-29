@@ -18,6 +18,7 @@ import { fetchDatasets } from "@/lib/api/datasets"
 import { fetchDefaultTrainingConfig, fetchPipelineConfig, triggerPipeline } from "@/lib/api/pipeline"
 import { appPath, trainingRunDetailPath } from "@/lib/console/paths"
 import { TrainingConfigFields } from "@/components/training-config-fields"
+import { TrainingModeBanner } from "@/components/training-mode-banner"
 import type { DatasetListItem } from "@/types/dataset"
 import {
   DEFAULT_TRAINING_CONFIG,
@@ -188,7 +189,9 @@ export function NewTrainingRunSheet({ onStarted }: Props) {
               <p className="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-muted-foreground">
                 Pipeline chưa cấu hình Step Functions trên backend. Chạy Deploy Runtime với state machine.
               </p>
-            ) : null}
+            ) : (
+              <TrainingModeBanner config={config} />
+            )}
 
             {datasets.length === 0 && !loading ? (
               <p className="text-sm text-muted-foreground">

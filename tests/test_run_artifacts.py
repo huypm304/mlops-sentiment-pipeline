@@ -8,6 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "apps" / "backend"))
 
 from registry.run_artifacts import (
+    align_mock_candidate_metrics,
     build_comparison_report,
     metrics_from_train_log_text,
     normalize_pipeline_metrics,
@@ -46,3 +47,23 @@ def test_compare_rejects_when_candidate_below_baseline():
         candidate_metrics=candidate,
     )
     assert report["promote"] is False
+
+
+def test_compare_uses_global_f1_when_tas_relaxed_missing():
+    baseline = normalize_pipeline_metrics({"global_f1": 0.82})
+    candidate = normalize_pipeline_metrics({"global_f1": 0.83})
+    report = build_comparison_report(
+        baseline_model_id="absa-v2b",
+        candidate_model_id="candidate-run-3",
+        production_metrics=baseline,
+        candidate_metrics=candidate,
+    )
+    assert report["primary_metric"] == "global_f1"
+    assert report["promote"] is True
+
+
+def test_align_mock_candidate_metrics_from_production():
+    baseline = normalize_pipeline_metrics({"tas_f1": 0.78, "global_f1": 0.80})
+    candidate = normalize_pipeline_metrics({"global_f1": 0})
+    aligned = align_mock_candidate_metrics(candidate, baseline)
+    assert aligned["tas_relaxed_f1"] == 0.78

@@ -12,6 +12,17 @@ _DEFAULT_PATH = Path(__file__).with_name("default_training_config.json")
 with _DEFAULT_PATH.open(encoding="utf-8") as handle:
     DEFAULT_TRAINING_CONFIG: dict[str, Any] = json.load(handle)
 
+SAGEMAKER_EXCLUDED_KEYS = frozenset(
+    {
+        "training_source_s3_uri",
+        "sagemaker_instance_type",
+        "mock_baseline_prefix",
+        "train_s3_uri",
+        "output_s3_uri",
+        "run_id",
+    }
+)
+
 NUMERIC_KEYS = {
     "seed",
     "max_len",
@@ -53,4 +64,8 @@ def merge_training_config(overrides: dict[str, Any] | None) -> dict[str, Any]:
 
 def as_sagemaker_hyperparameters(config: dict[str, Any]) -> dict[str, str]:
     """SageMaker HyperParameters must be string values."""
-    return {str(key): str(value) for key, value in config.items()}
+    return {
+        str(key): str(value)
+        for key, value in config.items()
+        if key not in SAGEMAKER_EXCLUDED_KEYS and value is not None
+    }

@@ -84,6 +84,8 @@ export type PipelineRun = {
 export type PipelineConfig = {
   configured: boolean
   demo_mode: boolean
+  sagemaker_training_enabled?: boolean
+  training_mode?: "sagemaker" | "mock"
   state_machine_arn: string | null
   artifacts_bucket: string | null
   stages: string[]
@@ -111,6 +113,8 @@ export const DEFAULT_TRAINING_CONFIG: TrainingConfig = {
   lambda_bio: 1.1,
   lambda_sent: 1.4,
   lambda_global: 0.2,
+  lambda_cons: 0.03,
+  lambda_contrast: 0.1,
   contrast_sampler_weight: 1.2,
   pred_span_ratio: 0.1,
 }
@@ -125,6 +129,8 @@ export const TRAINING_CONFIG_FIELDS = [
   "lambda_bio",
   "lambda_sent",
   "lambda_global",
+  "lambda_cons",
+  "lambda_contrast",
   "contrast_sampler_weight",
   "pred_span_ratio",
 ] as const

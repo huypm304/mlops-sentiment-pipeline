@@ -24,6 +24,7 @@ from training_config import DEFAULT_TRAINING_CONFIG, merge_training_config
 _STATE_MACHINE_ARN = os.getenv("STATE_MACHINE_ARN", "")
 _BUCKET = os.getenv("ARTIFACTS_BUCKET", "")
 _AWS_REGION = os.getenv("AWS_REGION", "ap-southeast-1")
+_ENABLE_SAGEMAKER_TRAINING = os.getenv("ENABLE_SAGEMAKER_TRAINING", "false").lower() == "true"
 
 _sfn = boto3.client("stepfunctions", region_name=_AWS_REGION)
 
@@ -199,17 +200,22 @@ def _handle_http(event: dict[str, Any]) -> dict[str, Any]:
 
     if path.endswith("/pipeline/config") and method == "GET":
         configured = bool(_STATE_MACHINE_ARN)
+        training_mode = "sagemaker" if _ENABLE_SAGEMAKER_TRAINING else "mock"
         return _response(
             200,
             {
                 "configured": configured,
                 "demo_mode": not configured,
+                "sagemaker_training_enabled": _ENABLE_SAGEMAKER_TRAINING,
+                "training_mode": training_mode,
                 "state_machine_arn": _STATE_MACHINE_ARN or None,
                 "artifacts_bucket": _BUCKET or None,
                 "stages": ["Train", "Evaluate", "Compare", "Register", "Smoke", "Promote", "Deploy", "Done"],
                 "default_training_config": DEFAULT_TRAINING_CONFIG,
                 "message": (
-                    "Step Functions connected — chọn dataset, config, trigger."
+                    "Step Functions + SageMaker GPU training (50 epoch, train_kaggle.py)."
+                    if configured and _ENABLE_SAGEMAKER_TRAINING
+                    else "Step Functions connected — mock training (copy baseline). Bật enable_sagemaker_training khi Deploy Runtime để train thật."
                     if configured
                     else "STATE_MACHINE_ARN chưa cấu hình."
                 ),

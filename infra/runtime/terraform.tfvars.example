@@ -47,7 +47,7 @@ log_retention_days     = 14
 # ---------------------------------------------------------------------------
 # Feature flags
 # ---------------------------------------------------------------------------
-enable_sagemaker_training     = false
+enable_sagemaker_training     = true
 enable_sagemaker_endpoint     = false
 enable_eventbridge_monitoring = true
 sagemaker_instance_type       = "ml.m5.large"

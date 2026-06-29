@@ -83,13 +83,25 @@ def build_sfn_steps(
     steps: list[dict[str, str]] = []
 
     for idx, (sfn_id, label) in enumerate(PIPELINE_SFN_STAGES):
+        train_phase_done = "EvaluateCandidate" in completed_states or (
+            current_idx >= 0 and current_idx > 0
+        )
         if sfn_status == "SUCCEEDED":
             status = "completed"
         elif sfn_status == "ABORTED":
-            if idx < current_idx or sfn_id in completed_states:
+            if idx == 0 and train_phase_done:
+                status = "completed"
+            elif idx < current_idx or sfn_id in completed_states:
                 status = "completed"
             elif idx == current_idx:
                 status = "failed"
+            else:
+                status = "pending"
+        elif sfn_id == "StartTraining":
+            if train_phase_done:
+                status = "completed"
+            elif current_state in _TRAIN_POLL_STATES or current_idx == 0:
+                status = "failed" if failed else "running"
             else:
                 status = "pending"
         elif sfn_id in completed_states or (current_idx >= 0 and idx < current_idx):
@@ -103,7 +115,14 @@ def build_sfn_steps(
     return steps
 
 
+_TRAIN_POLL_STATES = frozenset(
+    {"StartTraining", "CheckTrainingStatus", "WaitForTraining", "TrainingCompleteGate"}
+)
+
+
 def _state_index(sfn_id: str) -> int:
+    if sfn_id in _TRAIN_POLL_STATES:
+        sfn_id = "StartTraining"
     for idx, (sid, _) in enumerate(PIPELINE_SFN_STAGES):
         if sid == sfn_id:
             return idx

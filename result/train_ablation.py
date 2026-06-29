@@ -63,22 +63,143 @@ else:
 
 DEFAULT_TRAIN_FILE = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/train_aug500_boundary200.jsonl")
 DEFAULT_VAL_FILE   = Path("/kaggle/input/datasets/minhhuy304/absa-datav3/dev_clean.jsonl")
-DEFAULT_OUTPUT_DIR = Path("/kaggle/working/run1a_phobert")
 
-# Default hyperparameters — keep in sync with default_training_config.json (pipeline UI / DynamoDB).
-DEFAULT_MODEL_NAME = "vinai/phobert-base"
-DEFAULT_EPOCHS = 50
-DEFAULT_PATIENCE = 8
-DEFAULT_BATCH_SIZE = 24
-DEFAULT_LR_BACKBONE = 8e-6
-DEFAULT_LR_HEADS = 3e-5
-DEFAULT_LAMBDA_BIO = 1.1
-DEFAULT_LAMBDA_SENT = 1.4
-DEFAULT_LAMBDA_GLOBAL = 0.2
-DEFAULT_LAMBDA_CONS = 0.03
-DEFAULT_LAMBDA_CONTRAST = 0.1
-DEFAULT_CONTRAST_SAMPLER_WEIGHT = 1.2
-DEFAULT_PRED_SPAN_RATIO = 0.1
+# ============================================================
+# ABLATION CONFIG — CHỈ ĐỔI DÒNG NÀY ĐỂ CHẠY TỪNG CONFIG
+# ============================================================
+# Kaggle notebook: set ABLATION_NAME ở cell trước, rồi %run -i script.py
+_VALID_ABLATIONS = {
+    "A0_FULL", "A1_NO_BILSTM", "A2_NO_CRF",
+    "A3_NO_CROSS_ATTN", "A4_NO_CONTRA_VEC", "A5_NO_CONTRAST_LOSS",
+}
+_nb_abl = globals().get("ABLATION_NAME")
+ABLATION_NAME = _nb_abl if _nb_abl in _VALID_ABLATIONS else "A0_FULL"
+# Options:
+#   "A0_FULL"              — Full model (baseline)
+#   "A1_NO_BILSTM"         — Bỏ BiLSTM trước BIO head
+#   "A2_NO_CRF"            — Thay CRF bằng softmax argmax
+#   "A3_NO_CROSS_ATTN"     — Bỏ cross-attention span↔sequence
+#   "A4_NO_CONTRA_VEC"     — Bỏ contra_vec trong global head
+#   "A5_NO_CONTRAST_LOSS"  — Tắt contrastive loss (lambda=0)
+
+ABL_NO_BILSTM      = ABLATION_NAME == "A1_NO_BILSTM"
+ABL_NO_CRF         = ABLATION_NAME == "A2_NO_CRF"
+ABL_NO_CROSS_ATTN  = ABLATION_NAME == "A3_NO_CROSS_ATTN"
+ABL_NO_CONTRA_VEC  = ABLATION_NAME == "A4_NO_CONTRA_VEC"
+ABL_NO_CONTRAST    = ABLATION_NAME == "A5_NO_CONTRAST_LOSS"
+ABL_SLUG           = ABLATION_NAME.lower()
+
+DEFAULT_OUTPUT_DIR = Path(f"/kaggle/working/ablation_{ABL_SLUG}")
+print(f"[ABLATION] Config: {ABLATION_NAME} → output: {DEFAULT_OUTPUT_DIR}")
+
+
+def ablation_flags():
+    return {
+        "name": ABLATION_NAME,
+        "slug": ABL_SLUG,
+        "no_bilstm": ABL_NO_BILSTM,
+        "no_crf": ABL_NO_CRF,
+        "no_cross_attn": ABL_NO_CROSS_ATTN,
+        "no_contra_vec": ABL_NO_CONTRA_VEC,
+        "no_contrast_loss": ABL_NO_CONTRAST,
+        "bio_decode": "argmax" if ABL_NO_CRF else "crf",
+    }
+
+
+def ablation_artifact_paths(output_dir: Path, slug: str = ABL_SLUG):
+    """Per-config artifact names — tránh nhầm best_model.pt / train_log.csv giữa các run."""
+    return {
+        "best_model": output_dir / f"{slug}_best_model.pt",
+        "checkpoint": output_dir / f"{slug}_checkpoint.pt",
+        "train_log": output_dir / f"{slug}_train_log.csv",
+        "confusion_jsonl": output_dir / f"{slug}_confusion_matrices.jsonl",
+        "best_confusion": output_dir / f"{slug}_best_confusion.json",
+        "run_config": output_dir / f"{slug}_run_config.json",
+        "debug_jsonl": output_dir / f"{slug}_debug.jsonl",
+        "summary": output_dir / f"{slug}_summary.json",
+    }
+
+
+def count_model_params(model):
+    total = sum(p.numel() for p in model.parameters())
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    return total, trainable
+
+
+def print_ablation_banner(args, device, model, paths):
+    flags = ablation_flags()
+    total_p, trainable_p = count_model_params(model)
+    print("=" * 72)
+    print(f"  ABLATION RUN: {flags['name']}")
+    print(f"  slug={flags['slug']} | bio_decode={flags['bio_decode']}")
+    print(
+        "  flags:",
+        f"−BiLSTM={flags['no_bilstm']}",
+        f"−CRF={flags['no_crf']}",
+        f"−CrossAttn={flags['no_cross_attn']}",
+        f"−ContraVec={flags['no_contra_vec']}",
+        f"−ContrastLoss={flags['no_contrast_loss']}",
+    )
+    print(f"  device={device} | epochs={args.epochs} | seed={args.seed} | workers={args.num_workers}")
+    print(f"  params: total={total_p:,} trainable={trainable_p:,}")
+    print("  artifacts:")
+    for key, path in paths.items():
+        print(f"    {key}: {path}")
+    print("=" * 72)
+
+
+def append_debug_log(path, epoch, phase, train_m, eval_m, extra=None):
+    record = {
+        "ablation": ABLATION_NAME,
+        "slug": ABL_SLUG,
+        "epoch": epoch,
+        "phase": phase,
+        "train": {k: round(float(train_m[k]), 4) for k in train_m},
+        "eval": {
+            "tas_relaxed_f1": round(float(eval_m["tas_relaxed"]["f1"]), 4),
+            "tas_strict_f1": round(float(eval_m["tas_strict"]["f1"]), 4),
+            "span_f1": round(float(eval_m["span"]["f1"]), 4),
+            "sent_matched_f1": round(float(eval_m["sent_matched"]["f1"]), 4),
+            "sent_goldspan_f1": round(float(eval_m["sent_goldspan"]["f1"]), 4),
+            "global_f1": round(float(eval_m["global"]["f1"]), 4),
+        },
+    }
+    if extra:
+        record["debug"] = extra
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def save_ablation_summary(path, args, flags, paths, best_epoch, best_score, eval_m):
+    payload = {
+        "ablation_name": flags["name"],
+        "ablation_slug": flags["slug"],
+        "flags": flags,
+        "best_epoch": best_epoch,
+        "best_tas_relaxed_f1": round(float(best_score), 4),
+        "checkpoint_path": str(paths["best_model"]),
+        "train_log_path": str(paths["train_log"]),
+        "global_metrics": {
+            "tas_strict": round(float(eval_m["tas_strict"]["f1"]), 4),
+            "tas_relaxed": round(float(eval_m["tas_relaxed"]["f1"]), 4),
+            "span": round(float(eval_m["span"]["f1"]), 4),
+            "sent_matched": round(float(eval_m["sent_matched"]["f1"]), 4),
+            "sent_goldspan": round(float(eval_m["sent_goldspan"]["f1"]), 4),
+            "global": round(float(eval_m["global"]["f1"]), 4),
+        },
+        "aspect_sent_f1": {k: round(float(v), 3) for k, v in eval_m["asp_sent_f1"].items()},
+        "aspect_span_f1": {k: round(float(v), 3) for k, v in eval_m["asp_span_f1"].items()},
+        "hyperparams": {
+            "epochs": args.epochs,
+            "seed": args.seed,
+            "batch_size": args.batch_size,
+            "model_name": args.model_name,
+        },
+    }
+    if "debug" in eval_m:
+        payload["debug"] = eval_m["debug"]
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
 
 ASPECTS = ["Fashion", "Electronics", "General", "Service", "Ship", "Price", "App"]
 N_SENT  = 3
@@ -153,6 +274,24 @@ def extract_spans(seq):
     if start is not None:
         spans.add((start, len(seq) - 1, cur))
     return spans
+
+
+def decode_bio_emissions(model, emiss, mask):
+    """Decode BIO tag ids. A2: argmax + force O on padding; else CRF Viterbi."""
+    valid = mask.bool()
+    if ABL_NO_CRF:
+        tags = emiss.float().argmax(dim=-1)
+        return tags.masked_fill(~valid, 0).tolist()
+    return model.crf.decode(emiss.float(), mask=valid)
+
+
+def _default_num_workers():
+    # Kaggle/Jupyter: multiprocessing workers crash on kernel shutdown.
+    if os.path.isdir("/kaggle"):
+        return 0
+    if "ipykernel" in sys.modules:
+        return 0
+    return 2
 
 
 def compute_clause_aware_window(tmin, tmax, op_idx, span_token_lists, offsets, text, seq_len, max_context_window):
@@ -539,6 +678,7 @@ class ABSAModel(nn.Module):
         self.backbone = AutoModel.from_pretrained(model_name)
         h             = self.backbone.config.hidden_size
         self.dropout      = nn.Dropout(0.3)
+        # A1: BiLSTM vẫn được khởi tạo (tránh lỗi checkpoint), nhưng bị bỏ qua trong forward khi ABL_NO_BILSTM=True
         self.bio_lstm     = nn.LSTM(h, h // 2, num_layers=1, batch_first=True, bidirectional=True)
         self.bio_head     = nn.Linear(h, N_BIO)
         self.crf          = CRF(N_BIO, batch_first=True)
@@ -570,10 +710,24 @@ class ABSAModel(nn.Module):
         seq      = self.dropout(self.backbone(ids, attention_mask=mask).last_hidden_state) \
                    if cached_seq is None else cached_seq
         B        = seq.shape[0]
-        bio_feat, _ = self.bio_lstm(seq)
+        # A1: bỏ BiLSTM — feed raw PhoBERT seq trực tiếp vào BIO head
+        if ABL_NO_BILSTM:
+            bio_feat = seq
+        else:
+            bio_feat, _ = self.bio_lstm(seq)
         emiss    = self.bio_head(bio_feat)
-        crf_loss = -self.crf(emiss.float(), bio, mask=mask.bool(), reduction="mean") \
-                   if bio is not None else None
+        # A2: thay CRF loss bằng cross-entropy thông thường
+        if bio is not None:
+            if ABL_NO_CRF:
+                crf_loss = F.cross_entropy(
+                    emiss.view(-1, N_BIO),
+                    bio.view(-1),
+                    ignore_index=-100,
+                )
+            else:
+                crf_loss = -self.crf(emiss.float(), bio, mask=mask.bool(), reduction="mean")
+        else:
+            crf_loss = None
 
         sent_logits = None
         span_features = None
@@ -633,14 +787,16 @@ class ABSAModel(nn.Module):
             boundary_feat = torch.cat([pooled, start_repr, end_repr, start_repr * end_repr], dim=-1)
             pooled = self.span_proj(boundary_feat)
 
-            cross_out, _ = self.cross_attn(
-                pooled,
-                seq,
-                seq,
-                key_padding_mask=~mask.bool(),
-                need_weights=False,
-            )
-            pooled = self.cross_attn_norm(pooled + self.cross_attn_scale * cross_out * valid_span_slots)
+            # A3: bỏ cross-attention — skip span↔sequence interaction
+            if not ABL_NO_CROSS_ATTN:
+                cross_out, _ = self.cross_attn(
+                    pooled,
+                    seq,
+                    seq,
+                    key_padding_mask=~mask.bool(),
+                    need_weights=False,
+                )
+                pooled = self.cross_attn_norm(pooled + self.cross_attn_scale * cross_out * valid_span_slots)
 
             span_interact, _ = self.span_self_attn(
                 pooled,
@@ -667,7 +823,7 @@ class ABSAModel(nn.Module):
             pos_w = span_probs[:, :, 1] * valid_spans
             neg_pool = (span_features * neg_w.unsqueeze(-1)).sum(1) / neg_w.sum(1, keepdim=True).clamp(min=1e-4)
             pos_pool = (span_features * pos_w.unsqueeze(-1)).sum(1) / pos_w.sum(1, keepdim=True).clamp(min=1e-4)
-            contra_vec = neg_pool - pos_pool                        # explicit contradiction signal
+            contra_vec = neg_pool - pos_pool  if not ABL_NO_CONTRA_VEC else seq.new_zeros(B, h_dim)
         else:
             neg_pool = pos_pool = contra_vec = seq.new_zeros(B, h_dim)
 
@@ -993,6 +1149,10 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
 
     tas_strict_tp = tas_strict_fp = tas_strict_fn = 0
     tas_relaxed_tp = tas_relaxed_fp = tas_relaxed_fn = 0
+    n_samples = 0
+    zero_pred_span_samples = 0
+    total_pred_spans = 0
+    total_gold_spans = 0
 
     def tas_relaxed_match_count(pred_tuples, gold_tuples, iou_thr):
         used = [False] * len(gold_tuples)
@@ -1034,8 +1194,8 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
             with autocast_context(device):
                 _, emiss, _, _, cached, _ = model(ids, mask)
 
-            bio_p = model.crf.decode(emiss, mask=mask.bool())
-
+            # A2: thay CRF decode bằng argmax nếu ABL_NO_CRF
+            bio_p = decode_bio_emissions(model, emiss, mask)
             pred_sm = torch.zeros(ids.shape[0], max_ops, ids.shape[1], device=device)
             pred_sp_asp = torch.full(
                 (ids.shape[0], max_ops),
@@ -1099,6 +1259,12 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
 
                 pred_set = pred_sets[ri]
                 gold_set = extract_spans(bio[ri].tolist()[:vl])
+
+                n_samples += 1
+                if not pred_set:
+                    zero_pred_span_samples += 1
+                total_pred_spans += len(pred_set)
+                total_gold_spans += len(gold_set)
 
                 pred_spans_all.append(pred_set)
                 gold_spans_all.append(gold_set)
@@ -1278,7 +1444,23 @@ def evaluate(model, dataloader, device, max_ops, max_context_window, span_match_
         zero_division=0,
     ) if glob_gold else ([0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0.0, 0.0, 0.0], [0, 0, 0])
 
+    bio_token_acc = (
+        sum(int(g == p) for g, p in zip(bio_gold_all, bio_pred_all)) / max(len(bio_gold_all), 1)
+    )
+    debug_stats = {
+        "decode_mode": "argmax" if ABL_NO_CRF else "crf",
+        "n_samples": n_samples,
+        "zero_pred_span_samples": zero_pred_span_samples,
+        "zero_pred_span_pct": round(100.0 * zero_pred_span_samples / max(n_samples, 1), 2),
+        "total_pred_spans": total_pred_spans,
+        "total_gold_spans": total_gold_spans,
+        "avg_pred_spans_per_sample": round(total_pred_spans / max(n_samples, 1), 3),
+        "avg_gold_spans_per_sample": round(total_gold_spans / max(n_samples, 1), 3),
+        "bio_token_acc": round(bio_token_acc, 4),
+    }
+
     return {
+        "debug": debug_stats,
         "tas_strict": {"precision": tas_strict_p, "recall": tas_strict_r, "f1": tas_strict_f1},
         "tas_relaxed": {"precision": tas_relaxed_p, "recall": tas_relaxed_r, "f1": tas_relaxed_f1},
         "span": {"precision": span_precision, "recall": span_recall, "f1": span_f1},
@@ -1433,34 +1615,35 @@ def parse_args():
     p.add_argument("--train-file",             type=Path,  default=DEFAULT_TRAIN_FILE)
     p.add_argument("--val-file",               type=Path,  default=DEFAULT_VAL_FILE)
     p.add_argument("--output-dir",             type=Path,  default=DEFAULT_OUTPUT_DIR)
-    p.add_argument("--model-name",             default=DEFAULT_MODEL_NAME)
+    p.add_argument("--model-name",             default="vinai/phobert-base")
     p.add_argument("--seed",                   type=int,   default=42)
     p.add_argument("--max-len",                type=int,   default=192,
                    help="p50 text ~82 chars; 192 covers p95 without 224 cost")
-    p.add_argument("--epochs",                 type=int,   default=DEFAULT_EPOCHS)
-    p.add_argument("--patience",               type=int,   default=DEFAULT_PATIENCE)
+    p.add_argument("--epochs",                 type=int,   default=30,
+                   help="Ablation default=30; full training dùng 50")
+    p.add_argument("--patience",               type=int,   default=8)
     p.add_argument("--phase1-epochs",          type=int,   default=2)
     p.add_argument("--max-ops",                type=int,   default=6,
                    help="train max 6 opinions/sample; only 2 rows need >6")
-    p.add_argument("--batch-size",             type=int,   default=DEFAULT_BATCH_SIZE)
+    p.add_argument("--batch-size",             type=int,   default=24)
     p.add_argument("--eval-batch-size",        type=int,   default=64)
     p.add_argument("--grad-accum-steps",       type=int,   default=1)
-    p.add_argument("--num-workers",            type=int,   default=2)
+    p.add_argument("--num-workers",            type=int,   default=_default_num_workers())
     p.add_argument("--eval-every",             type=int,   default=1,
                    help="validate every N epochs (phase2); phase1 always evals")
     p.add_argument("--save-all-confusion",     action="store_true",
                    help="write confusion_matrices.jsonl every epoch (slower I/O)")
-    p.add_argument("--lr-backbone",            type=float, default=DEFAULT_LR_BACKBONE)
-    p.add_argument("--lr-heads",               type=float, default=DEFAULT_LR_HEADS)
+    p.add_argument("--lr-backbone",            type=float, default=8e-6)
+    p.add_argument("--lr-heads",               type=float, default=3e-5)
     p.add_argument("--max-context-window",     type=int,   default=25)
     p.add_argument("--span-match-iou",         type=float, default=0.5)
     p.add_argument("--contrast-margin",        type=float, default=0.25)
-    p.add_argument("--lambda-bio",             type=float, default=DEFAULT_LAMBDA_BIO)
-    p.add_argument("--lambda-sent",            type=float, default=DEFAULT_LAMBDA_SENT)
-    p.add_argument("--lambda-global",          type=float, default=DEFAULT_LAMBDA_GLOBAL)
-    p.add_argument("--lambda-cons",            type=float, default=DEFAULT_LAMBDA_CONS)
-    p.add_argument("--lambda-contrast",        type=float, default=DEFAULT_LAMBDA_CONTRAST)
-    p.add_argument("--contrast-sampler-weight",type=float, default=DEFAULT_CONTRAST_SAMPLER_WEIGHT)
+    p.add_argument("--lambda-bio",             type=float, default=1.1)
+    p.add_argument("--lambda-sent",            type=float, default=1.4)
+    p.add_argument("--lambda-global",          type=float, default=0.2)
+    p.add_argument("--lambda-cons",            type=float, default=0.1)
+    p.add_argument("--lambda-contrast",        type=float, default=0.0 if ABL_NO_CONTRAST else 0.2)
+    p.add_argument("--contrast-sampler-weight",type=float, default=1.2)
     p.add_argument("--lbtw-ema-decay",         type=float, default=0.99)
     p.add_argument("--lbtw-min-factor",        type=float, default=0.3)
     p.add_argument("--lbtw-max-factor",        type=float, default=3.0)
@@ -1469,7 +1652,7 @@ def parse_args():
     p.add_argument("--disable-ema",            action="store_true")
     p.add_argument("--disable-tf32",           action="store_true")
     p.add_argument("--rdrop-alpha",            type=float, default=0.0)
-    p.add_argument("--pred-span-ratio",        type=float, default=DEFAULT_PRED_SPAN_RATIO,
+    p.add_argument("--pred-span-ratio",        type=float, default=0.1,
                    help="Phase2 ratio of samples using predicted spans (rest uses gold spans)")
     args, unknown = p.parse_known_args()
     if unknown:
@@ -1493,15 +1676,27 @@ def main():
             raise FileNotFoundError(f"Missing: {path}")
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    best_model_path    = args.output_dir / "best_model.pt"
-    checkpoint_path    = args.output_dir / "checkpoint.pt"
-    metrics_csv_path   = args.output_dir / "train_log.csv"
-    confusion_jsonl    = args.output_dir / "confusion_matrices.jsonl"
-    best_confusion     = args.output_dir / "best_confusion_matrices.json"
+    paths = ablation_artifact_paths(args.output_dir, ABL_SLUG)
+    best_model_path    = paths["best_model"]
+    checkpoint_path    = paths["checkpoint"]
+    metrics_csv_path   = paths["train_log"]
+    confusion_jsonl    = paths["confusion_jsonl"]
+    best_confusion     = paths["best_confusion"]
+    debug_jsonl        = paths["debug_jsonl"]
+    summary_path       = paths["summary"]
 
-    with open(args.output_dir / "run_config.json", "w", encoding="utf-8") as f:
-        json.dump({k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
-                  f, ensure_ascii=False, indent=2)
+    flags = ablation_flags()
+    with open(paths["run_config"], "w", encoding="utf-8") as f:
+        json.dump(
+            {
+                "ablation": flags,
+                "args": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
+                "artifacts": {k: str(v) for k, v in paths.items()},
+            },
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
 
     set_seed(args.seed)
     print(f"Device: {device} | Train: {args.train_file} | Val: {args.val_file}")
@@ -1527,6 +1722,7 @@ def main():
     if args.num_workers > 0:
         loader_kwargs["persistent_workers"] = True
         loader_kwargs["prefetch_factor"] = 2
+    print(f"DataLoader num_workers={args.num_workers}")
 
     train_dl = DataLoader(train_ds, batch_size=args.batch_size,
                           sampler=WeightedRandomSampler(sample_w, len(train_ds), replacement=True),
@@ -1535,6 +1731,7 @@ def main():
                           **loader_kwargs)
 
     model = ABSAModel(args.model_name, args.max_ops).to(device).float()
+    print_ablation_banner(args, device, model, paths)
     model_ema = None if args.disable_ema else ModelEMA(model, decay=args.ema_decay)
     optimizer = AdamW([
         {"params": model.backbone.parameters(),
@@ -1589,6 +1786,7 @@ def main():
     scaler = torch.amp.GradScaler(enabled=device.type == "cuda")
 
     best_score, patience_cnt, start_ep = 0.0, 0, 1
+    best_epoch, best_eval_m = 0, None
     if checkpoint_path.exists():
         print(f"Checkpoint present but ignored for fresh training: {checkpoint_path}")
     if model_ema is not None:
@@ -1651,7 +1849,8 @@ def main():
                     pred_span_sent = span_sent
 
                     if mix_ratio > 0.0:
-                        bio_p = model.crf.decode(emiss, mask=mask.bool())
+                        with torch.no_grad():
+                            bio_p = decode_bio_emissions(model, emiss, mask)
                         pred_sm = torch.zeros(ids.shape[0], args.max_ops, ids.shape[1], device=device)
                         pred_sp_asp = torch.full(
                             (ids.shape[0], args.max_ops), len(ASPECTS), dtype=torch.long, device=device
@@ -1838,7 +2037,7 @@ def main():
         )
         if not run_eval:
             print(
-                f"Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
+                f"[{ABLATION_NAME}] Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
                 f"(skip dev eval, eval_every={args.eval_every})"
             )
             continue
@@ -1857,7 +2056,7 @@ def main():
                 model_ema.restore(model)
 
         print(
-            f"Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
+            f"[{ABLATION_NAME}] Ep {epoch:02d} | loss={train_m['loss']:.4f} | "
             f"TAS-Strict={eval_m['tas_strict']['f1']:.4f} | "
             f"TAS-Relaxed={eval_m['tas_relaxed']['f1']:.4f} | "
             f"Span={eval_m['span']['f1']:.4f} | "
@@ -1865,12 +2064,27 @@ def main():
             f"Sent@GoldSpan={eval_m['sent_goldspan']['f1']:.4f} | "
             f"Global={eval_m['global']['f1']:.4f}"
         )
+        dbg = eval_m.get("debug", {})
+        print(
+            f"  debug: decode={dbg.get('decode_mode', '?')} | "
+            f"bio_acc={dbg.get('bio_token_acc', 0):.3f} | "
+            f"pred_spans={dbg.get('total_pred_spans', 0)} "
+            f"(avg {dbg.get('avg_pred_spans_per_sample', 0):.2f}/sample) | "
+            f"zero_pred={dbg.get('zero_pred_span_samples', 0)} "
+            f"({dbg.get('zero_pred_span_pct', 0):.1f}%)"
+        )
         print("  Aspect sent F1:", {a: f"{v:.3f}" for a, v in eval_m["asp_sent_f1"].items()})
         print("  Aspect span F1:", {a: f"{v:.3f}" for a, v in eval_m["asp_span_f1"].items()})
+        append_debug_log(
+            debug_jsonl, epoch, "phase1" if in_phase1 else "phase2", train_m, eval_m, dbg
+        )
 
         is_best = eval_m["tas_relaxed"]["f1"] > best_score
         if is_best:
-            best_score, patience_cnt = eval_m["tas_relaxed"]["f1"], 0
+            best_score = eval_m["tas_relaxed"]["f1"]
+            best_epoch = epoch
+            best_eval_m = eval_m
+            patience_cnt = 0
             if use_ema_eval:
                 model_ema.apply_to(model)
             try:
@@ -1878,11 +2092,16 @@ def main():
             finally:
                 if use_ema_eval:
                     model_ema.restore(model)
-            print(f"  ⭐ New best: {best_score:.4f} → {best_model_path}")
+            print(f"  ⭐ [{ABL_SLUG}] New best ep{epoch}: {best_score:.4f} → {best_model_path.name}")
             with open(best_confusion, "w", encoding="utf-8") as f:
-                json.dump({"epoch": epoch, "best_metric": "tas_relaxed_f1", "tas_relaxed_f1": best_score,
-                           "matrices": eval_m["confusion_matrices"]}, f,
-                          ensure_ascii=False, indent=2)
+                json.dump({
+                    "ablation": ABLATION_NAME,
+                    "slug": ABL_SLUG,
+                    "epoch": epoch,
+                    "best_metric": "tas_relaxed_f1",
+                    "tas_relaxed_f1": best_score,
+                    "matrices": eval_m["confusion_matrices"],
+                }, f, ensure_ascii=False, indent=2)
         else:
             patience_cnt += 1
 
@@ -1899,6 +2118,17 @@ def main():
         if not in_phase1 and patience_cnt >= args.patience:
             print("Early stopping.")
             break
+
+    if best_eval_m is not None:
+        save_ablation_summary(
+            summary_path, args, flags, paths, best_epoch, best_score, best_eval_m
+        )
+        print(f"[{ABLATION_NAME}] Done. best_ep={best_epoch} TAS-R={best_score:.4f}")
+        print(f"  summary → {summary_path.name}")
+        print(f"  train_log → {metrics_csv_path.name}")
+        print(f"  model → {best_model_path.name}")
+
+    del train_dl, val_dl
 
 
 if __name__ == "__main__":
