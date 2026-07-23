@@ -108,10 +108,16 @@ export function EvaluationReport({ evaluation, history }: EvaluationReportProps)
       </ChartPanel>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <ChartPanel title="Span sentiment metrics" description="Sent@Matched confusion matrix">
+        <ChartPanel
+          title="Span sentiment metrics"
+          description="Sent@Matched · P/R/F1 từ train_log, accuracy từ confusion matrix"
+        >
           <MetricsOverview title="" metrics={evaluation.sentiment} />
         </ChartPanel>
-        <ChartPanel title="Global sentiment metrics" description="Document-level head">
+        <ChartPanel
+          title="Global sentiment metrics"
+          description="Document-level head · P/R/F1 từ train_log, accuracy từ confusion matrix"
+        >
           <MetricsOverview
             title=""
             metrics={evaluation.globalSentiment ?? evaluation.aspectPolarity}
@@ -131,8 +137,11 @@ export function EvaluationReport({ evaluation, history }: EvaluationReportProps)
         </ChartPanel>
       </div>
 
-      <ChartPanel title="Aspect extraction" description="Span detection F1 (validation)">
-        <MetricsOverview title="" metrics={evaluation.aspectExtraction} />
+      <ChartPanel
+        title="Aspect extraction"
+        description="Span detection · P/R/F1 từ train_log (best epoch)"
+      >
+        <MetricsOverview title="" metrics={evaluation.aspectExtraction} showAccuracy={false} />
       </ChartPanel>
     </div>
   )
