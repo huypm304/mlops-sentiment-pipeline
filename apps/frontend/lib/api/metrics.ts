@@ -31,25 +31,25 @@ type MetricsApiEvaluation = {
   }
   scores: EvaluationScores
   sentiment: {
-    accuracy: number
+    accuracy?: number
     precision: number
     recall: number
     f1: number
   }
   global_sentiment: {
-    accuracy: number
+    accuracy?: number
     precision: number
     recall: number
     f1: number
   }
   aspect_polarity: {
-    accuracy: number
+    accuracy?: number
     precision: number
     recall: number
     f1: number
   }
   aspect_extraction: {
-    accuracy: number
+    accuracy?: number
     precision: number
     recall: number
     f1: number

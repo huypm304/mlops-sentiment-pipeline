@@ -11,7 +11,6 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { ActivePipelineRunPanel } from "@/components/active-pipeline-run-panel"
 import { PipelineStageStepper } from "@/components/pipeline-stage-stepper"
 import { TrainingConfigFields } from "@/components/training-config-fields"
-import { TrainingModeBanner } from "@/components/training-mode-banner"
 import { fetchDataset, fetchDatasets } from "@/lib/api/datasets"
 import {
   fetchDefaultTrainingConfig,
@@ -226,9 +225,7 @@ export function PipelineView() {
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-500" />
           <p className="text-muted-foreground">{config.message}</p>
         </div>
-      ) : (
-        <TrainingModeBanner config={config} />
-      )}
+      ) : null}
 
       {activeRun && ["RUNNING", "TRAINING", "TRAINING_IN_PROGRESS", "TRAINING_COMPLETED", "EVALUATED", "COMPARED"].includes(activeRun.status.toUpperCase()) ? (
         <ActivePipelineRunPanel

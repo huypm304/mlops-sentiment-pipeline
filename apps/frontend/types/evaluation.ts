@@ -1,5 +1,5 @@
 export type ClassificationMetrics = {
-  accuracy: number
+  accuracy?: number
   precision: number
   recall: number
   f1: number
