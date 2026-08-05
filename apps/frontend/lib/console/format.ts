@@ -58,9 +58,18 @@ export function canDeleteDataset(status: string | undefined): boolean {
 }
 
 export function runDotColor(status: string): string {
-  const key = status.toLowerCase()
-  if (key === "succeeded" || key === "success") return "bg-emerald-500"
-  if (key === "running") return "bg-sky-500"
-  if (key === "failed") return "bg-red-500"
+  const key = status.toLowerCase().replace(/\s+/g, "_")
+  if (
+    key === "succeeded" ||
+    key === "success" ||
+    key === "completed" ||
+    key === "training_completed"
+  ) {
+    return "bg-emerald-500"
+  }
+  if (key === "running" || key === "training" || key === "training_in_progress") {
+    return "bg-sky-500"
+  }
+  if (key === "failed" || key === "rejected") return "bg-red-500"
   return "bg-muted-foreground/50"
 }
