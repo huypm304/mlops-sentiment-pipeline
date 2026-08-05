@@ -1,11 +1,11 @@
 {
-  "Comment": "ABSA retrain pipeline (compact for thesis figures) — Train → Evaluate → Compare → Register → PromoteGate → Deploy. Full ASL: training_pipeline.full.asl.json",
+  "Comment": "ABSA retrain pipeline — Train → Evaluate → Compare → Register → Promote → Deploy → Notify",
   "StartAt": "StartTraining",
   "States": {
     "StartTraining": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Start training (mock copies baseline; SageMaker GPU when enabled).",
+      "Comment": "Launch training (mock copies baseline artifacts, or SageMaker GPU job).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -24,6 +24,14 @@
       },
       "ResultPath": "$.training",
       "TimeoutSeconds": 14400,
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 1,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -31,12 +39,77 @@
           "Next": "NotifyFailure"
         }
       ],
-      "Next": "EvaluateCandidate"
+      "Next": "CheckTrainingStatus"
+    },
+    "CheckTrainingStatus": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Poll SageMaker training job; mock runs return Completed immediately.",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "wait_training",
+          "run_id.$": "$.run_id",
+          "created_at.$": "$.created_at",
+          "candidate_model_id.$": "$.candidate_model_id",
+          "training.$": "$.training.Payload"
+        }
+      },
+      "ResultPath": "$.training",
+      "TimeoutSeconds": 120,
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "TrainingCompleteGate"
+    },
+    "TrainingCompleteGate": {
+      "Type": "Choice",
+      "Comment": "Loop until SageMaker job finishes (50 epochs can take hours).",
+      "Choices": [
+        {
+          "Variable": "$.training.Payload.error",
+          "IsPresent": true,
+          "Next": "NotifyFailure"
+        },
+        {
+          "Variable": "$.training.Payload.status",
+          "IsPresent": false,
+          "Next": "NotifyFailure"
+        },
+        {
+          "Variable": "$.training.Payload.status",
+          "StringEquals": "Completed",
+          "Next": "EvaluateCandidate"
+        },
+        {
+          "Variable": "$.training.Payload.status",
+          "StringEquals": "InProgress",
+          "Next": "WaitForTraining"
+        }
+      ],
+      "Default": "NotifyFailure"
+    },
+    "WaitForTraining": {
+      "Type": "Wait",
+      "Seconds": 60,
+      "Next": "CheckTrainingStatus"
     },
     "EvaluateCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Load evaluation metrics from train_log / artifacts.",
+      "Comment": "Parse train_log.csv from S3 and persist evaluation metrics.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -49,6 +122,14 @@
         }
       },
       "ResultPath": "$.evaluation",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 10,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -61,7 +142,7 @@
     "CompareToProduction": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Compare candidate metrics vs production baseline (TAS-Relaxed F1).",
+      "Comment": "Compare candidate metrics against production baseline from registry/S3.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -76,6 +157,14 @@
         }
       },
       "ResultPath": "$.comparison",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -88,7 +177,7 @@
     "RegisterCandidate": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Register candidate in model registry.",
+      "Comment": "Register candidate in model registry (CANDIDATE or REJECTED).",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -101,6 +190,14 @@
         }
       },
       "ResultPath": "$.registry",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
       "Catch": [
         {
           "ErrorEquals": ["States.ALL"],
@@ -112,15 +209,37 @@
     },
     "PromoteGate": {
       "Type": "Choice",
-      "Comment": "Promote when comparison.promote == true.",
+      "Comment": "Promote only when candidate tas_relaxed_f1 >= production baseline.",
       "Choices": [
         {
           "Variable": "$.comparison.Payload.promote",
           "BooleanEquals": true,
-          "Next": "PromoteModel"
+          "Next": "SmokeTestCandidate"
         }
       ],
       "Default": "NotifyRejected"
+    },
+    "SmokeTestCandidate": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${pipeline_lambda_arn}",
+        "Payload": {
+          "action": "smoke_test",
+          "run_id.$": "$.run_id",
+          "evaluation.$": "$.evaluation.Payload",
+          "artifacts_bucket": "${artifacts_bucket}"
+        }
+      },
+      "ResultPath": "$.smoke_test",
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "ResultPath": "$.error",
+          "Next": "NotifyFailure"
+        }
+      ],
+      "Next": "PromoteModel"
     },
     "PromoteModel": {
       "Type": "Task",
@@ -149,7 +268,7 @@
     "DeployModel": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
-      "Comment": "Publish candidate artifacts to production prefix.",
+      "Comment": "Copy run artifacts to models/v1 production prefix on S3.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
@@ -172,6 +291,7 @@
     "NotifyResult": {
       "Type": "Task",
       "Resource": "arn:aws:states:::lambda:invoke",
+      "Comment": "Persist final run status with evaluation and comparison.",
       "Parameters": {
         "FunctionName": "${pipeline_lambda_arn}",
         "Payload": {
